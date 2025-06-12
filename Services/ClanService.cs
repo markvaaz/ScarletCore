@@ -94,8 +94,7 @@ public static class ClanService {
       }
     }
 
-    // TODO: This should return true on success - appears to be a bug
-    return false;
+    return true;
   }
 
   /// <summary>
