@@ -1,7 +1,7 @@
 {
   "name": "ScarletCore",
   "version_number": "1.0.0",
-  "website_url": "https://github.com/markvaaz/ScarletRCON",
+  "website_url": "https://github.com/markvaaz/ScarletCore",
   "description": "Framework and utilities for all Scarlet mods in V Rising.",
   "dependencies": [
     "BepInEx-BepInExPack_V_Rising-1.733.2"
