@@ -4,6 +4,14 @@
 
 ScarletCore is the foundational framework that powers all **ScarletMods** - a collection of advanced mods for V Rising. While primarily designed to support the ScarletMods ecosystem, ScarletCore can also be used by any developer who wants to create their own V Rising mods.
 
+---
+
+## Support & Donations
+
+<a href="https://www.patreon.com/bePatron?u=30093731" data-patreon-widget-type="become-patron-button"><img height='36' style='border:0px;height:36px;' src='https://i.imgur.com/o12xEqi.png' alt='Become a Patron' /></a>  <a href='https://ko-fi.com/F2F21EWEM7' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi6.png?v=6' alt='Buy Me a Coffee at ko-fi.com' /></a>
+
+---
+
 ## What does it do?
 
 ScarletCore provides a foundation with:

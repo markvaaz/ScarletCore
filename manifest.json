@@ -1,6 +1,6 @@
 {
   "name": "ScarletCore",
-  "version_number": "1.0.0",
+  "version_number": "1.0.1",
   "website_url": "https://github.com/markvaaz/ScarletCore",
   "description": "Framework and utilities for all Scarlet mods in V Rising.",
   "dependencies": [
