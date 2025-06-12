@@ -77,7 +77,7 @@ public static class PlayerService {
   /// Clears all cached player data and resets the lookup indexes.
   /// This is useful for resetting the service state, such as during server restarts or mod reloads.
   /// </summary>
-  public static void ClearCache() {
+  internal static void ClearCache() {
     PlayerNames.Clear();
     PlayerIds.Clear();
     PlayerNetworkIds.Clear();
@@ -160,26 +160,6 @@ public static class PlayerService {
   }
 
   /// <summary>
-  /// Removes all offline players from the cache to free memory.
-  /// Also cleans up their entries from all lookup indexes.
-  /// </summary>
-  public static void ClearOfflinePlayers() {
-    AllPlayers.RemoveAll(p => {
-      var remove = !p.IsOnline;
-
-      // If player is offline, remove from all indexes
-      if (remove) {
-        PlayerIds.Remove(p.PlatformId);
-        PlayerNames.Remove(p.Name.ToLower());
-        UnnamedPlayers.Remove(p);
-        // Note: NetworkId is already removed when player goes offline in SetPlayerCache
-      }
-
-      return remove;
-    });
-  }
-
-  /// <summary>
   /// Gets all players with admin privileges
   /// </summary>
   /// <returns>List of admin players</returns>
@@ -192,7 +172,7 @@ public static class PlayerService {
   /// </summary>
   /// <returns>List of online players</returns>
   public static List<PlayerData> GetAllConnected() {
-    return [.. AllPlayers.Where(p => p.IsOnline)];
+    return [.. PlayerNetworkIds.Values];
   }
 
   /// <summary>
