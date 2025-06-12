@@ -16,7 +16,7 @@ internal class UnitSpawnerReactSystemPatch {
 
   [HarmonyPatch(typeof(UnitSpawnerReactSystem), nameof(UnitSpawnerReactSystem.OnUpdate))]
   [HarmonyPostfix]
-  internal static bool Prefix(UnitSpawnerReactSystem __instance) {
+  internal static bool Postfix(UnitSpawnerReactSystem __instance) {
     // Early exit if no subscribers and no post actions to process
     if (EventManager.UnitSpawnSubscriberCount == 0 && PostActions.Count == 0) return true;
 
