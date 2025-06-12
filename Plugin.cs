@@ -6,7 +6,6 @@ using HarmonyLib;
 namespace ScarletCore;
 
 [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
-[BepInDependency("markvaaz.ScarletRCON", BepInDependency.DependencyFlags.SoftDependency)]
 public class Plugin : BasePlugin {
   static Harmony _harmony;
   public static Harmony Harmony => _harmony;
