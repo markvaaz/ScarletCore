@@ -27,16 +27,6 @@ ScarletCore is a modular and extensible framework for creating mods in V Rising.
    ```
 3. Start or restart your server.
 
-## Documentation Index
-
-| Section   | Description | Examples |
-|-----------|-------------|----------|
-| [Data](Wiki/Data/Database.md)      | Data structures and persistence | [PlayerData](Wiki/Data/PlayerData.md), [Settings](Wiki/Data/Settings.md) |
-| [Events](Wiki/Events/EventManager.md)    | Custom event system and game event integration | [OnChatMessage](Wiki/Events/OnChatMessage.md), [OnPlayerDeath](Wiki/Events/OnPlayerDeath.md) |
-| [Services](Wiki/Services/PlayerService.md)  | Utility services for player, inventory, admin, etc. | [AdminService](Wiki/Services/AdminService.md), [InventoryService](Wiki/Services/InventoryService.md) |
-| [Systems](Wiki/Systems/GameSystems.md)   | Game logic systems and action scheduling | [ActionScheduler](Wiki/Systems/ActionScheduler.md), [CoroutineHandler](Wiki/Systems/CoroutineHandler.md) |
-| [Utils](Wiki/Utils/Logger.md)      | Various utilities like logging and text formatting | [Logger](Wiki/Utils/Logger.md), [RichTextFormatter](Wiki/Utils/RichTextFormatter.md) |
-
 ## Getting Started
 
 1. Install ScarletCore in your V Rising mod project.
