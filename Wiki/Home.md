@@ -41,11 +41,6 @@ ScarletCore is a modular and extensible framework for creating mods in V Rising.
 EventManager.OnChatMessage += (sender, args) => {
     Logger.Log($"{args.UserName}: {args.Message}");
 };
-
-// Saving custom player data
-PlayerData data = PlayerService.GetPlayerData(player);
-data.CustomValue = 42;
-data.Save();
 ```
 
 ## Support & Contribution
