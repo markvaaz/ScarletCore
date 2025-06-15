@@ -106,6 +106,12 @@ public static class ECSExtensions {
 
     return false;
   }
+  public static Entity GetUserEntity(this Entity entity) {
+    if (entity.TryGetComponent(out PlayerCharacter playerCharacter)) return playerCharacter.UserEntity;
+    else if (entity.Has<User>()) return entity;
+
+    return Entity.Null;
+  }
   public static bool Exists(this Entity entity) {
     return !entity.IsNull() && EntityManager.Exists(entity);
   }
