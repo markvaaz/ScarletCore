@@ -223,7 +223,7 @@ public static class EventManager {
       if (deaths == null || deaths.Count == 0) return;
 
       var args = new DeathEventArgs(deaths);
-      OnAnyDeath?.Invoke(instance, args); Log.Info($"Death event fired with {deaths.Count} deaths");
+      OnAnyDeath?.Invoke(instance, args);
     } catch (Exception ex) {
       Log.Error($"Error invoking OnAnyDeath event: {ex}");
     }

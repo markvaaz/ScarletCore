@@ -57,8 +57,6 @@ public static class TeleportService {
       }
 
       UpdateEntityPosition(entity, position);
-
-      Log.Info($"Successfully teleported entity {entity.Index} to {position}");
       return true;
     } catch (System.Exception ex) {
       Log.Error($"Error teleporting entity {entity.Index}: {ex.Message}");
