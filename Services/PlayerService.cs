@@ -96,7 +96,7 @@ public static class PlayerService {
     // Extract core data from the user entity
     var networkId = userEntity.Read<NetworkId>();
     var userData = userEntity.Read<User>();
-    var name = userData.CharacterName.ToString();
+    var name = userData.CharacterName.Value;
 
     // Check if this is a new player we haven't seen before
     if (!PlayerIds.ContainsKey(userData.PlatformId)) {
