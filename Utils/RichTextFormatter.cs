@@ -368,7 +368,16 @@ public static class RichTextFormatter {
     // Apply highlights with cycling colors
     int highlightIndex = 0;
     result = Regex.Replace(result, highlightPattern, m => {
-      string color = highlightIndex < highlightColors.Count ? highlightColors[highlightIndex] : HighlightColor;
+      string color;
+      if (highlightColors.Count > 0) {
+        // Use the color at current index, or the last color if index exceeds list
+        int colorIndex = Math.Min(highlightIndex, highlightColors.Count - 1);
+        color = highlightColors[colorIndex];
+      } else {
+        // Fallback to HighlightColor if no colors provided
+        color = HighlightColor;
+      }
+
       if (color == null) color = HighlightColor;
       highlightIndex++;
       return m.Groups[1].Value.WithColor(color);
