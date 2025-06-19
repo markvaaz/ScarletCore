@@ -4,6 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using ProjectM;
+using Unity.Mathematics;
+using ScarletCore.Services;
+using Stunlock.Core;
 
 namespace ScarletCore.Data;
 
@@ -88,6 +91,10 @@ public class PlayerData() {
   /// </summary>
   public bool IsAdmin => User.IsAdmin;
 
+  public float3 Position => CharacterEntity.Position();
+
+  public int Level => Convert.ToInt32(GetEquipment().GetFullLevel());
+
   /// <summary>
   /// Gets the date and time when the player connected to the server.
   /// Converts from UTC ticks to local DateTime for easier handling.
@@ -108,6 +115,28 @@ public class PlayerData() {
 
       return string.IsNullOrEmpty(clanName) ? null : clanName;
     }
+  }
+
+  public DynamicBuffer<InventoryBuffer> GetInventory() {
+    return InventoryService.GetInventoryItems(CharacterEntity);
+  }
+
+  public bool TryGiveItem(PrefabGUID itemGuid, int amount = 1) {
+    if (InventoryService.IsFull(CharacterEntity)) return false;
+    InventoryService.AddItem(CharacterEntity, itemGuid, amount);
+    return true;
+  }
+
+  public Equipment GetEquipment() {
+    return CharacterEntity.Read<Equipment>();
+  }
+
+  public void CastAbility(PrefabGUID abilityGroup) {
+    AbilityService.CastAbility(CharacterEntity, abilityGroup);
+  }
+
+  public void TeleportTo(float3 position) {
+    TeleportService.TeleportToPosition(CharacterEntity, position);
   }
 
   /// <summary>
