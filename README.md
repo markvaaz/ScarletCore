@@ -67,4 +67,4 @@ This mod requires the following dependency:
 
 This project is made possible by the contributions of the following individuals:
 
-- **EduardoG, Helskog, Mitch, SirSaia, Odjit** & the [V Rising Mod Community on Discord](https://vrisingmods.com/discord)
+- **cheesasaurus, EduardoG, Helskog, Mitch, SirSaia, Odjit** & the [V Rising Mod Community on Discord](https://vrisingmods.com/discord)
