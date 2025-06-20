@@ -4,6 +4,7 @@ using Unity.Entities;
 using ProjectM.Scripting;
 using ProjectM;
 using ScarletCore.Services;
+using ProjectM.Network;
 
 namespace ScarletCore.Systems;
 
@@ -21,6 +22,8 @@ public static class GameSystems {
   private static DebugEventsSystem _debugEventsSystem;
   private static TriggerPersistenceSaveSystem _triggerPersistenceSaveSystem; private static EndSimulationEntityCommandBufferSystem _endSimulationEntityCommandBufferSystem;
   private static InstantiateMapIconsSystem_Spawn _instantiateMapIconsSystem_Spawn;
+  private static ServerScriptMapper _serverScriptMapper;
+  private static NetworkIdSystem.Singleton _networkIdSystem_Singleton;
 
   // Exception for when systems are not initialized
   private static Exception NotInitializedException => new("GameSystems not initialized. Call Initialize() first.");
@@ -117,6 +120,20 @@ public static class GameSystems {
     }
   }
 
+  public static ServerScriptMapper ServerScriptMapper {
+    get {
+      if (!Initialized) throw NotInitializedException;
+      return _serverScriptMapper;
+    }
+  }
+
+  public static NetworkIdSystem.Singleton NetworkIdSystem {
+    get {
+      if (!Initialized) throw NotInitializedException;
+      return _networkIdSystem_Singleton;
+    }
+  }
+
   public static bool Initialized { get; private set; } = false;
 
   public static void Initialize() {
@@ -129,7 +146,8 @@ public static class GameSystems {
     _entityManager = _server.EntityManager;
 
     // Cache all system references
-    _serverGameManager = _server.GetExistingSystemManaged<ServerScriptMapper>().GetServerGameManager();
+    _serverScriptMapper = _server.GetExistingSystemManaged<ServerScriptMapper>();
+    _serverGameManager = _serverScriptMapper.GetServerGameManager();
     _serverBootstrapSystem = _server.GetExistingSystemManaged<ServerBootstrapSystem>();
     _adminAuthSystem = _server.GetExistingSystemManaged<AdminAuthSystem>();
     _prefabCollectionSystem = _server.GetExistingSystemManaged<PrefabCollectionSystem>();
@@ -140,6 +158,7 @@ public static class GameSystems {
     _triggerPersistenceSaveSystem = _server.GetExistingSystemManaged<TriggerPersistenceSaveSystem>();
     _endSimulationEntityCommandBufferSystem = _server.GetExistingSystemManaged<EndSimulationEntityCommandBufferSystem>();
     _instantiateMapIconsSystem_Spawn = _server.GetExistingSystemManaged<InstantiateMapIconsSystem_Spawn>();
+    _networkIdSystem_Singleton = _serverScriptMapper.GetSingleton<NetworkIdSystem.Singleton>();
 
     Initialized = true;
 
