@@ -84,15 +84,22 @@ public class PlayerData() {
   /// Useful for checking player availability before performing operations.
   /// </summary>
   public bool IsOnline => User.IsConnected;
-
   /// <summary>
   /// Gets whether the player has administrator privileges.
   /// Used for permission checks and admin-only functionality.
   /// </summary>
   public bool IsAdmin => User.IsAdmin;
 
+  /// <summary>
+  /// Gets the current world position of the player's character.
+  /// Returns the 3D coordinates where the character is located in the game world.
+  /// </summary>
   public float3 Position => CharacterEntity.Position();
 
+  /// <summary>
+  /// Gets the player's current equipment level rounded to the nearest integer.
+  /// Calculates the full level from all equipped items and converts to int.
+  /// </summary>
   public int Level => Convert.ToInt32(GetEquipment().GetFullLevel());
 
   /// <summary>
@@ -117,24 +124,51 @@ public class PlayerData() {
     }
   }
 
+  /// <summary>
+  /// Gets the player's inventory items as a dynamic buffer.
+  /// Provides access to all items currently in the player's inventory.
+  /// </summary>
+  /// <returns>A dynamic buffer containing all inventory items</returns>
   public DynamicBuffer<InventoryBuffer> GetInventory() {
     return InventoryService.GetInventoryItems(CharacterEntity);
   }
 
+  /// <summary>
+  /// Attempts to give an item to the player's inventory.
+  /// Checks if inventory has space before adding the item.
+  /// </summary>
+  /// <param name="itemGuid">The GUID of the item to give</param>
+  /// <param name="amount">The quantity of items to give (default: 1)</param>
+  /// <returns>True if the item was successfully added, false if inventory is full</returns>
   public bool TryGiveItem(PrefabGUID itemGuid, int amount = 1) {
     if (InventoryService.IsFull(CharacterEntity)) return false;
     InventoryService.AddItem(CharacterEntity, itemGuid, amount);
     return true;
   }
 
+  /// <summary>
+  /// Gets the player's current equipment data.
+  /// Provides access to all equipped items and their stats.
+  /// </summary>
+  /// <returns>The Equipment component containing all equipped items</returns>
   public Equipment GetEquipment() {
     return CharacterEntity.Read<Equipment>();
   }
 
+  /// <summary>
+  /// Casts a specific ability for the player.
+  /// Triggers the specified ability if the player has it available.
+  /// </summary>
+  /// <param name="abilityGroup">The GUID of the ability group to cast</param>
   public void CastAbility(PrefabGUID abilityGroup) {
     AbilityService.CastAbility(CharacterEntity, abilityGroup);
   }
 
+  /// <summary>
+  /// Teleports the player to a specific position in the world.
+  /// Instantly moves the player's character to the specified coordinates.
+  /// </summary>
+  /// <param name="position">The target position to teleport to</param>
   public void TeleportTo(float3 position) {
     TeleportService.TeleportToPosition(CharacterEntity, position);
   }
