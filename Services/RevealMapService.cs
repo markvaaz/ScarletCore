@@ -15,8 +15,8 @@ public static class RevealMapService {
   private const int MAP_BUFFER_SIZE = 8192;
   private const int MAP_CANVAS_MAX_INDEX = MAP_CANVAS_SIZE - 1;
   private static readonly BoundsMinMax MAP_BOUNDS = new(
-    new(-2880, 635),
-    new(170, -2415)
+    new(-2880, 640),
+    new(160, -2400)
   );
   private static readonly int2 MAP_SIZE = new(3050, 3050);
 
