@@ -14,7 +14,6 @@ namespace ScarletCore.Services;
 /// Provides simplified methods for working with the game's buff system.
 /// </summary>
 public static class BuffService {
-
   /// <summary>
   /// Attempts to apply a buff to an entity with optional duration control.
   /// </summary>
@@ -22,7 +21,8 @@ public static class BuffService {
   /// <param name="prefabGUID">GUID of the buff prefab to apply</param>
   /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
   /// <returns>True if buff was successfully applied, false otherwise</returns>
-  public static bool TryApplyBuff(Entity entity, PrefabGUID prefabGUID, float duration = 0) {
+  public static bool TryApplyBuff(Entity entity, PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
+    buffEntity = Entity.Null; // Initialize output parameter
     try {
       // Create the buff application event using the game's debug system
       // This is the standard way to programmatically apply buffs in V Rising
@@ -43,39 +43,39 @@ public static class BuffService {
 
       // Verify the buff was actually applied by trying to retrieve it
       // BuffUtility.TryGetBuff checks if the buff entity exists and is valid
-      if (!BuffUtility.TryGetBuff(GameSystems.EntityManager, entity, prefabGUID, out var buff)) {
+      if (!BuffUtility.TryGetBuff(GameSystems.EntityManager, entity, prefabGUID, out buffEntity)) {
         return false;
       }
 
       // Remove gameplay event components to prevent unwanted side effects
       // These components can cause buffs to trigger additional events we might not want
-      if (buff.Has<CreateGameplayEventsOnSpawn>()) {
-        buff.Remove<CreateGameplayEventsOnSpawn>();
+      if (buffEntity.Has<CreateGameplayEventsOnSpawn>()) {
+        buffEntity.Remove<CreateGameplayEventsOnSpawn>();
       }
 
-      if (buff.Has<GameplayEventListeners>()) {
-        buff.Remove<GameplayEventListeners>();
+      if (buffEntity.Has<GameplayEventListeners>()) {
+        buffEntity.Remove<GameplayEventListeners>();
       }
 
       // Handle custom duration settings
       if (duration > 0) {
         // Set a specific duration for the buff
-        var lifeTime = buff.Read<LifeTime>();
+        var lifeTime = buffEntity.Read<LifeTime>();
 
         lifeTime.Duration = duration;
         lifeTime.EndAction = LifeTimeEndAction.Destroy; // Destroy when duration expires
 
-        buff.Write(lifeTime);
+        buffEntity.Write(lifeTime);
       }
 
       // Handle permanent/indefinite buffs
-      if (duration <= 0 && buff.Has<LifeTime>()) {
+      if (duration <= 0 && buffEntity.Has<LifeTime>()) {
         // Make the buff permanent by disabling its end action
-        var lifetime = buff.Read<LifeTime>();
+        var lifetime = buffEntity.Read<LifeTime>();
 
         lifetime.EndAction = LifeTimeEndAction.None; // Don't destroy when duration expires
 
-        buff.Write(lifetime);
+        buffEntity.Write(lifetime);
       }
 
       return true;
@@ -85,6 +85,18 @@ public static class BuffService {
       Log.Error($"An error occurred while applying buff: {e.Message}");
       return false;
     }
+  }
+
+  /// <summary>
+  /// Attempts to apply a buff to an entity with optional duration control.
+  /// </summary>
+  /// <param name="entity">Target entity to receive the buff</param>
+  /// <param name="prefabGUID">GUID of the buff prefab to apply</param>
+  /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <returns>True if buff was successfully applied, false otherwise</returns>
+  public static bool TryApplyBuff(Entity entity, PrefabGUID prefabGUID, float duration) {
+    // Call the overloaded method with an output parameter for the buff entity
+    return TryApplyBuff(entity, prefabGUID, duration, out _);
   }
 
   /// <summary>
