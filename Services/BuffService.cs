@@ -94,7 +94,7 @@ public static class BuffService {
   /// <param name="prefabGUID">GUID of the buff prefab to apply</param>
   /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
   /// <returns>True if buff was successfully applied, false otherwise</returns>
-  public static bool TryApplyBuff(Entity entity, PrefabGUID prefabGUID, float duration) {
+  public static bool TryApplyBuff(Entity entity, PrefabGUID prefabGUID, float duration = 0) {
     // Call the overloaded method with an output parameter for the buff entity
     return TryApplyBuff(entity, prefabGUID, duration, out _);
   }
