@@ -123,8 +123,9 @@ public class Database {
       // Check if file was modified since it was cached
       var configPath = GetConfigPath();
       string filePath = Path.Combine(configPath, $"{path}.json");
+      bool fileExists = File.Exists(filePath);
 
-      if (File.Exists(filePath)) {
+      if (fileExists) {
         var fileLastWrite = File.GetLastWriteTimeUtc(filePath);
         var cacheTimestamp = _cacheTimestamps[cacheKey];
 
@@ -138,10 +139,47 @@ public class Database {
       if (_cache[cacheKey] is T cachedData) {
         return cachedData;
       }
+
+      // If cache exists but value is null/invalid and no file exists, return default
+      if (!fileExists) {
+        return default;
+      }
     }
 
     // If not in cache, load from file
     return Load<T>(path);
+  }
+
+  /// <summary>
+  /// Gets from cache/file or creates and saves data if it doesn't exist
+  /// </summary>
+  /// <typeparam name="T">Type of data to get or create</typeparam>
+  /// <param name="path">File name/path (without extension)</param>
+  /// <param name="factory">Factory function to create the data if it doesn't exist</param>
+  /// <returns>Existing cached/loaded data or newly created and saved data</returns>
+  public T GetOrCreate<T>(string path, Func<T> factory) {
+    // First try to get existing data (from cache or file)
+    var existingData = Get<T>(path);
+
+    // If data exists and is not null/default, return it
+    if (existingData != null && !existingData.Equals(default(T))) {
+      return existingData;
+    }
+
+    // Create new data and save it
+    var newData = factory();
+    Save(path, newData);
+    return newData;
+  }
+
+  /// <summary>
+  /// Gets from cache/file or creates and saves data using default constructor if it doesn't exist
+  /// </summary>
+  /// <typeparam name="T">Type of data to get or create (must have parameterless constructor)</typeparam>
+  /// <param name="path">File name/path (without extension)</param>
+  /// <returns>Existing cached/loaded data or newly created and saved data</returns>
+  public T GetOrCreate<T>(string path) where T : new() {
+    return GetOrCreate(path, () => new T());
   }
 
   /// <summary>
@@ -275,6 +313,35 @@ public class Database {
     }
 
     /// <summary>
+    /// Gets temporary data from memory cache or creates it if it doesn't exist
+    /// </summary>
+    /// <typeparam name="T">Type of data to get or create</typeparam>
+    /// <param name="key">Key of the data to retrieve or create</param>
+    /// <param name="factory">Factory function to create the data if it doesn't exist</param>
+    /// <returns>Existing cached data or newly created data</returns>
+    public T GetOrCreate<T>(string key, Func<T> factory) {
+      string cacheKey = GetTempCacheKey(key);
+
+      if (_tempCache.ContainsKey(cacheKey) && _tempCache[cacheKey] is T cachedData) {
+        return cachedData;
+      }
+
+      var newData = factory();
+      _tempCache[cacheKey] = newData;
+      return newData;
+    }
+
+    /// <summary>
+    /// Gets temporary data from memory cache or creates it using default constructor if it doesn't exist
+    /// </summary>
+    /// <typeparam name="T">Type of data to get or create (must have parameterless constructor)</typeparam>
+    /// <param name="key">Key of the data to retrieve or create</param>
+    /// <returns>Existing cached data or newly created data</returns>
+    public T GetOrCreate<T>(string key) where T : new() {
+      return GetOrCreate(key, () => new T());
+    }
+
+    /// <summary>
     /// Checks if temporary data exists for the given key
     /// </summary>
     /// <param name="key">Key to check</param>
@@ -329,5 +396,4 @@ public class Database {
       return keys;
     }
   }
-
 }
