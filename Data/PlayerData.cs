@@ -227,4 +227,27 @@ public class PlayerData() {
     // Return default value if data not found or type mismatch
     return default;
   }
+
+  /// <summary>
+  /// Retrieves custom data from a specific assembly/mod.
+  /// Allows mods to access data stored by other mods if they know the assembly name.
+  /// Returns the default value for the type if no data is found or type mismatch occurs.
+  /// </summary>
+  /// <typeparam name="T">The expected type of the stored data</typeparam>
+  /// <param name="assemblyName">The name of the assembly/mod to retrieve data from</param>
+  /// <returns>The stored data or default(T) if not found</returns>
+  /// <example>
+  /// // Retrieve data from another mod
+  /// var otherModConfig = playerData.GetDataFrom&lt;SomeConfig&gt;("OtherModName");
+  /// var sharedPlayerLevel = playerData.GetDataFrom&lt;int&gt;("SharedLevelingMod");
+  /// </example>
+  public T GetDataFrom<T>(string assemblyName) {
+    // Try to get the data and cast it to the expected type
+    if (CustomData.TryGetValue(assemblyName, out var value) && value is T typedValue) {
+      return typedValue;
+    }
+
+    // Return default value if data not found or type mismatch
+    return default;
+  }
 }
