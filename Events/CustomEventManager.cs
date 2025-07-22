@@ -9,35 +9,8 @@ namespace ScarletCore.Events;
 /// Manager for custom events that allows dynamic event registration and triggering
 /// </summary>
 public static class CustomEventManager {
-  private static readonly ConcurrentDictionary<string, List<Action<object>>> _eventHandlers = new();
+  private static readonly ConcurrentDictionary<string, List<Delegate>> _eventHandlers = new();
   private static readonly object _lock = new();
-
-  /// <summary>
-  /// Registers a callback for a custom event
-  /// </summary>
-  /// <param name="eventName">Name of the custom event</param>
-  /// <param name="callback">Callback to execute when event is triggered</param>
-  public static void On(string eventName, Action<object> callback) {
-    if (string.IsNullOrWhiteSpace(eventName)) {
-      Log.Warning("CustomEventManager: Event name cannot be null or empty");
-      return;
-    }
-
-    if (callback == null) {
-      Log.Warning("CustomEventManager: Callback cannot be null");
-      return;
-    }
-
-    lock (_lock) {
-      if (!_eventHandlers.ContainsKey(eventName)) {
-        _eventHandlers[eventName] = [];
-      }
-
-      _eventHandlers[eventName].Add(callback);
-    }
-
-    Log.Info($"CustomEventManager: Registered callback for event '{eventName}'");
-  }
 
   /// <summary>
   /// Registers a callback for a custom event with typed data
@@ -46,36 +19,38 @@ public static class CustomEventManager {
   /// <param name="eventName">Name of the custom event</param>
   /// <param name="callback">Typed callback to execute when event is triggered</param>
   public static void On<T>(string eventName, Action<T> callback) {
-    On(eventName, data => {
-      try {
-        if (data is T typedData) {
-          callback(typedData);
-        } else {
-          Log.Warning($"CustomEventManager: Type mismatch for event '{eventName}'. Expected {typeof(T).Name}, got {data?.GetType().Name ?? "null"}");
-        }
-      } catch (Exception ex) {
-        Log.Error($"CustomEventManager: Error in typed callback for event '{eventName}': {ex}");
+    if (string.IsNullOrWhiteSpace(eventName)) {
+      Log.Warning("CustomEventManager: Event name cannot be null or empty");
+      return;
+    }
+    if (callback == null) {
+      Log.Warning("CustomEventManager: Callback cannot be null");
+      return;
+    }
+    lock (_lock) {
+      if (!_eventHandlers.ContainsKey(eventName)) {
+        _eventHandlers[eventName] = [];
       }
-    });
+      _eventHandlers[eventName].Add(callback);
+    }
+    Log.Info($"CustomEventManager: Registered callback for event '{eventName}'");
   }
 
   /// <summary>
-  /// Unregisters a callback from a custom event
+  /// Unregisters a callback from a custom event with typed data
   /// </summary>
+  /// <typeparam name="T">Type of the event data</typeparam>
   /// <param name="eventName">Name of the custom event</param>
-  /// <param name="callback">Callback to remove</param>
+  /// <param name="callback">Typed callback to remove</param>
   /// <returns>True if callback was found and removed</returns>
-  public static bool Off(string eventName, Action<object> callback) {
+  public static bool Off<T>(string eventName, Action<T> callback) {
     if (string.IsNullOrWhiteSpace(eventName) || callback == null)
       return false;
-
     lock (_lock) {
       if (_eventHandlers.TryGetValue(eventName, out var handlers)) {
         bool removed = handlers.Remove(callback);
         if (removed) {
           Log.Info($"CustomEventManager: Unregistered callback for event '{eventName}'");
-
-          // Clean up empty event lists
           if (handlers.Count == 0) {
             _eventHandlers.TryRemove(eventName, out _);
           }
@@ -83,7 +58,6 @@ public static class CustomEventManager {
         return removed;
       }
     }
-
     return false;
   }
 
@@ -97,22 +71,29 @@ public static class CustomEventManager {
       Log.Warning("CustomEventManager: Event name cannot be null or empty");
       return;
     }
-
-    List<Action<object>> handlersToExecute = null;
-
+    List<Delegate> handlersToExecute = null;
     lock (_lock) {
       if (_eventHandlers.TryGetValue(eventName, out var handlers) && handlers.Count > 0) {
-        // Create a copy to avoid holding the lock during execution
         handlersToExecute = [.. handlers];
       }
     }
-
     if (handlersToExecute != null) {
       Log.Info($"CustomEventManager: Emitting event '{eventName}' to {handlersToExecute.Count} subscribers");
-
       foreach (var handler in handlersToExecute) {
         try {
-          handler(data);
+          var handlerType = handler.GetType();
+          var invokeMethod = handlerType.GetMethod("Invoke");
+          var parameters = invokeMethod?.GetParameters();
+          if (parameters != null && parameters.Length == 1) {
+            var paramType = parameters[0].ParameterType;
+            if (data == null && paramType.IsClass) {
+              handler.DynamicInvoke(null);
+            } else if (data != null && paramType.IsAssignableFrom(data.GetType())) {
+              handler.DynamicInvoke(data);
+            } else {
+              Log.Warning($"CustomEventManager: Type mismatch for event '{eventName}'. Expected {paramType.Name}, got {data?.GetType().Name ?? "null"}");
+            }
+          }
         } catch (Exception ex) {
           Log.Error($"CustomEventManager: Error executing callback for event '{eventName}': {ex}");
         }
@@ -128,7 +109,6 @@ public static class CustomEventManager {
   public static int GetSubscriberCount(string eventName) {
     if (string.IsNullOrWhiteSpace(eventName))
       return 0;
-
     lock (_lock) {
       return _eventHandlers.TryGetValue(eventName, out var handlers) ? handlers.Count : 0;
     }
@@ -152,7 +132,6 @@ public static class CustomEventManager {
   public static bool ClearEvent(string eventName) {
     if (string.IsNullOrWhiteSpace(eventName))
       return false;
-
     lock (_lock) {
       bool removed = _eventHandlers.TryRemove(eventName, out _);
       if (removed) {
@@ -179,13 +158,11 @@ public static class CustomEventManager {
   /// <returns>Dictionary with event names and subscriber counts</returns>
   public static Dictionary<string, int> GetEventStatistics() {
     var stats = new Dictionary<string, int>();
-
     lock (_lock) {
       foreach (var kvp in _eventHandlers) {
         stats[kvp.Key] = kvp.Value.Count;
       }
     }
-
     return stats;
   }
 }
