@@ -14,6 +14,9 @@ namespace ScarletCore.Data;
 /// Represents comprehensive player data and provides convenient access to player-related information.
 /// This class serves as a wrapper around Unity ECS entities to simplify player data management.
 /// </summary>
+/// <summary>
+/// Creates a new instance of PlayerData.
+/// </summary>
 public class PlayerData() {
   /// <summary>
   /// The underlying Unity ECS entity representing the user.
@@ -146,6 +149,19 @@ public class PlayerData() {
     return true;
   }
 
+
+  /// <summary>
+  /// Attempts to remove an item from the player's inventory.
+  /// Returns false if the inventory is empty or if there are not enough items.
+  /// </summary>
+  /// <param name="itemGuid">The GUID of the item to remove</param>
+  /// <param name="amount">The quantity of items to remove (default: 1)</param>
+  /// <returns>True if the item was successfully removed, false otherwise</returns>
+  public bool TryRemoveItem(PrefabGUID itemGuid, int amount = 1) {
+    if (InventoryService.IsInventoryEmpty(CharacterEntity)) return false;
+    return InventoryService.RemoveItem(CharacterEntity, itemGuid, amount);
+  }
+
   /// <summary>
   /// Gets the player's current equipment data.
   /// Provides access to all equipped items and their stats.
@@ -171,6 +187,16 @@ public class PlayerData() {
   /// <param name="position">The target position to teleport to</param>
   public void TeleportTo(float3 position) {
     TeleportService.TeleportToPosition(CharacterEntity, position);
+  }
+
+  /// <summary>
+  /// Sends a chat or system message to the player.
+  /// Ignores empty or whitespace-only messages.
+  /// </summary>
+  /// <param name="message">The message text to send</param>
+  public void SendMessage(string message) {
+    if (string.IsNullOrWhiteSpace(message)) return;
+    MessageService.Send(this, message);
   }
 
   /// <summary>
