@@ -3,19 +3,19 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>ScarletCore</AssemblyName>
     <Description>Framework and utilities for all Scarlet mods in V Rising</Description>
-    <Version>1.1.5</Version>
+    <Version>1.1.7</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RootNamespace>ScarletCore</RootNamespace>
     <PackageId>ScarletCore</PackageId>
-    <AssemblyVersion>1.1.5.0</AssemblyVersion>
-    <FileVersion>1.1.5.0</FileVersion>
+    <AssemblyVersion>1.1.7.0</AssemblyVersion>
+    <FileVersion>1.1.7.0</FileVersion>
     <Authors>markvaaz</Authors>
   </PropertyGroup>
   <PropertyGroup> 
     <BepInExPluginGuid>markvaaz.ScarletCore</BepInExPluginGuid>
     <BepInExPluginName>ScarletCore</BepInExPluginName>
-    <BepInExPluginVersion>1.1.5</BepInExPluginVersion>
+    <BepInExPluginVersion>1.1.7</BepInExPluginVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.691" IncludeAssets="compile" />
@@ -23,6 +23,12 @@
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
     <PackageReference Include="VRising.Unhollowed.Client" Version="1.1.*" />
   </ItemGroup>
+
+  <!-- ignore the Wiki folder -->
+  <ItemGroup>
+    <None Remove="Wiki\**" />
+  </ItemGroup>
+  
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
 		<Exec Command="copy &quot;$(TargetPath)&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\VRisingDedicatedServer\BepInEx\plugins&quot; " ContinueOnError="true" />
     <Exec Command="start &quot;VRising Server&quot; cmd /c &quot;cd /d &quot;C:\Program Files (x86)\Steam\steamapps\common\VRisingDedicatedServer&quot; &amp; START_SERVER.bat&quot;" />
