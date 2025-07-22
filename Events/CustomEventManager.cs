@@ -13,6 +13,51 @@ public static class CustomEventManager {
   private static readonly object _lock = new();
 
   /// <summary>
+  /// Registra um callback para um evento customizado sem dados (Action sem parâmetros)
+  /// </summary>
+  /// <param name="eventName">Nome do evento customizado</param>
+  /// <param name="callback">Callback a ser executado quando o evento for disparado</param>
+  public static void On(string eventName, Action callback) {
+    if (string.IsNullOrWhiteSpace(eventName)) {
+      Log.Warning("CustomEventManager: Event name cannot be null or empty");
+      return;
+    }
+    if (callback == null) {
+      Log.Warning("CustomEventManager: Callback cannot be null");
+      return;
+    }
+    lock (_lock) {
+      if (!_eventHandlers.ContainsKey(eventName)) {
+        _eventHandlers[eventName] = [];
+      }
+      _eventHandlers[eventName].Add(callback);
+    }
+  }
+
+  /// <summary>
+  /// Remove um callback sem parâmetros de um evento customizado
+  /// </summary>
+  /// <param name="eventName">Nome do evento customizado</param>
+  /// <param name="callback">Callback a ser removido</param>
+  /// <returns>True se o callback foi encontrado e removido</returns>
+  public static bool Off(string eventName, Action callback) {
+    if (string.IsNullOrWhiteSpace(eventName) || callback == null)
+      return false;
+    lock (_lock) {
+      if (_eventHandlers.TryGetValue(eventName, out var handlers)) {
+        bool removed = handlers.Remove(callback);
+        if (removed) {
+          if (handlers.Count == 0) {
+            _eventHandlers.TryRemove(eventName, out _);
+          }
+        }
+        return removed;
+      }
+    }
+    return false;
+  }
+
+  /// <summary>
   /// Registers a callback for a custom event with typed data
   /// </summary>
   /// <typeparam name="T">Type of the event data</typeparam>
@@ -33,7 +78,6 @@ public static class CustomEventManager {
       }
       _eventHandlers[eventName].Add(callback);
     }
-    Log.Info($"CustomEventManager: Registered callback for event '{eventName}'");
   }
 
   /// <summary>
@@ -50,7 +94,6 @@ public static class CustomEventManager {
       if (_eventHandlers.TryGetValue(eventName, out var handlers)) {
         bool removed = handlers.Remove(callback);
         if (removed) {
-          Log.Info($"CustomEventManager: Unregistered callback for event '{eventName}'");
           if (handlers.Count == 0) {
             _eventHandlers.TryRemove(eventName, out _);
           }
@@ -78,7 +121,6 @@ public static class CustomEventManager {
       }
     }
     if (handlersToExecute != null) {
-      Log.Info($"CustomEventManager: Emitting event '{eventName}' to {handlersToExecute.Count} subscribers");
       foreach (var handler in handlersToExecute) {
         try {
           var handlerType = handler.GetType();
@@ -133,11 +175,7 @@ public static class CustomEventManager {
     if (string.IsNullOrWhiteSpace(eventName))
       return false;
     lock (_lock) {
-      bool removed = _eventHandlers.TryRemove(eventName, out _);
-      if (removed) {
-        Log.Info($"CustomEventManager: Cleared all subscribers for event '{eventName}'");
-      }
-      return removed;
+      return _eventHandlers.TryRemove(eventName, out _);
     }
   }
 
