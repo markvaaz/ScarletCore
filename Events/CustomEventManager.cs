@@ -203,4 +203,28 @@ public static class CustomEventManager {
     }
     return stats;
   }
+
+  /// <summary>
+  /// Unregisters all callbacks from a given assembly for all events
+  /// </summary>
+  /// <param name="assembly">The assembly whose callbacks should be removed</param>
+  /// <returns>The number of callbacks removed</returns>
+  public static int UnregisterAssembly(System.Reflection.Assembly assembly) {
+    if (assembly == null) return 0;
+    int removedCount = 0;
+    lock (_lock) {
+      var keysToRemove = new List<string>();
+      foreach (var kvp in _eventHandlers) {
+        var handlers = kvp.Value;
+        int before = handlers.Count;
+        handlers.RemoveAll(d => d.Method?.DeclaringType?.Assembly == assembly);
+        removedCount += before - handlers.Count;
+        if (handlers.Count == 0) keysToRemove.Add(kvp.Key);
+      }
+      foreach (var key in keysToRemove) {
+        _eventHandlers.TryRemove(key, out _);
+      }
+    }
+    return removedCount;
+  }
 }
