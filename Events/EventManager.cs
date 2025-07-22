@@ -468,5 +468,48 @@ public static class EventManager {
     Log.Warning("All ScarletEvents subscribers have been cleared");
   }
 
+  /// <summary>
+  /// Removes all event subscribers from a specific assembly from all ScarletCore events.
+  /// </summary>
+  /// <param name="assembly">Assembly whose event handlers should be removed</param>
+  public static void UnregisterAssembly(System.Reflection.Assembly assembly) {
+    if (assembly == null) return;
+
+    void RemoveHandlers<T>(ref EventHandler<T> evt) where T : EventArgs {
+      if (evt == null) return;
+      foreach (var d in evt.GetInvocationList()) {
+        if (d.Method.DeclaringType != null && d.Method.DeclaringType.Assembly == assembly) {
+          evt -= (EventHandler<T>)d;
+        }
+      }
+    }
+
+    void RemoveHandlersSimple(ref EventHandler evt) {
+      if (evt == null) return;
+      foreach (var d in evt.GetInvocationList()) {
+        if (d.Method.DeclaringType != null && d.Method.DeclaringType.Assembly == assembly) {
+          evt -= (EventHandler)d;
+        }
+      }
+    }
+
+    RemoveHandlers(ref OnInitialize);
+    RemoveHandlers(ref OnChatMessage);
+    RemoveHandlers(ref OnUserConnected);
+    RemoveHandlers(ref OnUserDisconnected);
+    RemoveHandlers(ref OnUserKicked);
+    RemoveHandlers(ref OnUserBanned);
+    RemoveHandlers(ref OnAnyDeath);
+    RemoveHandlers(ref OnOtherDeath);
+    RemoveHandlers(ref OnPlayerDeath);
+    RemoveHandlers(ref OnVBloodDeath);
+    RemoveHandlers(ref OnServantDeath);
+    RemoveHandlers(ref OnDealDamage);
+    RemoveHandlers(ref OnUnitSpawn);
+    RemoveHandlers(ref OnWarEventsStarted);
+    RemoveHandlersSimple(ref OnWarEventsEnded);
+    RemoveHandlers(ref OnPlayerDowned);
+  }
+
   #endregion
 }
