@@ -15,43 +15,44 @@ namespace ScarletCore.Services;
 /// </summary>
 public class InventoryService {
   /// <summary>
-  /// Verifica se o inventário de uma entidade está completamente vazio.
+  /// Checks if an entity's inventory is completely empty.
   /// </summary>
-  /// <param name="entity">A entidade a ser verificada</param>
-  /// <returns>True se o inventário estiver vazio, false caso contrário</returns>
+  /// <param name="entity">The entity to check</param>
+  /// <returns>True if the inventory is empty, false otherwise</returns>
   public static bool IsInventoryEmpty(Entity entity) {
     return InventoryUtilities.IsInventoryEmpty(EntityManager, entity);
   }
+
   /// <summary>
-  /// Tenta obter o item em um slot específico do inventário de uma entidade.
+  /// Attempts to get the item at a specific slot in an entity's inventory.
   /// </summary>
-  /// <param name="entity">A entidade cujo inventário será consultado</param>
-  /// <param name="slot">O índice do slot</param>
-  /// <param name="item">O item encontrado, se houver</param>
-  /// <returns>True se o item existir no slot, false caso contrário</returns>
+  /// <param name="entity">The entity whose inventory will be checked</param>
+  /// <param name="slot">The slot index</param>
+  /// <param name="item">The item found, if any</param>
+  /// <returns>True if an item exists at the slot, false otherwise</returns>
   public static bool TryGetItemAtSlot(Entity entity, int slot, out InventoryBuffer item) {
     return InventoryUtilities.TryGetItemAtSlot(EntityManager, entity, slot, out item);
   }
 
   /// <summary>
-  /// Remove o item de um slot específico do inventário de uma entidade.
+  /// Removes the item at a specific slot in an entity's inventory.
   /// </summary>
-  /// <param name="entity">A entidade cujo inventário será alterado</param>
-  /// <param name="slot">O índice do slot</param>
+  /// <param name="entity">The entity whose inventory will be modified</param>
+  /// <param name="slot">The slot index</param>
   public static void RemoveItemAtSlot(Entity entity, int slot) {
     if (!TryGetItemAtSlot(entity, slot, out var item)) return;
-    // Opcional: proteger slots inválidos, se necessário, aqui não há checagem extra
+    // Optionally: protect invalid slots if needed, here there is no extra check
     InventoryUtilitiesServer.TryRemoveItemAtIndex(EntityManager, entity, item.ItemType, item.Amount, slot, true);
   }
 
   /// <summary>
-  /// Adiciona um item em um slot específico do inventário, definindo quantidade e MaxAmountOverride.
+  /// Adds an item to a specific slot in the inventory, setting amount and MaxAmountOverride.
   /// </summary>
-  /// <param name="entity">A entidade cujo inventário será alterado</param>
-  /// <param name="slot">O índice do slot</param>
-  /// <param name="prefabGUID">O GUID do item</param>
-  /// <param name="amount">A quantidade do item</param>
-  /// <param name="maxAmount">O valor de MaxAmountOverride</param>
+  /// <param name="entity">The entity whose inventory will be modified</param>
+  /// <param name="slot">The slot index</param>
+  /// <param name="prefabGUID">The GUID of the item</param>
+  /// <param name="amount">The amount of the item</param>
+  /// <param name="maxAmount">The value for MaxAmountOverride</param>
   public static void AddWithMaxAmount(Entity entity, int slot, PrefabGUID prefabGUID, int amount, int maxAmount) {
     var response = GameManager.TryAddInventoryItem(entity, prefabGUID, 1, new(slot), false);
     var slotIndex = response.Slot;
@@ -63,9 +64,9 @@ public class InventoryService {
   }
 
   /// <summary>
-  /// Força todos os itens do inventário de uma entidade a terem MaxAmountOverride igual à quantidade atual.
+  /// Forces all items in an entity's inventory to have MaxAmountOverride equal to their current amount.
   /// </summary>
-  /// <param name="entity">A entidade cujo inventário será ajustado</param>
+  /// <param name="entity">The entity whose inventory will be adjusted</param>
   public static void ForceAllSlotsMaxAmount(Entity entity) {
     var items = GetInventoryItems(entity);
     for (int i = 0; i < items.Length; i++) {
