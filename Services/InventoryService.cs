@@ -14,6 +14,66 @@ namespace ScarletCore.Services;
 /// Handles inventory operations like adding, removing, and checking items.
 /// </summary>
 public class InventoryService {
+  /// <summary>
+  /// Verifica se o inventário de uma entidade está completamente vazio.
+  /// </summary>
+  /// <param name="entity">A entidade a ser verificada</param>
+  /// <returns>True se o inventário estiver vazio, false caso contrário</returns>
+  public static bool IsInventoryEmpty(Entity entity) {
+    return InventoryUtilities.IsInventoryEmpty(EntityManager, entity);
+  }
+  /// <summary>
+  /// Tenta obter o item em um slot específico do inventário de uma entidade.
+  /// </summary>
+  /// <param name="entity">A entidade cujo inventário será consultado</param>
+  /// <param name="slot">O índice do slot</param>
+  /// <param name="item">O item encontrado, se houver</param>
+  /// <returns>True se o item existir no slot, false caso contrário</returns>
+  public static bool TryGetItemAtSlot(Entity entity, int slot, out InventoryBuffer item) {
+    return InventoryUtilities.TryGetItemAtSlot(EntityManager, entity, slot, out item);
+  }
+
+  /// <summary>
+  /// Remove o item de um slot específico do inventário de uma entidade.
+  /// </summary>
+  /// <param name="entity">A entidade cujo inventário será alterado</param>
+  /// <param name="slot">O índice do slot</param>
+  public static void RemoveItemAtSlot(Entity entity, int slot) {
+    if (!TryGetItemAtSlot(entity, slot, out var item)) return;
+    // Opcional: proteger slots inválidos, se necessário, aqui não há checagem extra
+    InventoryUtilitiesServer.TryRemoveItemAtIndex(EntityManager, entity, item.ItemType, item.Amount, slot, true);
+  }
+
+  /// <summary>
+  /// Adiciona um item em um slot específico do inventário, definindo quantidade e MaxAmountOverride.
+  /// </summary>
+  /// <param name="entity">A entidade cujo inventário será alterado</param>
+  /// <param name="slot">O índice do slot</param>
+  /// <param name="prefabGUID">O GUID do item</param>
+  /// <param name="amount">A quantidade do item</param>
+  /// <param name="maxAmount">O valor de MaxAmountOverride</param>
+  public static void AddWithMaxAmount(Entity entity, int slot, PrefabGUID prefabGUID, int amount, int maxAmount) {
+    var response = GameManager.TryAddInventoryItem(entity, prefabGUID, 1, new(slot), false);
+    var slotIndex = response.Slot;
+    var items = GetInventoryItems(entity);
+    var item = items[slotIndex];
+    item.MaxAmountOverride = maxAmount;
+    item.Amount = amount;
+    items[slotIndex] = item;
+  }
+
+  /// <summary>
+  /// Força todos os itens do inventário de uma entidade a terem MaxAmountOverride igual à quantidade atual.
+  /// </summary>
+  /// <param name="entity">A entidade cujo inventário será ajustado</param>
+  public static void ForceAllSlotsMaxAmount(Entity entity) {
+    var items = GetInventoryItems(entity);
+    for (int i = 0; i < items.Length; i++) {
+      var existingItem = items[i];
+      existingItem.MaxAmountOverride = existingItem.Amount;
+      items[i] = existingItem;
+    }
+  }
   private static ServerGameManager GameManager = GameSystems.ServerGameManager;
   private static EntityManager EntityManager = GameSystems.EntityManager;
 
@@ -32,14 +92,15 @@ public class InventoryService {
   /// <param name="entity">The entity to add items to</param>
   /// <param name="guid">The GUID of the item to add</param>
   /// <param name="amount">The quantity of items to add</param>
-  public static void AddItem(Entity entity, PrefabGUID guid, int amount) {
+  public static bool AddItem(Entity entity, PrefabGUID guid, int amount) {
     // Don't add items if inventory is full
-    if (GameManager.HasFullInventory(entity)) return;
+    if (GameManager.HasFullInventory(entity)) return false;
 
     try {
-      GameManager.TryAddInventoryItem(entity, guid, amount);
+      return GameManager.TryAddInventoryItem(entity, guid, amount);
     } catch (Exception e) {
       Log.Error(e);
+      return false;
     }
   }
 
@@ -279,49 +340,6 @@ public class InventoryService {
     }
 
     return failedItems;
-  }
-
-  /// <summary>
-  /// Gets a summary of all items in an entity's inventory.
-  /// </summary>
-  /// <param name="entity">The entity to analyze</param>
-  /// <returns>Dictionary with all items and their quantities</returns>
-  public static Dictionary<PrefabGUID, int> GetInventorySummary(Entity entity) {
-    var summary = new Dictionary<PrefabGUID, int>();
-    var inventoryBuffer = GetInventoryItems(entity);
-
-    if (inventoryBuffer.IsCreated) {
-      foreach (var item in inventoryBuffer) {
-        if (summary.ContainsKey(item.ItemType)) {
-          summary[item.ItemType] += item.Amount;
-        } else {
-          summary[item.ItemType] = item.Amount;
-        }
-      }
-    }
-
-    return summary;
-  }
-
-  /// <summary>
-  /// Counts the number of free slots in an entity's inventory.
-  /// </summary>
-  /// <param name="entity">The entity to check</param>
-  /// <returns>Number of free inventory slots</returns>
-  public static int GetFreeSlots(Entity entity) {
-    var totalSlots = GetInventorySize(entity);
-    var inventoryBuffer = GetInventoryItems(entity);
-
-    if (!inventoryBuffer.IsCreated) return 0;
-
-    var usedSlots = 0;
-    foreach (var item in inventoryBuffer) {
-      if (item.Amount > 0) {
-        usedSlots++;
-      }
-    }
-
-    return totalSlots - usedSlots;
   }
 
   #endregion
