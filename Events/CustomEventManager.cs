@@ -13,10 +13,10 @@ public static class CustomEventManager {
   private static readonly object _lock = new();
 
   /// <summary>
-  /// Registra um callback para um evento customizado sem dados (Action sem parâmetros)
+  /// Registers a callback for a custom event with no data (parameterless Action)
   /// </summary>
-  /// <param name="eventName">Nome do evento customizado</param>
-  /// <param name="callback">Callback a ser executado quando o evento for disparado</param>
+  /// <param name="eventName">Name of the custom event</param>
+  /// <param name="callback">Callback to execute when the event is triggered</param>
   public static void On(string eventName, Action callback) {
     if (string.IsNullOrWhiteSpace(eventName)) {
       Log.Warning("CustomEventManager: Event name cannot be null or empty");
@@ -35,11 +35,11 @@ public static class CustomEventManager {
   }
 
   /// <summary>
-  /// Remove um callback sem parâmetros de um evento customizado
+  /// Unregisters a parameterless callback from a custom event
   /// </summary>
-  /// <param name="eventName">Nome do evento customizado</param>
-  /// <param name="callback">Callback a ser removido</param>
-  /// <returns>True se o callback foi encontrado e removido</returns>
+  /// <param name="eventName">Name of the custom event</param>
+  /// <param name="callback">Callback to remove</param>
+  /// <returns>True if the callback was found and removed</returns>
   public static bool Off(string eventName, Action callback) {
     if (string.IsNullOrWhiteSpace(eventName) || callback == null)
       return false;
