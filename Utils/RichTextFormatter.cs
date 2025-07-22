@@ -40,6 +40,7 @@ public static class RichTextFormatter {
   public static readonly string HighlightWarningColor = "#ffff00";
   /// <summary>Default text color</summary>
   public static readonly string TextColor = "#ffffff";
+  public static readonly string SuccessTextColor = "#9cff9c";
   /// <summary>Error text color</summary>
   public static readonly string ErrorTextColor = "#ff8f8f";
   /// <summary>Warning text color</summary>
@@ -167,7 +168,7 @@ public static class RichTextFormatter {
   /// <param name="text">Text to format as success</param>
   /// <returns>Success-styled text</returns>
   public static string FormatSuccess(this string text) {
-    return ApplyFormatting(text, TextColor, [Green]);
+    return ApplyFormatting(text, SuccessTextColor, [Green]);
   }
 
   /// <summary>
