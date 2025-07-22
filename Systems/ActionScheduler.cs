@@ -1,3 +1,4 @@
+using System.Reflection;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -172,6 +173,28 @@ public static class ActionScheduler {
 
   // Reusable list to avoid allocations in Execute() - PERFORMANCE OPTIMIZATION  
   private static readonly List<ScheduledAction> _activeActions = new();
+
+  /// <summary>
+  /// Removes all scheduled actions associated with a specific assembly.
+  /// </summary>
+  /// <param name="assembly">Assembly whose actions should be removed</param>
+  public static void UnregisterAssembly(Assembly assembly) {
+    if (assembly == null) return;
+    lock (_scheduledActions) {
+      // Collect actions to remove
+      var toRemove = new List<ScheduledAction>();
+      foreach (var action in _scheduledActions) {
+        var method = action.Action?.Method ?? action.ActionWithCancel?.Method;
+        if (method != null && method.DeclaringType != null && method.DeclaringType.Assembly == assembly) {
+          toRemove.Add(action);
+        }
+      }
+      foreach (var action in toRemove) {
+        _scheduledActions.Remove(action);
+        _actionLookup.Remove(action.Id);
+      }
+    }
+  }
 
   /// <summary>
   /// Main execution method that processes all scheduled actions.
