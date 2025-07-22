@@ -13,11 +13,11 @@ public static class CustomEventManager {
   private static readonly object _lock = new();
 
   /// <summary>
-  /// Registers a callback for a custom event with no data (parameterless Action)
+  /// Registers a callback (any delegate type) for a custom event.
   /// </summary>
   /// <param name="eventName">Name of the custom event</param>
-  /// <param name="callback">Callback to execute when the event is triggered</param>
-  public static void On(string eventName, Action callback) {
+  /// <param name="callback">Delegate to execute when the event is triggered</param>
+  public static void On(string eventName, Delegate callback) {
     if (string.IsNullOrWhiteSpace(eventName)) {
       Log.Warning("CustomEventManager: Event name cannot be null or empty");
       return;
@@ -35,12 +35,12 @@ public static class CustomEventManager {
   }
 
   /// <summary>
-  /// Unregisters a parameterless callback from a custom event
+  /// Unregisters a delegate from a custom event.
   /// </summary>
   /// <param name="eventName">Name of the custom event</param>
-  /// <param name="callback">Callback to remove</param>
+  /// <param name="callback">Delegate to remove</param>
   /// <returns>True if the callback was found and removed</returns>
-  public static bool Off(string eventName, Action callback) {
+  public static bool Off(string eventName, Delegate callback) {
     if (string.IsNullOrWhiteSpace(eventName) || callback == null)
       return false;
     lock (_lock) {
@@ -57,52 +57,9 @@ public static class CustomEventManager {
     return false;
   }
 
-  /// <summary>
-  /// Registers a callback for a custom event with typed data
-  /// </summary>
-  /// <typeparam name="T">Type of the event data</typeparam>
-  /// <param name="eventName">Name of the custom event</param>
-  /// <param name="callback">Typed callback to execute when event is triggered</param>
-  public static void On<T>(string eventName, Action<T> callback) {
-    if (string.IsNullOrWhiteSpace(eventName)) {
-      Log.Warning("CustomEventManager: Event name cannot be null or empty");
-      return;
-    }
-    if (callback == null) {
-      Log.Warning("CustomEventManager: Callback cannot be null");
-      return;
-    }
-    lock (_lock) {
-      if (!_eventHandlers.ContainsKey(eventName)) {
-        _eventHandlers[eventName] = [];
-      }
-      _eventHandlers[eventName].Add(callback);
-    }
-  }
-
-  /// <summary>
-  /// Unregisters a callback from a custom event with typed data
-  /// </summary>
-  /// <typeparam name="T">Type of the event data</typeparam>
-  /// <param name="eventName">Name of the custom event</param>
-  /// <param name="callback">Typed callback to remove</param>
-  /// <returns>True if callback was found and removed</returns>
-  public static bool Off<T>(string eventName, Action<T> callback) {
-    if (string.IsNullOrWhiteSpace(eventName) || callback == null)
-      return false;
-    lock (_lock) {
-      if (_eventHandlers.TryGetValue(eventName, out var handlers)) {
-        bool removed = handlers.Remove(callback);
-        if (removed) {
-          if (handlers.Count == 0) {
-            _eventHandlers.TryRemove(eventName, out _);
-          }
-        }
-        return removed;
-      }
-    }
-    return false;
-  }
+  // Generic overloads for convenience (Action<T>, Func<T>, etc)
+  public static void On<T>(string eventName, Delegate callback) => On(eventName, callback);
+  public static bool Off<T>(string eventName, Delegate callback) => Off(eventName, callback);
 
   /// <summary>
   /// Triggers a custom event with optional data
