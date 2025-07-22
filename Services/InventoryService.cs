@@ -14,6 +14,9 @@ namespace ScarletCore.Services;
 /// Handles inventory operations like adding, removing, and checking items.
 /// </summary>
 public class InventoryService {
+  private static ServerGameManager GameManager = GameSystems.ServerGameManager;
+  private static EntityManager EntityManager = GameSystems.EntityManager;
+
   /// <summary>
   /// Checks if an entity's inventory is completely empty.
   /// </summary>
@@ -75,8 +78,6 @@ public class InventoryService {
       items[i] = existingItem;
     }
   }
-  private static ServerGameManager GameManager = GameSystems.ServerGameManager;
-  private static EntityManager EntityManager = GameSystems.EntityManager;
 
   /// <summary>
   /// Checks if the specified entity has an inventory component.
