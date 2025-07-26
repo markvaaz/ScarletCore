@@ -83,14 +83,18 @@ public static class CustomEventManager {
           var handlerType = handler.GetType();
           var invokeMethod = handlerType.GetMethod("Invoke");
           var parameters = invokeMethod?.GetParameters();
-          if (parameters != null && parameters.Length == 1) {
-            var paramType = parameters[0].ParameterType;
-            if (data == null && paramType.IsClass) {
-              handler.DynamicInvoke(null);
-            } else if (data != null && paramType.IsAssignableFrom(data.GetType())) {
-              handler.DynamicInvoke(data);
-            } else {
-              Log.Warning($"CustomEventManager: Type mismatch for event '{eventName}'. Expected {paramType.Name}, got {data?.GetType().Name ?? "null"}");
+          if (parameters != null) {
+            if (parameters.Length == 0) {
+              handler.DynamicInvoke();
+            } else if (parameters.Length == 1) {
+              var paramType = parameters[0].ParameterType;
+              if (data == null && paramType.IsClass) {
+                handler.DynamicInvoke(null);
+              } else if (data != null && paramType.IsAssignableFrom(data.GetType())) {
+                handler.DynamicInvoke(data);
+              } else {
+                Log.Warning($"CustomEventManager: Type mismatch for event '{eventName}'. Expected {paramType.Name}, got {data?.GetType().Name ?? "null"}");
+              }
             }
           }
         } catch (Exception ex) {
