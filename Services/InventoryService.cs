@@ -423,6 +423,20 @@ public class InventoryService {
   }
 
   /// <summary>
+  /// Moves an item between inventories by item prefab.
+  /// Finds the slot of the item in the source inventory and moves the specified amount to the destination inventory.
+  /// </summary>
+  /// <param name="fromInventory">Source inventory entity</param>
+  /// <param name="toInventory">Destination inventory entity</param>
+  /// <param name="itemPrefab">The PrefabGUID of the item to move</param>
+  /// <param name="amount">Amount to move (0 = move all)</param>
+  /// <returns>True if the item was successfully moved, false otherwise</returns>
+  public static bool MoveItemBetweenInventories(Entity fromInventory, Entity toInventory, PrefabGUID itemPrefab, int amount = 0) {
+    if (!TryGetItemSlot(fromInventory, itemPrefab, out var fromSlot)) return false;
+    return MoveItemBetweenInventories(fromInventory, toInventory, fromSlot, amount);
+  }
+
+  /// <summary>
   /// Moves a unique item (with ItemEntity) between inventories.
   /// </summary>
   private static bool MoveUniqueItem(Entity fromInventory, Entity toInventory, int fromSlot, InventoryBuffer itemEntry) {
@@ -578,5 +592,19 @@ public class InventoryService {
       Log.Error($"Error moving item between entities: {e}");
       return false;
     }
+  }
+
+  /// <summary>
+  /// Moves an item between inventories by item prefab, with additional validation and error handling.
+  /// Finds the slot of the item in the source inventory and moves the specified amount to the destination inventory.
+  /// </summary>
+  /// <param name="fromInventory">Entity that owns the source inventory</param>
+  /// <param name="toInventory">Entity that owns the destination inventory</param>
+  /// <param name="itemPrefab">The PrefabGUID of the item to move</param>
+  /// <param name="amount">Amount to move (0 = move all)</param>
+  /// <returns>True if the item was successfully moved, false otherwise</returns>
+  public static bool MoveItemBetweenEntities(Entity fromInventory, Entity toInventory, PrefabGUID itemPrefab, int amount = 0) {
+    if (!TryGetItemSlot(fromInventory, itemPrefab, out var fromSlot)) return false;
+    return MoveItemBetweenEntities(fromInventory, toInventory, fromSlot, amount);
   }
 }
