@@ -392,33 +392,91 @@ public class InventoryService {
 
   /// <summary>
   /// Moves an item from a specific slot in one inventory to another inventory.
-  /// Handles both unique items (with ItemEntity) and stackable items properly.
+  /// For unique items (with ItemEntity): moves only from the specific slot.
+  /// For stackable items (without ItemEntity): collects the required amount from any slots containing the item.
   /// </summary>
   /// <param name="fromInventory">Source inventory entity</param>
   /// <param name="toInventory">Destination inventory entity</param>
   /// <param name="fromSlot">Slot index in the source inventory</param>
-  /// <param name="amount">Amount to move (0 = move all)</param>
+  /// <param name="amount">Amount to move (0 = move all from slot for unique items, or all available for stackable items)</param>
   /// <returns>True if the item was successfully moved, false otherwise</returns>
-  public static bool MoveItemBetweenInventories(Entity fromInventory, Entity toInventory, int fromSlot, int amount = 0) {
+  public static bool TransferItem(Entity fromInventory, Entity toInventory, int fromSlot, int amount = 0) {
     try {
       // Use existing method to get item at slot
       if (!TryGetItemAtSlot(fromInventory, fromSlot, out var itemEntry)) {
         return false;
       }
 
-      var amountToMove = amount > 0 ? Math.Min(amount, itemEntry.Amount) : itemEntry.Amount;
-
       var hasItemEntity = !itemEntry.ItemEntity.GetEntityOnServer().Equals(Entity.Null);
 
       if (hasItemEntity) {
+        // For unique items, move only from the specific slot
         return MoveUniqueItem(fromInventory, toInventory, fromSlot, itemEntry);
       } else {
-        return MoveStackableItem(fromInventory, toInventory, fromSlot, itemEntry, amountToMove);
+        // For stackable items, collect from any slots if needed
+        return MoveStackableItemFromAnySlot(fromInventory, toInventory, itemEntry.ItemType, amount > 0 ? amount : itemEntry.Amount);
       }
 
     } catch (Exception e) {
       Log.Error($"Error moving item between inventories: {e}");
       return false;
+    }
+  }
+
+  /// <summary>
+  /// Moves stackable items by collecting the required amount from any slots in the inventory.
+  /// </summary>
+  private static bool MoveStackableItemFromAnySlot(Entity fromInventory, Entity toInventory, PrefabGUID itemType, int requestedAmount) {
+    try {
+      // Check if source inventory has enough of the item
+      var totalAvailable = GetItemAmountInInventory(fromInventory, itemType);
+
+      if (totalAvailable < requestedAmount) {
+        Log.Warning($"Not enough items available. Requested: {requestedAmount}, Available: {totalAvailable}");
+        return false;
+      }
+
+      // Try to add the items to destination inventory first
+      if (!AddItemToInventoryDirect(toInventory, itemType, requestedAmount, out var transferredAmount)) {
+        Log.Warning("Failed to add items to destination inventory");
+        return false;
+      }
+
+      if (transferredAmount <= 0) {
+        Log.Warning("No items were transferred");
+        return false;
+      }
+
+      // Now remove the transferred amount from source inventory
+      RemoveItem(fromInventory, itemType, transferredAmount);
+
+      return true;
+
+    } catch (Exception e) {
+      Log.Error($"Error moving stackable item from any slot: {e}");
+      return false;
+    }
+  }
+
+  /// <summary>
+  /// Gets the total amount of a specific item type in an inventory.
+  /// </summary>
+  private static int GetItemAmountInInventory(Entity inventory, PrefabGUID itemType) {
+    try {
+      var inventoryItems = GetInventoryItems(inventory);
+      if (inventoryItems.Equals(default)) return 0;
+
+      int totalAmount = 0;
+      for (int i = 0; i < inventoryItems.Length; i++) {
+        if (inventoryItems[i].ItemType.Equals(itemType)) {
+          totalAmount += inventoryItems[i].Amount;
+        }
+      }
+
+      return totalAmount;
+    } catch (Exception e) {
+      Log.Error($"Error getting item amount in inventory: {e}");
+      return 0;
     }
   }
 
@@ -431,9 +489,9 @@ public class InventoryService {
   /// <param name="itemPrefab">The PrefabGUID of the item to move</param>
   /// <param name="amount">Amount to move (0 = move all)</param>
   /// <returns>True if the item was successfully moved, false otherwise</returns>
-  public static bool MoveItemBetweenInventories(Entity fromInventory, Entity toInventory, PrefabGUID itemPrefab, int amount = 0) {
+  public static bool TransferItem(Entity fromInventory, Entity toInventory, PrefabGUID itemPrefab, int amount = 0) {
     if (!TryGetItemSlot(fromInventory, itemPrefab, out var fromSlot)) return false;
-    return MoveItemBetweenInventories(fromInventory, toInventory, fromSlot, amount);
+    return TransferItem(fromInventory, toInventory, fromSlot, amount);
   }
 
   /// <summary>
@@ -563,7 +621,7 @@ public class InventoryService {
   /// <param name="fromSlot">Slot index in the source inventory</param>
   /// <param name="amount">Amount to move (0 = move all)</param>
   /// <returns>True if the item was successfully moved, false otherwise</returns>
-  public static bool MoveItemBetweenEntities(Entity fromEntity, Entity toEntity, int fromSlot, int amount = 0) {
+  public static bool TransferItemBetweenEntities(Entity fromEntity, Entity toEntity, int fromSlot, int amount = 0) {
     try {
       // Use existing method to check if entities have inventories
       if (!HasInventory(fromEntity)) {
@@ -586,8 +644,7 @@ public class InventoryService {
         return false;
       }
 
-      return MoveItemBetweenInventories(fromInventory, toInventory, fromSlot, amount);
-
+      return TransferItem(fromInventory, toInventory, fromSlot, amount);
     } catch (Exception e) {
       Log.Error($"Error moving item between entities: {e}");
       return false;
@@ -603,8 +660,8 @@ public class InventoryService {
   /// <param name="itemPrefab">The PrefabGUID of the item to move</param>
   /// <param name="amount">Amount to move (0 = move all)</param>
   /// <returns>True if the item was successfully moved, false otherwise</returns>
-  public static bool MoveItemBetweenEntities(Entity fromInventory, Entity toInventory, PrefabGUID itemPrefab, int amount = 0) {
+  public static bool TransferItemBetweenEntities(Entity fromInventory, Entity toInventory, PrefabGUID itemPrefab, int amount = 0) {
     if (!TryGetItemSlot(fromInventory, itemPrefab, out var fromSlot)) return false;
-    return MoveItemBetweenEntities(fromInventory, toInventory, fromSlot, amount);
+    return TransferItemBetweenEntities(fromInventory, toInventory, fromSlot, amount);
   }
 }
