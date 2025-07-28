@@ -7,6 +7,7 @@ using ProjectM;
 using Unity.Mathematics;
 using ScarletCore.Services;
 using Stunlock.Core;
+using ScarletCore.Utils;
 
 namespace ScarletCore.Data;
 
@@ -178,6 +179,132 @@ public class PlayerData() {
   /// <param name="abilityGroup">The GUID of the ability group to cast</param>
   public void CastAbility(PrefabGUID abilityGroup) {
     AbilityService.CastAbility(CharacterEntity, abilityGroup);
+  }
+
+  /// <summary>
+  /// Replaces the player's ability in a specific slot with a new ability.
+  /// </summary>
+  /// <param name="newAbilityGuid">The GUID of the new ability to assign</param>
+  /// <param name="abilitySlotIndex">The slot index to replace (default: 0)</param>
+  /// <param name="priority">The priority for the ability replacement (default: 99)</param>
+  public void ReplaceAbilityOnSlot(PrefabGUID newAbilityGuid, int abilitySlotIndex = 0, int priority = 99) {
+    AbilityService.ReplaceNpcAbilityOnSlot(CharacterEntity, newAbilityGuid, abilitySlotIndex, priority);
+  }
+
+  /// <summary>
+  /// Attempts to apply a buff to the player's character with a specific duration.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to apply</param>
+  /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <param name="buffEntity">Output parameter for the applied buff entity</param>
+  /// <returns>True if the buff was successfully applied, false otherwise</returns>
+  public bool TryApplyBuff(PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
+    return BuffService.TryApplyBuff(CharacterEntity, prefabGUID, duration, out buffEntity);
+  }
+
+  /// <summary>
+  /// Attempts to apply a buff to the player's character with an optional duration.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to apply</param>
+  /// <param name="duration">Duration in seconds (default: 0)</param>
+  /// <returns>True if the buff was successfully applied, false otherwise</returns>
+  public bool TryApplyBuff(PrefabGUID prefabGUID, float duration = 0) {
+    return BuffService.TryApplyBuff(CharacterEntity, prefabGUID, duration, out _);
+  }
+
+  /// <summary>
+  /// Attempts to apply a 'clean' buff to the player's character, removing extra gameplay components.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to apply</param>
+  /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <param name="buffEntity">Output parameter for the applied buff entity</param>
+  /// <returns>True if the clean buff was successfully applied, false otherwise</returns>
+  public bool TryApplyCleanBuff(PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
+    return BuffService.TryApplyCleanBuff(CharacterEntity, prefabGUID, duration, out buffEntity);
+  }
+
+  /// <summary>
+  /// Attempts to apply a 'clean' buff to the player's character with an optional duration.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to apply</param>
+  /// <param name="duration">Duration in seconds (default: 0)</param>
+  /// <returns>True if the clean buff was successfully applied, false otherwise</returns>
+  public bool TryApplyCleanBuff(PrefabGUID prefabGUID, float duration = 0) {
+    return BuffService.TryApplyCleanBuff(CharacterEntity, prefabGUID, duration);
+  }
+
+  /// <summary>
+  /// Grants administrator privileges to the player.
+  /// </summary>
+  public void MakeAdmin() {
+    AdminService.AddAdmin(this);
+  }
+
+  /// <summary>
+  /// Removes administrator privileges from the player.
+  /// </summary>
+  public void RemoveAdmin() {
+    AdminService.RemoveAdmin(this);
+  }
+
+  /// <summary>
+  /// Kicks the player from the server.
+  /// </summary>
+  public void Kick() {
+    KickBanService.Kick(this);
+  }
+
+  /// <summary>
+  /// Bans the player from the server.
+  /// </summary>
+  public void Ban() {
+    KickBanService.Ban(this);
+  }
+
+  /// <summary>
+  /// Unbans the player, allowing them to reconnect to the server.
+  /// </summary>
+  public void Unban() {
+    KickBanService.Unban(this);
+  }
+
+  /// <summary>
+  /// Attempts to add another player to this player's clan.
+  /// </summary>
+  /// <param name="player">The player to add to the clan</param>
+  /// <returns>True if the player was added, false otherwise</returns>
+  public bool TryAddMemberToClan(PlayerData player) {
+    return ClanService.TryAddMember(player, ClanName);
+  }
+
+  /// <summary>
+  /// Gets a list of all members in this player's clan.
+  /// </summary>
+  /// <returns>List of PlayerData for each clan member</returns>
+  public List<PlayerData> GetClanMembers() {
+    return ClanService.GetMembers(ClanName);
+  }
+
+  /// <summary>
+  /// Attempts to remove this player from their current clan.
+  /// </summary>
+  /// <returns>True if the player was removed, false otherwise</returns>
+  public bool TryRemoveFromClan() {
+    return ClanService.TryRemoveFromClan(this);
+  }
+
+  /// <summary>
+  /// Reveals the entire map for the player.
+  /// </summary>
+  public void RevealMap() {
+    RevealMapService.RevealFullMap(this);
+  }
+
+  /// <summary>
+  /// Hides the entire map for the player.
+  /// </summary>
+  public void HideMap() {
+    RevealMapService.HideFullMap(this);
   }
 
   /// <summary>
