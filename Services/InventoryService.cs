@@ -27,6 +27,47 @@ public class InventoryService {
   }
 
   /// <summary>
+  /// Creates a dropped item in the world from an entity's position.
+  /// </summary>
+  /// <param name="entity">The entity to drop the item from</param>
+  /// <param name="prefabGUID">The GUID of the item to drop</param>
+  /// <param name="amount">The amount of the item to drop (default is 1)</param>
+  public static void CreateDropItem(Entity entity, PrefabGUID prefabGUID, int amount = 1) {
+    InventoryUtilitiesServer.CreateDropItem(GameSystems.EntityManager, entity, prefabGUID, amount, Entity.Null);
+  }
+
+  /// <summary>
+  /// Copies all items from one entity's inventory to another.
+  /// </summary>
+  /// <param name="sourceEntity">The entity to copy items from</param>
+  /// <param name="targetEntity">The entity to copy items to</param>
+  public static void CopyInventory(Entity sourceEntity, Entity targetEntity) {
+    InventoryUtilitiesServer.CopyInventory(EntityManager, sourceEntity, targetEntity);
+  }
+
+  /// <summary>
+  /// Modifies the inventory size of an entity, setting minimum, maximum, and new size.
+  /// </summary>
+  /// <param name="entity">The entity whose inventory size will be modified</param>
+  /// <param name="minSize">Minimum inventory size</param>
+  /// <param name="maxSize">Maximum inventory size</param>
+  /// <param name="newSize">New inventory size to set</param>
+  public static void ModifyInventorySize(Entity entity, int minSize, int maxSize, int newSize) {
+    InventoryUtilitiesServer.ModifyInventorySize(EntityManager, entity, minSize, maxSize, newSize);
+  }
+
+  /// <summary>
+  /// Attempts to get the slot index of a specific item in an entity's inventory.
+  /// </summary>
+  /// <param name="entity">The entity to search</param>
+  /// <param name="prefabGUID">The GUID of the item to find</param>
+  /// <param name="slot">Output parameter for the slot index</param>
+  /// <returns>True if the item was found and slot index retrieved, false otherwise</returns>
+  public static bool TryGetItemSlot(Entity entity, PrefabGUID prefabGUID, out int slot) {
+    return InventoryUtilities.TryGetItemSlot(EntityManager, entity, prefabGUID, out slot);
+  }
+
+  /// <summary>
   /// Attempts to get the item at a specific slot in an entity's inventory.
   /// </summary>
   /// <param name="entity">The entity whose inventory will be checked</param>
@@ -59,11 +100,12 @@ public class InventoryService {
   public static void AddWithMaxAmount(Entity entity, int slot, PrefabGUID prefabGUID, int amount, int maxAmount) {
     var response = GameManager.TryAddInventoryItem(entity, prefabGUID, 1, new(slot), false);
     var slotIndex = response.Slot;
-    var items = GetInventoryItems(entity);
-    var item = items[slotIndex];
-    item.MaxAmountOverride = maxAmount;
-    item.Amount = amount;
-    items[slotIndex] = item;
+
+    if (TryGetItemAtSlot(entity, slotIndex, out var item)) {
+      item.MaxAmountOverride = maxAmount;
+      item.Amount = amount;
+      return;
+    }
   }
 
   /// <summary>
@@ -166,6 +208,7 @@ public class InventoryService {
 
     // Get all items in the inventory
     var inventoryBuffer = GetInventoryItems(entity);
+
 
     // Remove each item from the inventory
     foreach (var item in inventoryBuffer) {
@@ -308,40 +351,211 @@ public class InventoryService {
   }
 
   /// <summary>
-  /// Transfers items from one entity's inventory to another.
+  /// Moves an item from a specific slot in one inventory to another inventory.
+  /// Handles both unique items (with ItemEntity) and stackable items properly.
   /// </summary>
-  /// <param name="fromEntity">Source entity</param>
-  /// <param name="toEntity">Destination entity</param>
-  /// <param name="items">Dictionary of items to transfer</param>
-  /// <returns>Dictionary of items that couldn't be transferred</returns>
-  public static Dictionary<PrefabGUID, int> TransferItems(Entity fromEntity, Entity toEntity, Dictionary<PrefabGUID, int> items) {
-    var failedItems = new Dictionary<PrefabGUID, int>();
-
-    // First, try to remove items from source
-    var removeFailed = RemoveItems(fromEntity, items);
-
-    // Calculate what was actually removed
-    var actuallyRemoved = new Dictionary<PrefabGUID, int>();
-    foreach (var item in items) {
-      var failedAmount = removeFailed.ContainsKey(item.Key) ? removeFailed[item.Key] : 0;
-      var removedAmount = item.Value - failedAmount;
-      if (removedAmount > 0) {
-        actuallyRemoved[item.Key] = removedAmount;
+  /// <param name="fromInv">Source inventory entity</param>
+  /// <param name="toInv">Destination inventory entity</param>
+  /// <param name="fromSlot">Slot index in the source inventory</param>
+  /// <param name="amount">Amount to move (0 = move all)</param>
+  /// <returns>True if the item was successfully moved, false otherwise</returns>
+  public static bool MoveItemBetweenInventories(Entity fromInv, Entity toInv, int fromSlot, int amount = 0) {
+    try {
+      // Use existing method to get item at slot
+      if (!TryGetItemAtSlot(fromInv, fromSlot, out var itemEntry)) {
+        Log.Warning("Source slot is empty or invalid");
+        return false;
       }
-    }
 
-    // Add the removed items to destination
-    if (actuallyRemoved.Count > 0) {
-      var addFailed = AddItems(toEntity, actuallyRemoved);
+      // Determine amount to move
+      var amountToMove = amount > 0 ? Math.Min(amount, itemEntry.Amount) : itemEntry.Amount;
 
-      // If some items couldn't be added to destination, return them to source
-      if (addFailed.Count > 0) {
-        AddItems(fromEntity, addFailed);
-        failedItems = addFailed;
+      // Check if item has an entity (unique item like equipment, tools, etc.)
+      var hasItemEntity = !itemEntry.ItemEntity.GetEntityOnServer().Equals(Entity.Null);
+
+      if (hasItemEntity) {
+        return MoveUniqueItem(fromInv, toInv, fromSlot, itemEntry);
+      } else {
+        return MoveStackableItem(fromInv, toInv, fromSlot, itemEntry, amountToMove);
       }
-    }
 
-    return failedItems;
+    } catch (Exception e) {
+      Log.Error($"Error moving item between inventories: {e}");
+      return false;
+    }
+  }
+
+  /// <summary>
+  /// Moves a unique item (with ItemEntity) between inventories.
+  /// </summary>
+  private static bool MoveUniqueItem(Entity fromInv, Entity toInv, int fromSlot, InventoryBuffer itemEntry) {
+    try {
+      // Use existing method to get inventory items buffer
+      var toInventoryBuffer = GetInventoryItems(toInv);
+      if (toInventoryBuffer.Equals(default)) {
+        Log.Error("Destination inventory buffer not found");
+        return false;
+      }
+
+      // Find an empty slot in destination inventory
+      int emptySlot = -1;
+      for (int i = 0; i < toInventoryBuffer.Length; i++) {
+        if (toInventoryBuffer[i].ItemType.Equals(PrefabGUID.Empty)) {
+          emptySlot = i;
+          break;
+        }
+      }
+
+      if (emptySlot == -1) {
+        Log.Warning("No empty slot found in destination inventory");
+        return false;
+      }
+
+      // Move the item to destination slot
+      toInventoryBuffer[emptySlot] = itemEntry;
+
+      // Update the ItemEntity's container reference
+      var itemEntity = itemEntry.ItemEntity.GetEntityOnServer();
+      if (itemEntity.Has<InventoryItem>()) {
+        var inventoryItem = itemEntity.Read<InventoryItem>();
+        inventoryItem.ContainerEntity = toInv;
+        itemEntity.Write(inventoryItem);
+      }
+
+      // Use existing method to clear the source slot
+      RemoveItemAtSlot(fromInv, fromSlot);
+
+      return true;
+
+    } catch (Exception e) {
+      Log.Error($"Error moving unique item: {e}");
+      return false;
+    }
+  }
+
+  /// <summary>
+  /// Moves a stackable item between inventories.
+  /// </summary>
+  private static bool MoveStackableItem(Entity fromInv, Entity toInv, int fromSlot, InventoryBuffer itemEntry, int amountToMove) {
+    try {
+      // Use existing AddItem method instead of manual TryAddItem
+      var success = AddItemToInventoryDirect(toInv, itemEntry.ItemType, amountToMove, out var transferredAmount);
+
+      if (!success || transferredAmount <= 0) {
+        Log.Warning("No items were transferred");
+        return false;
+      }
+
+      // Update source inventory
+      var remainingAmount = itemEntry.Amount - transferredAmount;
+
+      if (remainingAmount <= 0) {
+        // All items moved, use existing method to clear the slot
+        RemoveItemAtSlot(fromInv, fromSlot);
+      } else {
+        // Update the source slot with remaining amount using existing method
+        UpdateSlotAmount(fromInv, fromSlot, remainingAmount);
+      }
+
+      return true;
+
+    } catch (Exception e) {
+      Log.Error($"Error moving stackable item: {e}");
+      return false;
+    }
+  }
+
+  /// <summary>
+  /// Helper method to add items directly to inventory and return transferred amount.
+  /// Extends existing AddItem functionality.
+  /// </summary>
+  private static bool AddItemToInventoryDirect(Entity inventory, PrefabGUID itemGuid, int amount, out int transferredAmount) {
+    transferredAmount = 0;
+
+    try {
+      // Create temporary item entry
+      var moveEntry = new InventoryBuffer {
+        ItemType = itemGuid,
+        Amount = amount
+      };
+
+      var addItemSettings = new AddItemSettings() {
+        EntityManager = GameSystems.EntityManager,
+        ItemDataMap = GameSystems.ServerGameManager.ItemLookupMap
+      };
+
+      var addItemResponse = InventoryUtilitiesServer.TryAddItem(addItemSettings, inventory, moveEntry);
+
+      if (addItemResponse.Success) {
+        transferredAmount = amount - addItemResponse.RemainingAmount;
+        return true;
+      }
+
+      return false;
+    } catch (Exception e) {
+      Log.Error($"Error adding item to inventory: {e}");
+      return false;
+    }
+  }
+
+  /// <summary>
+  /// Helper method to update the amount of an item in a specific slot.
+  /// Complements existing slot management methods.
+  /// </summary>
+  private static void UpdateSlotAmount(Entity inventory, int slot, int newAmount) {
+    try {
+      if (TryGetItemAtSlot(inventory, slot, out var item)) {
+        var inventoryItems = GetInventoryItems(inventory);
+        if (!inventoryItems.Equals(default) && slot < inventoryItems.Length) {
+          var updatedEntry = item;
+          updatedEntry.Amount = newAmount;
+          inventoryItems[slot] = updatedEntry;
+        }
+      }
+    } catch (Exception e) {
+      Log.Error($"Error updating slot amount: {e}");
+    }
+  }
+
+  /// <summary>
+  /// Moves an item between inventories with additional validation and error handling.
+  /// This is a wrapper method that provides extra safety checks using existing HasInventory method.
+  /// </summary>
+  /// <param name="fromEntity">Entity that owns the source inventory</param>
+  /// <param name="toEntity">Entity that owns the destination inventory</param>
+  /// <param name="fromSlot">Slot index in the source inventory</param>
+  /// <param name="amount">Amount to move (0 = move all)</param>
+  /// <returns>True if the item was successfully moved, false otherwise</returns>
+  public static bool MoveItemBetweenEntities(Entity fromEntity, Entity toEntity, int fromSlot, int amount = 0) {
+    try {
+      // Use existing method to check if entities have inventories
+      if (!HasInventory(fromEntity)) {
+        Log.Error("Source entity has no inventory");
+        return false;
+      }
+
+      if (!HasInventory(toEntity)) {
+        Log.Error("Destination entity has no inventory");
+        return false;
+      }
+
+      // Get inventory entities using existing utility
+      if (!InventoryUtilities.TryGetInventoryEntity(EntityManager, fromEntity, out var fromInventory)) {
+        Log.Error("Failed to get source inventory entity");
+        return false;
+      }
+
+      if (!InventoryUtilities.TryGetInventoryEntity(EntityManager, toEntity, out var toInventory)) {
+        Log.Error("Failed to get destination inventory entity");
+        return false;
+      }
+
+      return MoveItemBetweenInventories(fromInventory, toInventory, fromSlot, amount);
+
+    } catch (Exception e) {
+      Log.Error($"Error moving item between entities: {e}");
+      return false;
+    }
   }
 
   #endregion
