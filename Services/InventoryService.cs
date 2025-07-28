@@ -33,7 +33,7 @@ public class InventoryService {
   /// <param name="prefabGUID">The GUID of the item to drop</param>
   /// <param name="amount">The amount of the item to drop (default is 1)</param>
   public static void CreateDropItem(Entity entity, PrefabGUID prefabGUID, int amount = 1) {
-    InventoryUtilitiesServer.CreateDropItem(GameSystems.EntityManager, entity, prefabGUID, amount, Entity.Null);
+    InventoryUtilitiesServer.CreateDropItem(EntityManager, entity, prefabGUID, amount, Entity.Null);
   }
 
   /// <summary>
@@ -354,16 +354,15 @@ public class InventoryService {
   /// Moves an item from a specific slot in one inventory to another inventory.
   /// Handles both unique items (with ItemEntity) and stackable items properly.
   /// </summary>
-  /// <param name="fromInv">Source inventory entity</param>
-  /// <param name="toInv">Destination inventory entity</param>
+  /// <param name="fromInventory">Source inventory entity</param>
+  /// <param name="toInventory">Destination inventory entity</param>
   /// <param name="fromSlot">Slot index in the source inventory</param>
   /// <param name="amount">Amount to move (0 = move all)</param>
   /// <returns>True if the item was successfully moved, false otherwise</returns>
-  public static bool MoveItemBetweenInventories(Entity fromInv, Entity toInv, int fromSlot, int amount = 0) {
+  public static bool MoveItemBetweenInventories(Entity fromInventory, Entity toInventory, int fromSlot, int amount = 0) {
     try {
       // Use existing method to get item at slot
-      if (!TryGetItemAtSlot(fromInv, fromSlot, out var itemEntry)) {
-        Log.Warning("Source slot is empty or invalid");
+      if (!TryGetItemAtSlot(fromInventory, fromSlot, out var itemEntry)) {
         return false;
       }
 
@@ -374,9 +373,9 @@ public class InventoryService {
       var hasItemEntity = !itemEntry.ItemEntity.GetEntityOnServer().Equals(Entity.Null);
 
       if (hasItemEntity) {
-        return MoveUniqueItem(fromInv, toInv, fromSlot, itemEntry);
+        return MoveUniqueItem(fromInventory, toInventory, fromSlot, itemEntry);
       } else {
-        return MoveStackableItem(fromInv, toInv, fromSlot, itemEntry, amountToMove);
+        return MoveStackableItem(fromInventory, toInventory, fromSlot, itemEntry, amountToMove);
       }
 
     } catch (Exception e) {
@@ -388,42 +387,38 @@ public class InventoryService {
   /// <summary>
   /// Moves a unique item (with ItemEntity) between inventories.
   /// </summary>
-  private static bool MoveUniqueItem(Entity fromInv, Entity toInv, int fromSlot, InventoryBuffer itemEntry) {
+  private static bool MoveUniqueItem(Entity fromInventory, Entity toInventory, int fromSlot, InventoryBuffer itemEntry) {
     try {
-      // Use existing method to get inventory items buffer
-      var toInventoryBuffer = GetInventoryItems(toInv);
-      if (toInventoryBuffer.Equals(default)) {
+      var inventoryItems = GetInventoryItems(toInventory);
+
+      if (inventoryItems.Equals(default)) {
         Log.Error("Destination inventory buffer not found");
         return false;
       }
 
-      // Find an empty slot in destination inventory
       int emptySlot = -1;
-      for (int i = 0; i < toInventoryBuffer.Length; i++) {
-        if (toInventoryBuffer[i].ItemType.Equals(PrefabGUID.Empty)) {
+
+      for (int i = 0; i < inventoryItems.Length; i++) {
+        if (inventoryItems[i].ItemType.Equals(PrefabGUID.Empty)) {
           emptySlot = i;
           break;
         }
       }
 
       if (emptySlot == -1) {
-        Log.Warning("No empty slot found in destination inventory");
         return false;
       }
 
-      // Move the item to destination slot
-      toInventoryBuffer[emptySlot] = itemEntry;
+      inventoryItems[emptySlot] = itemEntry;
 
-      // Update the ItemEntity's container reference
       var itemEntity = itemEntry.ItemEntity.GetEntityOnServer();
-      if (itemEntity.Has<InventoryItem>()) {
-        var inventoryItem = itemEntity.Read<InventoryItem>();
-        inventoryItem.ContainerEntity = toInv;
-        itemEntity.Write(inventoryItem);
-      }
+
+      itemEntity.HasWith((ref InventoryItem inventoryItem) => {
+        inventoryItem.ContainerEntity = toInventory;
+      });
 
       // Use existing method to clear the source slot
-      RemoveItemAtSlot(fromInv, fromSlot);
+      RemoveItemAtSlot(fromInventory, fromSlot);
 
       return true;
 
@@ -436,10 +431,10 @@ public class InventoryService {
   /// <summary>
   /// Moves a stackable item between inventories.
   /// </summary>
-  private static bool MoveStackableItem(Entity fromInv, Entity toInv, int fromSlot, InventoryBuffer itemEntry, int amountToMove) {
+  private static bool MoveStackableItem(Entity fromInventory, Entity toInventory, int fromSlot, InventoryBuffer itemEntry, int amountToMove) {
     try {
       // Use existing AddItem method instead of manual TryAddItem
-      var success = AddItemToInventoryDirect(toInv, itemEntry.ItemType, amountToMove, out var transferredAmount);
+      var success = AddItemToInventoryDirect(toInventory, itemEntry.ItemType, amountToMove, out var transferredAmount);
 
       if (!success || transferredAmount <= 0) {
         Log.Warning("No items were transferred");
@@ -451,10 +446,10 @@ public class InventoryService {
 
       if (remainingAmount <= 0) {
         // All items moved, use existing method to clear the slot
-        RemoveItemAtSlot(fromInv, fromSlot);
+        RemoveItemAtSlot(fromInventory, fromSlot);
       } else {
         // Update the source slot with remaining amount using existing method
-        UpdateSlotAmount(fromInv, fromSlot, remainingAmount);
+        UpdateSlotAmount(fromInventory, fromSlot, remainingAmount);
       }
 
       return true;
@@ -480,8 +475,8 @@ public class InventoryService {
       };
 
       var addItemSettings = new AddItemSettings() {
-        EntityManager = GameSystems.EntityManager,
-        ItemDataMap = GameSystems.ServerGameManager.ItemLookupMap
+        EntityManager = EntityManager,
+        ItemDataMap = GameManager.ItemLookupMap
       };
 
       var addItemResponse = InventoryUtilitiesServer.TryAddItem(addItemSettings, inventory, moveEntry);
