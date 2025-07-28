@@ -69,7 +69,7 @@ public static class BuffService {
       }
 
       // Handle permanent/indefinite buffs
-      if (duration <= 0 && buffEntity.Has<LifeTime>()) {
+      if (duration <= -1 && buffEntity.Has<LifeTime>()) {
         // Make the buff permanent by disabling its end action
         var lifetime = buffEntity.Read<LifeTime>();
 
@@ -97,6 +97,53 @@ public static class BuffService {
   public static bool TryApplyBuff(Entity entity, PrefabGUID prefabGUID, float duration = 0) {
     // Call the overloaded method with an output parameter for the buff entity
     return TryApplyBuff(entity, prefabGUID, duration, out _);
+  }
+
+  /// <summary>
+  /// Attempts to apply a buff to an entity and removes common gameplay-related components for a 'clean' buff.
+  /// This is useful for applying buffs without triggering extra gameplay events or side effects.
+  /// </summary>
+  /// <param name="entity">Target entity to receive the buff</param>
+  /// <param name="prefabGUID">GUID of the buff prefab to apply</param>
+  /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <param name="buffEntity">Output parameter that will contain the buff entity if applied</param>
+  /// <returns>True if the buff was successfully applied and cleaned, false otherwise</returns>
+  public static bool TryApplyCleanBuff(Entity entity, PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
+    var entityManager = GameSystems.EntityManager;
+    var componentTypes = new ComponentType[] {
+      ComponentType.ReadWrite<SpellModSetComponent>(),
+      ComponentType.ReadWrite<SpellModArithmetic>(),
+      ComponentType.ReadWrite<GetOwnerTeamOnSpawn>(),
+      ComponentType.ReadWrite<DealDamageOnGameplayEvent>(),
+      ComponentType.ReadWrite<CreateGameplayEventsOnTick>(),
+      ComponentType.ReadWrite<GameplayEventListeners>(),
+      ComponentType.ReadWrite<ModifyMovementSpeedBuff>(),
+      ComponentType.ReadWrite<ModifyMovementSpeedBuffModification>(),
+      ComponentType.ReadWrite<CreateGameplayEventsOnHit>(),
+      ComponentType.ReadWrite<CreateGameplayEventsOnTick>(),
+      ComponentType.ReadWrite<PlaySequenceOnGameplayEvent>(),
+      ComponentType.ReadWrite<RunScriptOnGameplayEvent>(),
+      ComponentType.ReadWrite<AbsorbBuff>(),
+      ComponentType.ReadWrite<MultiplyAbsorbCapBySpellPower>(),
+      ComponentType.ReadWrite<AmplifyBuff>(),
+      ComponentType.ReadWrite<BuffModificationFlagData>(),
+    };
+
+    if (!TryApplyBuff(entity, prefabGUID, duration, out buffEntity) || !buffEntity.Exists()) {
+      return false;
+    }
+
+    foreach (var type in componentTypes) {
+      if (entityManager.HasComponent(buffEntity, type)) {
+        entityManager.RemoveComponent(buffEntity, type);
+      }
+    }
+
+    return true;
+  }
+
+  public static bool TryApplyCleanBuff(Entity entity, PrefabGUID prefabGUID, float duration = 0) {
+    return TryApplyCleanBuff(entity, prefabGUID, duration, out _);
   }
 
   /// <summary>
