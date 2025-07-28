@@ -127,7 +127,7 @@ public class InventoryService {
   /// <param name="entity">The entity to check for inventory</param>
   /// <returns>True if the entity has an inventory, false otherwise</returns>
   public static bool HasInventory(Entity entity) {
-    return InventoryUtilities.TryGetInventoryEntity(EntityManager, entity, out _);
+    return TryGetInventoryEntity(entity, out _);
   }
 
   /// <summary>
@@ -178,7 +178,7 @@ public class InventoryService {
   /// <returns>True if the removal was successful, false otherwise</returns>
   public static bool RemoveItem(Entity entity, PrefabGUID guid, int amount) {
     // Check if entity has an inventory
-    if (!InventoryUtilities.TryGetInventoryEntity(EntityManager, entity, out var inventoryEntity)) return false;
+    if (!TryGetInventoryEntity(entity, out var inventoryEntity)) return false;
 
     // Verify the entity has enough items to remove
     if (GetItemAmount(entity, guid) < amount) return false;
@@ -194,7 +194,7 @@ public class InventoryService {
   /// <param name="entity">The entity whose inventory to retrieve</param>
   /// <returns>A dynamic buffer of inventory items, or default if no inventory exists</returns>
   public static DynamicBuffer<InventoryBuffer> GetInventoryItems(Entity entity) {
-    if (!InventoryUtilities.TryGetInventoryEntity(EntityManager, entity, out var inventoryEntity)) return default;
+    if (!TryGetInventoryEntity(entity, out var inventoryEntity)) return default;
     return EntityManager.GetBuffer<InventoryBuffer>(inventoryEntity);
   }
 
@@ -204,7 +204,7 @@ public class InventoryService {
   /// <param name="entity">The entity whose inventory to clear</param>
   public static void ClearInventory(Entity entity) {
     // Check if entity has an inventory
-    if (!InventoryUtilities.TryGetInventoryEntity(EntityManager, entity, out var inventoryEntity)) return;
+    if (!TryGetInventoryEntity(entity, out var inventoryEntity)) return;
 
     // Get all items in the inventory
     var inventoryBuffer = GetInventoryItems(entity);
@@ -244,7 +244,26 @@ public class InventoryService {
     return GameManager.HasFullInventory(entity);
   }
 
-  #region Bulk Operations
+  /// <summary>
+  /// Returns the index of the first empty slot in the entity's inventory, or -1 if none is available or inventory does not exist.
+  /// </summary>
+  /// <param name="entity">The entity whose inventory will be checked</param>
+  /// <returns>The index of the first empty slot, or -1 if no empty slot is found or inventory is missing</returns>
+  public static int GetEmptySlot(Entity entity) {
+    if (!HasInventory(entity)) {
+      return -1;
+    }
+
+    var inventoryBuffer = GetInventoryItems(entity);
+
+    for (int i = 0; i < inventoryBuffer.Length; i++) {
+      if (inventoryBuffer[i].ItemType.Equals(PrefabGUID.Empty)) {
+        return i;
+      }
+    }
+
+    return -1;
+  }
 
   /// <summary>
   /// Adds multiple items to an entity's inventory in a single operation.
@@ -283,7 +302,7 @@ public class InventoryService {
     var failedItems = new Dictionary<PrefabGUID, int>();
 
     // Check if entity has an inventory
-    if (!InventoryUtilities.TryGetInventoryEntity(EntityManager, entity, out var inventoryEntity)) {
+    if (!TryGetInventoryEntity(entity, out var inventoryEntity)) {
       return items; // Return all items as failed if no inventory
     }
 
@@ -336,6 +355,20 @@ public class InventoryService {
   }
 
   /// <summary>
+  /// Attempts to get the inventory entity associated with the given entity.
+  /// </summary>
+  /// <param name="entity">The entity to check for an inventory</param>
+  /// <param name="inventoryEntity">The resulting inventory entity if found, or Entity.Null if not</param>
+  /// <returns>True if the inventory entity was found, false otherwise</returns>
+  public static bool TryGetInventoryEntity(Entity entity, out Entity inventoryEntity) {
+    if (!InventoryUtilities.TryGetInventoryEntity(EntityManager, entity, out inventoryEntity)) {
+      inventoryEntity = Entity.Null;
+      return false;
+    }
+    return true;
+  }
+
+  /// <summary>
   /// Gives a complete item set to an entity (useful for starter kits, admin tools, etc.).
   /// </summary>
   /// <param name="entity">The entity to give items to</param>
@@ -366,10 +399,8 @@ public class InventoryService {
         return false;
       }
 
-      // Determine amount to move
       var amountToMove = amount > 0 ? Math.Min(amount, itemEntry.Amount) : itemEntry.Amount;
 
-      // Check if item has an entity (unique item like equipment, tools, etc.)
       var hasItemEntity = !itemEntry.ItemEntity.GetEntityOnServer().Equals(Entity.Null);
 
       if (hasItemEntity) {
@@ -396,14 +427,7 @@ public class InventoryService {
         return false;
       }
 
-      int emptySlot = -1;
-
-      for (int i = 0; i < inventoryItems.Length; i++) {
-        if (inventoryItems[i].ItemType.Equals(PrefabGUID.Empty)) {
-          emptySlot = i;
-          break;
-        }
-      }
+      int emptySlot = GetEmptySlot(toInventory);
 
       if (emptySlot == -1) {
         return false;
@@ -417,7 +441,6 @@ public class InventoryService {
         inventoryItem.ContainerEntity = toInventory;
       });
 
-      // Use existing method to clear the source slot
       RemoveItemAtSlot(fromInventory, fromSlot);
 
       return true;
@@ -433,7 +456,6 @@ public class InventoryService {
   /// </summary>
   private static bool MoveStackableItem(Entity fromInventory, Entity toInventory, int fromSlot, InventoryBuffer itemEntry, int amountToMove) {
     try {
-      // Use existing AddItem method instead of manual TryAddItem
       var success = AddItemToInventoryDirect(toInventory, itemEntry.ItemType, amountToMove, out var transferredAmount);
 
       if (!success || transferredAmount <= 0) {
@@ -441,14 +463,11 @@ public class InventoryService {
         return false;
       }
 
-      // Update source inventory
       var remainingAmount = itemEntry.Amount - transferredAmount;
 
       if (remainingAmount <= 0) {
-        // All items moved, use existing method to clear the slot
         RemoveItemAtSlot(fromInventory, fromSlot);
       } else {
-        // Update the source slot with remaining amount using existing method
         UpdateSlotAmount(fromInventory, fromSlot, remainingAmount);
       }
 
@@ -534,13 +553,12 @@ public class InventoryService {
         return false;
       }
 
-      // Get inventory entities using existing utility
-      if (!InventoryUtilities.TryGetInventoryEntity(EntityManager, fromEntity, out var fromInventory)) {
+      if (!TryGetInventoryEntity(fromEntity, out var fromInventory)) {
         Log.Error("Failed to get source inventory entity");
         return false;
       }
 
-      if (!InventoryUtilities.TryGetInventoryEntity(EntityManager, toEntity, out var toInventory)) {
+      if (!TryGetInventoryEntity(toEntity, out var toInventory)) {
         Log.Error("Failed to get destination inventory entity");
         return false;
       }
@@ -552,6 +570,4 @@ public class InventoryService {
       return false;
     }
   }
-
-  #endregion
 }
