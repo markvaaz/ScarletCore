@@ -533,34 +533,6 @@ public class InventoryService {
   }
 
   /// <summary>
-  /// Moves a stackable item between inventories.
-  /// </summary>
-  private static bool MoveStackableItem(Entity fromInventory, Entity toInventory, int fromSlot, InventoryBuffer itemEntry, int amountToMove) {
-    try {
-      var success = AddItemToInventoryDirect(toInventory, itemEntry.ItemType, amountToMove, out var transferredAmount);
-
-      if (!success || transferredAmount <= 0) {
-        Log.Warning("No items were transferred");
-        return false;
-      }
-
-      var remainingAmount = itemEntry.Amount - transferredAmount;
-
-      if (remainingAmount <= 0) {
-        RemoveItemAtSlot(fromInventory, fromSlot);
-      } else {
-        UpdateSlotAmount(fromInventory, fromSlot, remainingAmount);
-      }
-
-      return true;
-
-    } catch (Exception e) {
-      Log.Error($"Error moving stackable item: {e}");
-      return false;
-    }
-  }
-
-  /// <summary>
   /// Helper method to add items directly to inventory and return transferred amount.
   /// Extends existing AddItem functionality.
   /// </summary>
