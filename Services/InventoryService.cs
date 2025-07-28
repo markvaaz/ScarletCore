@@ -84,9 +84,16 @@ public class InventoryService {
   /// <param name="entity">The entity whose inventory will be modified</param>
   /// <param name="slot">The slot index</param>
   public static void RemoveItemAtSlot(Entity entity, int slot) {
+    RemoveItemAtSlot(entity, slot, 0); // Default to removing all items at the slot
+  }
+
+  public static void RemoveItemAtSlot(Entity entity, int slot, int amount) {
     if (!TryGetItemAtSlot(entity, slot, out var item)) return;
-    // Optionally: protect invalid slots if needed, here there is no extra check
-    InventoryUtilitiesServer.TryRemoveItemAtIndex(EntityManager, entity, item.ItemType, item.Amount, slot, true);
+    InventoryUtilitiesServer.TryRemoveItemAtIndex(EntityManager, entity, item.ItemType, amount <= 0 ? item.Amount : amount, slot, true);
+  }
+
+  public static void ClearSlot(Entity entity, int slot) {
+    InventoryUtilitiesServer.ClearSlot(EntityManager, entity, slot);
   }
 
   /// <summary>
@@ -437,11 +444,13 @@ public class InventoryService {
 
       var itemEntity = itemEntry.ItemEntity.GetEntityOnServer();
 
-      itemEntity.HasWith((ref InventoryItem inventoryItem) => {
+      if (!itemEntity.Has<InventoryItem>()) return false;
+
+      itemEntity.With((ref InventoryItem inventoryItem) => {
         inventoryItem.ContainerEntity = toInventory;
       });
 
-      RemoveItemAtSlot(fromInventory, fromSlot);
+      ClearSlot(fromInventory, fromSlot);
 
       return true;
 
