@@ -62,7 +62,7 @@ public static class PlayerService {
 
       foreach (var entity in userEntities) {
         // Add each user to the cache system
-        SetPlayerCache(entity);
+        SetPlayerCache(entity, true);
       }
     } catch (Exception e) {
       Log.Error(e);
@@ -126,6 +126,7 @@ public static class PlayerService {
 
     // Manage network ID indexing based on online/offline status
     if (isOffline) {
+      playerData.UserEntity.With((ref User user) => user.IsConnected = false);
       // Remove network ID when going offline as it may change on reconnection
       PlayerNetworkIds.Remove(networkId);
     } else {
@@ -172,7 +173,14 @@ public static class PlayerService {
   /// </summary>
   /// <returns>List of online players</returns>
   public static List<PlayerData> GetAllConnected() {
-    return [.. PlayerNetworkIds.Values];
+    List<PlayerData> connectedPlayers = [];
+    foreach (var player in AllPlayers) {
+      if (player.IsOnline) {
+        connectedPlayers.Add(player);
+      }
+    }
+
+    return connectedPlayers;
   }
 
   /// <summary>
