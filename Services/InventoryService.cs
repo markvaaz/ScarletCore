@@ -49,11 +49,28 @@ public class InventoryService {
   /// Modifies the inventory size of an entity, setting minimum, maximum, and new size.
   /// </summary>
   /// <param name="entity">The entity whose inventory size will be modified</param>
-  /// <param name="minSize">Minimum inventory size</param>
-  /// <param name="maxSize">Maximum inventory size</param>
   /// <param name="newSize">New inventory size to set</param>
-  public static void ModifyInventorySize(Entity entity, int minSize, int maxSize, int newSize) {
-    InventoryUtilitiesServer.ModifyInventorySize(EntityManager, entity, minSize, maxSize, newSize);
+  public static void ModifyInventorySize(Entity entity, int newSize) {
+    var inventoryBuffer = GetInventoryItems(entity);
+    var inventoryInstanceBuffer = entity.ReadBuffer<InventoryInstanceElement>();
+
+    inventoryInstanceBuffer[0] = inventoryInstanceBuffer[0] with {
+      MaxSlots = newSize
+    };
+
+    if (inventoryBuffer.Length < newSize) {
+      for (int i = inventoryBuffer.Length; i < newSize; i++) {
+        inventoryBuffer.Add(new InventoryBuffer());
+      }
+    } else {
+      for (int i = inventoryBuffer.Length - 1; i >= newSize; i--) {
+        var item = inventoryBuffer[i];
+        if (!item.ItemType.Equals(PrefabGUID.Empty)) {
+          CreateDropItem(entity, item.ItemType, item.Amount);
+        }
+        inventoryBuffer.RemoveAt(i);
+      }
+    }
   }
 
   /// <summary>
@@ -106,17 +123,19 @@ public class InventoryService {
   /// <param name="maxAmount">The value for MaxAmountOverride</param>
   public static void AddWithMaxAmount(Entity entity, int slot, PrefabGUID prefabGUID, int amount, int maxAmount) {
     var response = GameManager.TryAddInventoryItem(entity, prefabGUID, 1, new(slot), false);
-    var slotIndex = response.Slot;
+    var inventoryBuffer = GetInventoryItems(entity);
 
-    if (TryGetItemAtSlot(entity, slotIndex, out var item)) {
-      item.MaxAmountOverride = maxAmount;
-      item.Amount = amount;
-      return;
+    if (response.Result == AddItemResult.Success_Complete || response.Result == AddItemResult.Success_Equipped || response.Result == AddItemResult.Success_Partial) {
+      inventoryBuffer[slot] = inventoryBuffer[slot] with {
+        ItemType = prefabGUID,
+        Amount = amount,
+        MaxAmountOverride = maxAmount
+      };
     }
   }
 
   /// <summary>
-  /// Forces all items in an entity's inventory to have MaxAmountOverride equal to their current amount.
+  /// DANGER! Forces all items in an entity's inventory to have MaxAmountOverride equal to their current amount.
   /// </summary>
   /// <param name="entity">The entity whose inventory will be adjusted</param>
   public static void ForceAllSlotsMaxAmount(Entity entity) {
@@ -149,6 +168,72 @@ public class InventoryService {
 
     try {
       return GameManager.TryAddInventoryItem(entity, guid, amount);
+    } catch (Exception e) {
+      Log.Error(e);
+      return false;
+    }
+  }
+
+  /// <summary>
+  /// Adds items to an entity's inventory and returns the resulting InventoryBuffer item.
+  /// </summary>
+  /// <param name="entity">The entity to add items to</param>
+  /// <param name="guid">The GUID of the item to add</param>
+  /// <param name="amount">The quantity of items to add</param>
+  /// <param name="item">Output parameter for the resulting InventoryBuffer item</param>
+  /// <returns>True if the item was successfully added, false otherwise</returns>
+  public static bool AddItem(Entity entity, PrefabGUID guid, int amount, out InventoryBuffer item) {
+    item = default;
+
+    // Don't add items if inventory is full
+    if (GameManager.HasFullInventory(entity)) return false;
+
+    try {
+      var response = GameManager.TryAddInventoryItem(entity, guid, amount);
+      if ((response.Result == AddItemResult.Success_Complete || response.Result == AddItemResult.Success_Equipped || response.Result == AddItemResult.Success_Partial) && TryGetItemAtSlot(entity, response.Slot, out item)) {
+        return true;
+      }
+      return false;
+    } catch (Exception e) {
+      Log.Error(e);
+      return false;
+    }
+  }
+
+  /// <summary>
+  /// Adds items to a specific slot in an entity's inventory.
+  /// </summary>
+  /// <param name="entity">The entity to add items to</param>
+  /// <param name="guid">The GUID of the item to add</param>
+  /// <param name="amount">The quantity of items to add</param>
+  /// <param name="slot">The slot index to add the item to</param>
+  /// <returns>True if the item was successfully added, false otherwise</returns>
+  public static bool AddItemAtSlot(Entity entity, PrefabGUID guid, int amount, int slot) {
+    var response = GameManager.TryAddInventoryItem(entity, guid, amount, new(slot), false);
+    return response.Result == AddItemResult.Success_Complete || response.Result == AddItemResult.Success_Equipped || response.Result == AddItemResult.Success_Partial;
+  }
+
+  /// <summary>
+  /// Adds items to a specific slot in an entity's inventory and returns the resulting InventoryBuffer item.
+  /// </summary>
+  /// <param name="entity">The entity to add items to</param>
+  /// <param name="guid">The GUID of the item to add</param>
+  /// <param name="amount">The quantity of items to add</param>
+  /// <param name="slot">The slot index to add the item to</param>
+  /// <param name="item">Output parameter for the resulting InventoryBuffer item</param>
+  /// <returns>True if the item was successfully added, false otherwise</returns>
+  public static bool AddItemAtSlot(Entity entity, PrefabGUID guid, int amount, int slot, out InventoryBuffer item) {
+    item = default;
+
+    // Don't add items if inventory is full
+    if (GameManager.HasFullInventory(entity)) return false;
+
+    try {
+      var response = GameManager.TryAddInventoryItem(entity, guid, amount, new(slot), false);
+      if ((response.Result == AddItemResult.Success_Complete || response.Result == AddItemResult.Success_Equipped || response.Result == AddItemResult.Success_Partial) && TryGetItemAtSlot(entity, slot, out item)) {
+        return true;
+      }
+      return false;
     } catch (Exception e) {
       Log.Error(e);
       return false;
@@ -256,7 +341,7 @@ public class InventoryService {
   /// </summary>
   /// <param name="entity">The entity whose inventory will be checked</param>
   /// <returns>The index of the first empty slot, or -1 if no empty slot is found or inventory is missing</returns>
-  public static int GetEmptySlot(Entity entity) {
+  public static int GetEmptySlotIndex(Entity entity) {
     if (!HasInventory(entity)) {
       return -1;
     }
@@ -270,6 +355,28 @@ public class InventoryService {
     }
 
     return -1;
+  }
+
+  /// <summary>
+  /// Returns the total number of empty slots in the entity's inventory.
+  /// </summary>
+  /// <param name="entity">The entity whose inventory will be checked</param>
+  /// <returns>The number of empty slots, or 0 if inventory does not exist</returns>
+  public static int GetEmptySlotsCount(Entity entity) {
+    if (!HasInventory(entity)) {
+      return 0;
+    }
+
+    var inventoryBuffer = GetInventoryItems(entity);
+    int emptySlots = 0;
+
+    for (int i = 0; i < inventoryBuffer.Length; i++) {
+      if (inventoryBuffer[i].ItemType.Equals(PrefabGUID.Empty)) {
+        emptySlots++;
+      }
+    }
+
+    return emptySlots;
   }
 
   /// <summary>
@@ -506,7 +613,7 @@ public class InventoryService {
         return false;
       }
 
-      int emptySlot = GetEmptySlot(toInventory);
+      int emptySlot = GetEmptySlotIndex(toInventory);
 
       if (emptySlot == -1) {
         return false;
