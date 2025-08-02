@@ -114,14 +114,38 @@ public class InventoryService {
   }
 
   /// <summary>
-  /// Adds an item to a specific slot in the inventory, setting amount and MaxAmountOverride.
+  /// Adds an item to the inventory, setting amount and MaxAmountOverride.
   /// </summary>
   /// <param name="entity">The entity whose inventory will be modified</param>
-  /// <param name="slot">The slot index</param>
   /// <param name="prefabGUID">The GUID of the item</param>
   /// <param name="amount">The amount of the item</param>
   /// <param name="maxAmount">The value for MaxAmountOverride</param>
-  public static void AddWithMaxAmount(Entity entity, int slot, PrefabGUID prefabGUID, int amount, int maxAmount) {
+  /// <returns>True if the item was successfully added, false otherwise</returns>
+  public static bool AddWithMaxAmount(Entity entity, PrefabGUID prefabGUID, int amount, int maxAmount) {
+    var response = GameManager.TryAddInventoryItem(entity, prefabGUID, amount);
+    var inventoryBuffer = GetInventoryItems(entity);
+
+    if (response.Result == AddItemResult.Success_Complete || response.Result == AddItemResult.Success_Equipped || response.Result == AddItemResult.Success_Partial) {
+      inventoryBuffer[response.Slot] = inventoryBuffer[response.Slot] with {
+        ItemType = prefabGUID,
+        Amount = amount,
+        MaxAmountOverride = maxAmount
+      };
+      return true;
+    }
+    return false;
+  }
+
+  /// <summary>
+  /// Adds an item to a specific slot in the inventory, setting amount and MaxAmountOverride.
+  /// </summary>
+  /// <param name="entity">The entity whose inventory will be modified</param>
+  /// <param name="prefabGUID">The GUID of the item</param>
+  /// <param name="slot">The slot index where the item will be placed</param>
+  /// <param name="amount">The amount of the item</param>
+  /// <param name="maxAmount">The value for MaxAmountOverride</param>
+  /// <returns>True if the item was successfully added, false otherwise</returns>
+  public static bool AddWithMaxAmount(Entity entity, PrefabGUID prefabGUID, int slot, int amount, int maxAmount) {
     var response = GameManager.TryAddInventoryItem(entity, prefabGUID, 1, new(slot), false);
     var inventoryBuffer = GetInventoryItems(entity);
 
@@ -131,7 +155,9 @@ public class InventoryService {
         Amount = amount,
         MaxAmountOverride = maxAmount
       };
+      return true;
     }
+    return false;
   }
 
   /// <summary>
