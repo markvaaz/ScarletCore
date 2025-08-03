@@ -126,7 +126,6 @@ public static class PlayerService {
 
     // Manage network ID indexing based on online/offline status
     if (isOffline) {
-      playerData.UserEntity.With((ref User user) => user.IsConnected = false);
       // Remove network ID when going offline as it may change on reconnection
       PlayerNetworkIds.Remove(networkId);
     } else {
