@@ -57,9 +57,37 @@ public static class CustomEventManager {
     return false;
   }
 
-  // Generic overloads for convenience (Action<T>, Func<T>, etc)
+  /// <summary>
+  /// Generic overload for registering a callback for a custom event with type parameter.
+  /// </summary>
+  /// <typeparam name="T">The type of data the event will handle</typeparam>
+  /// <param name="eventName">Name of the custom event</param>
+  /// <param name="callback">Delegate to execute when the event is triggered</param>
   public static void On<T>(string eventName, Delegate callback) => On(eventName, callback);
+
+  /// <summary>
+  /// Generic overload for unregistering a delegate from a custom event with type parameter.
+  /// </summary>
+  /// <typeparam name="T">The type of data the event handles</typeparam>
+  /// <param name="eventName">Name of the custom event</param>
+  /// <param name="callback">Delegate to remove</param>
+  /// <returns>True if the callback was found and removed</returns>
   public static bool Off<T>(string eventName, Delegate callback) => Off(eventName, callback);
+
+  /// <summary>
+  /// Registers a callback that will only execute once and then automatically unregister itself.
+  /// </summary>
+  /// <typeparam name="T">The type of data the event will handle</typeparam>
+  /// <param name="eventName">Name of the custom event</param>
+  /// <param name="callback">Action to execute once when the event is triggered</param>
+  public static void Once<T>(string eventName, Action<T> callback) {
+    Action<T> wrappedCallback = null;
+    wrappedCallback = (data) => {
+      Off(eventName, wrappedCallback);
+      callback(data);
+    };
+    On(eventName, wrappedCallback);
+  }
 
   /// <summary>
   /// Triggers a custom event with optional data
