@@ -75,18 +75,50 @@ public static class CustomEventManager {
   public static bool Off<T>(string eventName, Delegate callback) => Off(eventName, callback);
 
   /// <summary>
-  /// Registers a callback that will only execute once and then automatically unregister itself.
+  /// Registers a callback that will be executed only once and then automatically removed.
+  /// </summary>
+  /// <param name="eventName">Name of the custom event</param>
+  /// <param name="callback">Delegate to execute when the event is triggered</param>
+  public static void Once(string eventName, Delegate callback) {
+    if (string.IsNullOrWhiteSpace(eventName) || callback == null) return;
+
+    Delegate wrappedCallback = null;
+    wrappedCallback = CreateWrappedCallback(callback, () => Off(eventName, wrappedCallback));
+    On(eventName, wrappedCallback);
+  }
+
+  /// <summary>
+  /// Generic overload for registering a one-time callback for a custom event with type parameter.
   /// </summary>
   /// <typeparam name="T">The type of data the event will handle</typeparam>
   /// <param name="eventName">Name of the custom event</param>
-  /// <param name="callback">Action to execute once when the event is triggered</param>
-  public static void Once<T>(string eventName, Action<T> callback) {
-    Action<T> wrappedCallback = null;
-    wrappedCallback = (data) => {
-      Off(eventName, wrappedCallback);
-      callback(data);
-    };
-    On(eventName, wrappedCallback);
+  /// <param name="callback">Delegate to execute when the event is triggered</param>
+  public static void Once<T>(string eventName, Delegate callback) => Once(eventName, callback);
+
+  private static Delegate CreateWrappedCallback(Delegate originalCallback, Action removeCallback) {
+    var handlerType = originalCallback.GetType();
+    var invokeMethod = handlerType.GetMethod("Invoke");
+    var parameters = invokeMethod?.GetParameters();
+
+    if (parameters?.Length == 0) {
+      return new Action(() => {
+        try {
+          originalCallback.DynamicInvoke();
+        } finally {
+          removeCallback();
+        }
+      });
+    } else if (parameters?.Length == 1) {
+      return new Action<object>(data => {
+        try {
+          originalCallback.DynamicInvoke(data);
+        } finally {
+          removeCallback();
+        }
+      });
+    }
+
+    return originalCallback;
   }
 
   /// <summary>
