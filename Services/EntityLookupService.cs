@@ -1,6 +1,7 @@
 using System;
 using ProjectM;
 using ProjectM.CastleBuilding;
+using ProjectM.Network;
 using ScarletCore.Systems;
 using Unity.Collections;
 using Unity.Entities;
@@ -146,6 +147,7 @@ public static class EntityLookupService {
     var destroyed = 0;
 
     foreach (var entity in entities) {
+      if (!entity.Exists() || entity.Has<PlayerCharacter>() || entity.Has<User>()) continue;
       destroyed++;
       entity.Destroy();
     }
