@@ -25,7 +25,6 @@ public static class GameSystems {
   private static InstantiateMapIconsSystem_Spawn _instantiateMapIconsSystem_Spawn;
   private static ServerScriptMapper _serverScriptMapper;
   private static NetworkIdSystem.Singleton _networkIdSystem_Singleton;
-  private static GenerateCastleSystem _generateCastleSystem;
 
   // Exception for when systems are not initialized
   private static Exception NotInitializedException => new("GameSystems not initialized. Call Initialize() first.");
@@ -136,12 +135,7 @@ public static class GameSystems {
     }
   }
 
-  public static GenerateCastleSystem GenerateCastleSystem {
-    get {
-      if (!Initialized) throw NotInitializedException;
-      return _generateCastleSystem;
-    }
-  }
+  public static GenerateCastleSystem GenerateCastleSystem => _server.GetExistingSystemManaged<GenerateCastleSystem>();
 
   public static bool Initialized { get; private set; } = false;
 
@@ -168,7 +162,6 @@ public static class GameSystems {
     _endSimulationEntityCommandBufferSystem = _server.GetExistingSystemManaged<EndSimulationEntityCommandBufferSystem>();
     _instantiateMapIconsSystem_Spawn = _server.GetExistingSystemManaged<InstantiateMapIconsSystem_Spawn>();
     _networkIdSystem_Singleton = _serverScriptMapper.GetSingleton<NetworkIdSystem.Singleton>();
-    _generateCastleSystem = _server.GetExistingSystemManaged<GenerateCastleSystem>();
 
     Initialized = true;
 
