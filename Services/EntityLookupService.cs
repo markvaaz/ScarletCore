@@ -12,7 +12,7 @@ namespace ScarletCore.Services;
 /// <summary>
 /// Provides utility methods for querying and manipulating entities in the game world using Unity's ECS.
 /// </summary>
-internal static class EntityLookupService {
+public static class EntityLookupService {
   public static EntityManager EntityManager => GameSystems.EntityManager;
   public static GenerateCastleSystem GenerateCastleSystem => GameSystems.GenerateCastleSystem;
 
