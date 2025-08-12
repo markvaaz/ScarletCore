@@ -113,14 +113,14 @@ public static class EntityLookupService {
   /// <summary>
   /// Destroys all entities with the specified component type T within a given radius from the center (float3 overload).
   /// </summary>
-  public static int ClearEntitiesInRadius<T>(float3 center, float radius) where T : IComponentData {
+  public static int ClearEntitiesInRadius<T>(float3 center, float radius) {
     return ClearEntitiesInRadius<T>(new float2(center.x, center.z), radius);
   }
 
   /// <summary>
   /// Destroys all entities with the specified component type T within a given radius from the center.
   /// </summary>
-  public static int ClearEntitiesInRadius<T>(float2 center, float radius) where T : IComponentData {
+  public static int ClearEntitiesInRadius<T>(float2 center, float radius) {
     var entities = GetEntitiesInRadius<T>(center, radius);
     var destroyed = 0;
     foreach (var entity in entities) {
@@ -188,14 +188,14 @@ public static class EntityLookupService {
   /// <summary>
   /// Gets all entities within a given radius from the center that have the specified component type T (float3 overload).
   /// </summary>
-  public static NativeList<Entity> GetEntitiesInRadius<T>(float3 center, float radius) where T : IComponentData {
+  public static NativeList<Entity> GetEntitiesInRadius<T>(float3 center, float radius) {
     return GetEntitiesInRadius<T>(new float2(center.x, center.z), radius);
   }
 
   /// <summary>
   /// Gets all entities within a given radius from the center that have the specified component type T.
   /// </summary>
-  public static NativeList<Entity> GetEntitiesInRadius<T>(float2 center, float radius) where T : IComponentData {
+  public static NativeList<Entity> GetEntitiesInRadius<T>(float2 center, float radius) {
     var entities = GetAllEntitiesInRadius(center, radius);
     var filtered = new NativeList<Entity>(Allocator.Temp);
 
