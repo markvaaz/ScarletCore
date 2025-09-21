@@ -161,6 +161,123 @@ namespace ScarletCore.Services {
     }
 
     /// <summary>
+    /// Spawns a copy of an entity by directly instantiating from the prefab collection
+    /// </summary>
+    /// <param name="prefabGUID">The prefab GUID of the unit to spawn</param>
+    /// <param name="position">The position to spawn at</param>
+    /// <param name="minRange">Minimum spawn range (default: 1)</param>
+    /// <param name="maxRange">Maximum spawn range (default: 1)</param>
+    /// <param name="lifeTime">How long the unit should live (0 = permanent, default: 0)</param>
+    /// <returns>The spawned entity or Entity.Null if failed</returns>
+    public static Entity SpawnCopy(PrefabGUID prefabGUID, float3 position, float minRange = 1, float maxRange = 1, float lifeTime = 0f) {
+      if (prefabGUID.GuidHash == 0) {
+        Log.Warning("Invalid prefab GUID provided to UnitSpawnerService.SpawnCopy");
+        return Entity.Null;
+      }
+
+      if (minRange < 0 || maxRange < minRange) {
+        Log.Warning("Invalid range values provided to UnitSpawnerService.SpawnCopy");
+        return Entity.Null;
+      }
+
+      var defaultPrefab = GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap[prefabGUID];
+
+      if (!defaultPrefab.Exists()) {
+        Log.Warning($"Prefab with GUID {prefabGUID.GuidHash} not found in PrefabCollectionSystem");
+        return Entity.Null;
+      }
+
+      var copy = GameSystems.EntityManager.Instantiate(defaultPrefab);
+
+      copy.AddWith((ref Age age) => {
+        age.Value = 0;
+      });
+
+      copy.AddWith((ref LifeTime lt) => {
+        lt.Duration = lifeTime;
+        lt.EndAction = lifeTime <= 0 ? LifeTimeEndAction.None : LifeTimeEndAction.Destroy;
+      });
+
+      copy.AddWith((ref UnitSpawnHandler spawnHandler) => {
+        spawnHandler.StationEntity = Entity.Null;
+      });
+
+      // Calculate random spawn position within range
+      var spawnPosition = position + new float3(
+        UnityEngine.Random.Range(-maxRange, maxRange),
+        0,
+        UnityEngine.Random.Range(-maxRange, maxRange)
+      );
+
+      TeleportService.TeleportToPosition(copy, spawnPosition);
+      return copy;
+    }
+
+    /// <summary>
+    /// Spawns multiple copies of an entity around the specified position
+    /// </summary>
+    /// <param name="prefabGUID">The prefab GUID of the unit to spawn</param>
+    /// <param name="position">The center position to spawn around</param>
+    /// <param name="count">Number of units to spawn</param>
+    /// <param name="minRange">Minimum spawn range (default: 1)</param>
+    /// <param name="maxRange">Maximum spawn range (default: 8)</param>
+    /// <param name="lifeTime">How long the units should live (0 = permanent, default: 0)</param>
+    /// <returns>List of spawned entities (empty if failed)</returns>
+    public static List<Entity> SpawnCopy(PrefabGUID prefabGUID, float3 position, int count, float minRange = 1, float maxRange = 8, float lifeTime = 0f) {
+      var entities = new List<Entity>();
+
+      if (prefabGUID.GuidHash == 0) {
+        Log.Warning("Invalid prefab GUID provided to UnitSpawnerService.SpawnCopy");
+        return entities;
+      }
+
+      if (count <= 0) {
+        Log.Warning("Invalid count provided to UnitSpawnerService.SpawnCopy");
+        return entities;
+      }
+
+      if (minRange < 0 || maxRange < minRange) {
+        Log.Warning("Invalid range values provided to UnitSpawnerService.SpawnCopy");
+        return entities;
+      }
+
+      var defaultPrefab = GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap[prefabGUID];
+
+      if (!defaultPrefab.Exists()) {
+        Log.Warning($"Prefab with GUID {prefabGUID.GuidHash} not found in PrefabCollectionSystem");
+        return entities;
+      }
+
+      for (var i = 0; i < count; i++) {
+        var copy = GameSystems.EntityManager.Instantiate(defaultPrefab);
+
+        copy.AddWith((ref Age age) => {
+          age.Value = 0;
+        });
+
+        copy.AddWith((ref LifeTime lt) => {
+          lt.Duration = lifeTime;
+          lt.EndAction = lifeTime <= 0 ? LifeTimeEndAction.None : LifeTimeEndAction.Destroy;
+        });
+
+        copy.AddWith((ref UnitSpawnHandler spawnHandler) => {
+          spawnHandler.StationEntity = Entity.Null;
+        });
+
+        var spawnPosition = position + new float3(
+          UnityEngine.Random.Range(-maxRange, maxRange),
+          0,
+          UnityEngine.Random.Range(-maxRange, maxRange)
+        );
+
+        TeleportService.TeleportToPosition(copy, spawnPosition);
+        entities.Add(copy);
+      }
+
+      return entities;
+    }
+
+    /// <summary>
     /// Spawns a single unit at exact position
     /// </summary>
     /// <param name="prefabGUID">The prefab GUID of the unit to spawn</param>
