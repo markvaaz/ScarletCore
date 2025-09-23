@@ -87,10 +87,6 @@ namespace ScarletCore.Services {
         lt.EndAction = lifeTime <= 0 ? LifeTimeEndAction.None : LifeTimeEndAction.Destroy;
       });
 
-      entity.AddWith((ref UnitSpawnHandler spawnHandler) => {
-        spawnHandler.StationEntity = Entity.Null;
-      });
-
       // Calculate random spawn position within range
       var spawnPosition = position + new float3(
         UnityEngine.Random.Range(-maxRange, maxRange),
@@ -143,10 +139,6 @@ namespace ScarletCore.Services {
           lt.EndAction = lifeTime <= 0 ? LifeTimeEndAction.None : LifeTimeEndAction.Destroy;
         });
 
-        entity.AddWith((ref UnitSpawnHandler spawnHandler) => {
-          spawnHandler.StationEntity = Entity.Null;
-        });
-
         var spawnPosition = position + new float3(
           UnityEngine.Random.Range(-maxRange, maxRange),
           0,
@@ -196,10 +188,6 @@ namespace ScarletCore.Services {
       copy.AddWith((ref LifeTime lt) => {
         lt.Duration = lifeTime;
         lt.EndAction = lifeTime <= 0 ? LifeTimeEndAction.None : LifeTimeEndAction.Destroy;
-      });
-
-      copy.AddWith((ref UnitSpawnHandler spawnHandler) => {
-        spawnHandler.StationEntity = Entity.Null;
       });
 
       // Calculate random spawn position within range
@@ -258,10 +246,6 @@ namespace ScarletCore.Services {
         copy.AddWith((ref LifeTime lt) => {
           lt.Duration = lifeTime;
           lt.EndAction = lifeTime <= 0 ? LifeTimeEndAction.None : LifeTimeEndAction.Destroy;
-        });
-
-        copy.AddWith((ref UnitSpawnHandler spawnHandler) => {
-          spawnHandler.StationEntity = Entity.Null;
         });
 
         var spawnPosition = position + new float3(
