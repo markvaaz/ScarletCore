@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using ScarletCore.Utils;
 
 namespace ScarletCore.Data;
@@ -268,9 +270,120 @@ public class Database {
         }
       }
     }
-  }  /// <summary>
-     /// Temporary data storage that exists only in memory and is lost on restart
-     /// </summary>
+  }
+
+  /// <summary>
+  /// Creates a backup of all database files by compressing them into a ZIP archive
+  /// </summary>
+  /// <param name="backupLocation">Optional custom backup location. If null, saves to the BepInEx config directory</param>
+  /// <returns>Task that returns the path to the created backup file, or null if backup failed</returns>
+  public async Task<string> CreateBackup(string backupLocation = null) {
+    return await Task.Run(() => {
+      try {
+        var configPath = GetConfigPath();
+
+        // Check if the database folder exists and has files
+        if (!Directory.Exists(configPath)) {
+          Log.Warning($"Database folder '{configPath}' does not exist. No backup created.");
+          return null;
+        }
+
+        var files = Directory.GetFiles(configPath, "*", SearchOption.AllDirectories);
+        if (files.Length == 0) {
+          Log.Warning($"Database folder '{configPath}' is empty. No backup created.");
+          return null;
+        }
+
+        // Generate backup filename with timestamp
+        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+        var backupFileName = $"{_databaseName}_backup_{timestamp}.zip";
+
+        // Determine backup location
+        var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath;
+        var fullBackupPath = Path.Combine(backupPath, backupFileName);
+
+        // Create backup directory if it doesn't exist
+        Directory.CreateDirectory(backupPath);
+
+        // Save all cached data before creating backup
+        SaveAll();
+
+        // Create ZIP archive
+        using (var archive = ZipFile.Open(fullBackupPath, ZipArchiveMode.Create)) {
+          foreach (var file in files) {
+            // Calculate relative path within the database folder
+            var relativePath = Path.GetRelativePath(configPath, file);
+
+            // Add file to archive
+            archive.CreateEntryFromFile(file, relativePath);
+          }
+        }
+
+        Log.Info($"Database backup created successfully: {fullBackupPath}");
+        return fullBackupPath;
+      } catch (Exception ex) {
+        Log.Error($"Failed to create database backup: {ex.Message}");
+        return null;
+      }
+    });
+  }
+
+  /// <summary>
+  /// Restores database from a backup ZIP file
+  /// </summary>
+  /// <param name="backupFilePath">Path to the backup ZIP file</param>
+  /// <param name="clearExisting">If true, clears existing data before restoring</param>
+  /// <returns>Task that returns true if restoration was successful</returns>
+  public async Task<bool> RestoreFromBackup(string backupFilePath, bool clearExisting = false) {
+    return await Task.Run(() => {
+      try {
+        if (!File.Exists(backupFilePath)) {
+          Log.Error($"Backup file not found: {backupFilePath}");
+          return false;
+        }
+
+        var configPath = GetConfigPath();
+
+        // Clear existing data if requested
+        if (clearExisting && Directory.Exists(configPath)) {
+          Directory.Delete(configPath, true);
+          ClearCache(); // Clear memory cache as well
+        }
+
+        // Create config directory if it doesn't exist
+        Directory.CreateDirectory(configPath);
+
+        // Extract backup
+        using (var archive = ZipFile.OpenRead(backupFilePath)) {
+          foreach (var entry in archive.Entries) {
+            // Skip directories
+            if (string.IsNullOrEmpty(entry.Name)) continue;
+
+            var destinationPath = Path.Combine(configPath, entry.FullName);
+
+            // Create directory if needed
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath));
+
+            // Extract file
+            entry.ExtractToFile(destinationPath, true);
+          }
+        }
+
+        // Clear cache to force reload of restored data
+        ClearCache();
+
+        Log.Info($"Database restored successfully from: {backupFilePath}");
+        return true;
+      } catch (Exception ex) {
+        Log.Error($"Failed to restore database from backup: {ex.Message}");
+        return false;
+      }
+    });
+  }
+
+  /// <summary>
+  /// Temporary data storage that exists only in memory and is lost on restart
+  /// </summary>
   public class TempStorage {
     // Exclusive cache for temporary data
     private readonly Dictionary<string, object> _tempCache = [];
