@@ -147,6 +147,46 @@ public static class BuffService {
   }
 
   /// <summary>
+  /// Attempts to apply a buff to an entity only if it doesn't already exist.
+  /// If the buff already exists, it will not be reapplied or modified.
+  /// </summary>
+  /// <param name="entity">Target entity to receive the buff</param>
+  /// <param name="prefabGUID">GUID of the buff prefab to apply</param>
+  /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <param name="buffEntity">Output parameter that will contain the existing or newly created buff entity</param>
+  /// <returns>True if buff was applied or already exists, false if application failed</returns>
+  public static bool TryApplyUnique(Entity entity, PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
+    try {
+      // First check if the buff already exists
+      if (BuffUtility.TryGetBuff(GameSystems.EntityManager, entity, prefabGUID, out buffEntity)) {
+        // Buff already exists, return true with the existing buff entity
+        return true;
+      }
+
+      // Buff doesn't exist, apply it normally
+      return TryApplyBuff(entity, prefabGUID, duration, out buffEntity);
+    } catch (Exception e) {
+      // Log any errors that occur during unique buff application
+      buffEntity = Entity.Null;
+      Log.Error($"An error occurred while applying unique buff: {e.Message}");
+      return false;
+    }
+  }
+
+  /// <summary>
+  /// Attempts to apply a buff to an entity only if it doesn't already exist.
+  /// If the buff already exists, it will not be reapplied or modified.
+  /// </summary>
+  /// <param name="entity">Target entity to receive the buff</param>
+  /// <param name="prefabGUID">GUID of the buff prefab to apply</param>
+  /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <returns>True if buff was applied or already exists, false if application failed</returns>
+  public static bool TryApplyUnique(Entity entity, PrefabGUID prefabGUID, float duration = 0) {
+    // Call the overloaded method with an output parameter for the buff entity
+    return TryApplyUnique(entity, prefabGUID, duration, out _);
+  }
+
+  /// <summary>
   /// Attempts to retrieve a specific buff entity from an entity.
   /// </summary>
   /// <param name="entity">Entity to search for the buff on</param>
