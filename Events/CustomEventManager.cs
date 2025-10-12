@@ -248,4 +248,125 @@ public static class CustomEventManager {
     }
     return removedCount;
   }
+
+  // Communication system for two-way events
+  private static readonly ConcurrentDictionary<string, List<Delegate>> _communicationHandlers = new();
+  private static readonly object _commLock = new();
+
+  /// <summary>
+  /// Registers a communication handler for two-way events that can return a response
+  /// </summary>
+  /// <param name="eventName">Name of the communication event</param>
+  /// <param name="callback">Delegate that can return a response</param>
+  public static void OnCommunicate(string eventName, Delegate callback) {
+    if (string.IsNullOrWhiteSpace(eventName)) {
+      Log.Warning("CustomEventManager: Communication event name cannot be null or empty");
+      return;
+    }
+    if (callback == null) {
+      Log.Warning("CustomEventManager: Communication callback cannot be null");
+      return;
+    }
+    lock (_commLock) {
+      if (!_communicationHandlers.ContainsKey(eventName)) {
+        _communicationHandlers[eventName] = [];
+      }
+      _communicationHandlers[eventName].Add(callback);
+    }
+  }
+
+  /// <summary>
+  /// Generic overload for registering a communication callback with type parameter
+  /// </summary>
+  /// <typeparam name="T">The type of data the event will handle</typeparam>
+  /// <param name="eventName">Name of the communication event</param>
+  /// <param name="callback">Delegate that can return a response</param>
+  public static void OnCommunicate<T>(string eventName, Delegate callback) => OnCommunicate(eventName, callback);
+
+  /// <summary>
+  /// Unregisters a communication handler from a two-way event
+  /// </summary>
+  /// <param name="eventName">Name of the communication event</param>
+  /// <param name="callback">Delegate to remove</param>
+  /// <returns>True if the callback was found and removed</returns>
+  public static bool OffCommunicate(string eventName, Delegate callback) {
+    if (string.IsNullOrWhiteSpace(eventName) || callback == null)
+      return false;
+    lock (_commLock) {
+      if (_communicationHandlers.TryGetValue(eventName, out var handlers)) {
+        bool removed = handlers.Remove(callback);
+        if (removed && handlers.Count == 0) {
+          _communicationHandlers.TryRemove(eventName, out _);
+        }
+        return removed;
+      }
+    }
+    return false;
+  }
+
+  /// <summary>
+  /// Generic overload for unregistering a communication callback with type parameter
+  /// </summary>
+  /// <typeparam name="T">The type of data the event handles</typeparam>
+  /// <param name="eventName">Name of the communication event</param>
+  /// <param name="callback">Delegate to remove</param>
+  /// <returns>True if the callback was found and removed</returns>
+  public static bool OffCommunicate<T>(string eventName, Delegate callback) => OffCommunicate(eventName, callback);
+
+  /// <summary>
+  /// Emits a communication event and returns the first response received
+  /// </summary>
+  /// <param name="eventName">Name of the communication event</param>
+  /// <param name="data">Data to send to handlers</param>
+  /// <returns>Response from the first handler, or null if no handlers or no response</returns>
+  public static object EmitCommunication(string eventName, object data = null) {
+    if (string.IsNullOrWhiteSpace(eventName)) {
+      Log.Warning("CustomEventManager: Communication event name cannot be null or empty");
+      return null;
+    }
+    List<Delegate> handlersToExecute = null;
+    lock (_commLock) {
+      if (_communicationHandlers.TryGetValue(eventName, out var handlers) && handlers.Count > 0) {
+        handlersToExecute = [.. handlers];
+      }
+    }
+    if (handlersToExecute != null) {
+      foreach (var handler in handlersToExecute) {
+        try {
+          var handlerType = handler.GetType();
+          var invokeMethod = handlerType.GetMethod("Invoke");
+          var parameters = invokeMethod?.GetParameters();
+          var returnType = invokeMethod?.ReturnType;
+
+          if (returnType == typeof(void)) {
+            continue; // Skip void methods as they can't return a response
+          }
+
+          object response = null;
+          if (parameters != null) {
+            if (parameters.Length == 0) {
+              response = handler.DynamicInvoke();
+            } else if (parameters.Length == 1) {
+              var paramType = parameters[0].ParameterType;
+              if (data == null && paramType.IsClass) {
+                response = handler.DynamicInvoke(null);
+              } else if (data != null && paramType.IsAssignableFrom(data.GetType())) {
+                response = handler.DynamicInvoke(data);
+              } else {
+                Log.Warning($"CustomEventManager: Type mismatch for communication event '{eventName}'. Expected {paramType.Name}, got {data?.GetType().Name ?? "null"}");
+                continue;
+              }
+            }
+          }
+
+          if (response != null) {
+            return response;
+          }
+        } catch (Exception ex) {
+          Log.Error($"CustomEventManager: Error executing communication handler for event '{eventName}': {ex}");
+        }
+      }
+    }
+    return null;
+  }
 }
