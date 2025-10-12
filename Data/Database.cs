@@ -311,7 +311,7 @@ public class Database {
         var backupFileName = $"{_databaseName}_backup_{timestamp}.zip";
 
         // Determine backup location
-        var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath + $"{_databaseName} Backups";
+        var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath + $"/{_databaseName} Backups";
         var fullBackupPath = Path.Combine(backupPath, backupFileName);
 
         // Create backup directory if it doesn't exist
