@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
@@ -23,10 +24,21 @@ public class Database {
   // Temp storage instance
   private readonly TempStorage _temp;
 
+  // Maximum number of backups to keep
+  private int _maxBackups = 10;
+
   /// <summary>
   /// Gets the temporary storage instance for this database
   /// </summary>
   public TempStorage Temp => _temp;
+
+  /// <summary>
+  /// Gets or sets the maximum number of backups to keep (default: 10)
+  /// </summary>
+  public int MaxBackups {
+    get => _maxBackups;
+    set => _maxBackups = value > 0 ? value : 10; // Ensure positive value
+  }
 
   /// <summary>
   /// JSON serialization options
@@ -299,11 +311,14 @@ public class Database {
         var backupFileName = $"{_databaseName}_backup_{timestamp}.zip";
 
         // Determine backup location
-        var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath;
+        var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath + $"{_databaseName} Backups";
         var fullBackupPath = Path.Combine(backupPath, backupFileName);
 
         // Create backup directory if it doesn't exist
         Directory.CreateDirectory(backupPath);
+
+        // Clean up old backups before creating new one
+        CleanupOldBackups(backupPath, _maxBackups);
 
         // Save all cached data before creating backup
         SaveAll();
@@ -379,6 +394,51 @@ public class Database {
         return false;
       }
     });
+  }
+
+  /// <summary>
+  /// Cleans up old backup files, keeping only the specified number of most recent backups
+  /// </summary>
+  /// <param name="backupPath">Directory containing backup files</param>
+  /// <param name="maxBackups">Maximum number of backups to keep (default: 10)</param>
+  private void CleanupOldBackups(string backupPath, int maxBackups = 10) {
+    try {
+      if (!Directory.Exists(backupPath)) {
+        return; // Nothing to clean up
+      }
+
+      // Get all backup files for this database
+      var backupPattern = $"{_databaseName}_backup_*.zip";
+      var backupFiles = Directory.GetFiles(backupPath, backupPattern, SearchOption.TopDirectoryOnly);
+
+      // If we have fewer than or equal to max backups, nothing to clean
+      if (backupFiles.Length <= maxBackups) {
+        return;
+      }
+
+      // Sort files by creation time (oldest first)
+      var sortedFiles = backupFiles
+        .Select(file => new FileInfo(file))
+        .OrderBy(fileInfo => fileInfo.CreationTime)
+        .ToArray();
+
+      // Calculate how many files to delete
+      int filesToDelete = sortedFiles.Length - maxBackups + 1; // +1 because we're about to create a new one
+
+      // Delete the oldest files
+      for (int i = 0; i < filesToDelete && i < sortedFiles.Length; i++) {
+        try {
+          File.Delete(sortedFiles[i].FullName);
+          Log.Info($"Deleted old backup: {sortedFiles[i].Name}");
+        } catch (Exception ex) {
+          Log.Warning($"Failed to delete old backup {sortedFiles[i].Name}: {ex.Message}");
+        }
+      }
+
+      Log.Info($"Cleanup completed. Kept {Math.Min(maxBackups, sortedFiles.Length - filesToDelete)} backup(s).");
+    } catch (Exception ex) {
+      Log.Warning($"Error during backup cleanup: {ex.Message}");
+    }
   }
 
   /// <summary>
