@@ -311,11 +311,11 @@ public class Database {
         var backupFileName = $"{_databaseName}_backup_{timestamp}.zip";
 
         // Determine backup location
-        var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath + $"/{_databaseName} Backups";
+        var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath;
         var fullBackupPath = Path.Combine(backupPath, backupFileName);
 
         // Create backup directory if it doesn't exist
-        Directory.CreateDirectory(backupPath);
+        Directory.CreateDirectory(Path.Combine(backupPath, $"{_databaseName} Backups"));
 
         // Clean up old backups before creating new one
         CleanupOldBackups(backupPath, _maxBackups);
@@ -334,7 +334,7 @@ public class Database {
           }
         }
 
-        Log.Info($"Database backup created successfully: {fullBackupPath}");
+        Log.Info($"Database backup created successfully");
         return fullBackupPath;
       } catch (Exception ex) {
         Log.Error($"Failed to create database backup: {ex.Message}");
