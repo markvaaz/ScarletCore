@@ -181,6 +181,18 @@ public static class RichTextFormatter {
     return ApplyFormatting(text, TextColor, [Blue]);
   }
 
+  /// <summary>
+  /// Formats text with background colors using ^text^ syntax.
+  /// Only processes ^ symbols when called through this method, otherwise leaves them unchanged.
+  /// </summary>
+  /// <param name="text">Text with ^background^ formatting</param>
+  /// <param name="backgroundColors">List of colors for backgrounds (optional)</param>
+  /// <returns>Formatted text with background colors applied</returns>
+  public static string FormatBackground(this string text, List<string> backgroundColors = null) {
+    backgroundColors ??= [HighlightColor];
+    return ApplyBackgroundFormatting(text, backgroundColors);
+  }
+
   #endregion
 
   #region System Message Formatters
@@ -387,6 +399,36 @@ public static class RichTextFormatter {
 
     // Apply base color to entire text
     return result.WithColor(baseColor);
+  }
+
+  /// <summary>
+  /// Applies background formatting to text using regex patterns.
+  /// Processes ^text^ syntax for background colors.
+  /// </summary>
+  /// <param name="text">Text to format</param>
+  /// <param name="backgroundColors">Colors to use for backgrounds</param>
+  /// <returns>Formatted text with background colors applied</returns>
+  private static string ApplyBackgroundFormatting(string text, List<string> backgroundColors) {
+    var backgroundPattern = @"\^(.*?)\^";  // ^text^
+
+    int backgroundIndex = 0;
+    var result = Regex.Replace(text, backgroundPattern, m => {
+      string color;
+      if (backgroundColors.Count > 0) {
+        // Use the color at current index, or the last color if index exceeds list
+        int colorIndex = Math.Min(backgroundIndex, backgroundColors.Count - 1);
+        color = backgroundColors[colorIndex];
+      } else {
+        // Fallback to HighlightColor if no colors provided
+        color = HighlightColor;
+      }
+
+      if (color == null) color = HighlightColor;
+      backgroundIndex++;
+      return $"<mark={color}>{m.Groups[1].Value}</mark>";
+    });
+
+    return result;
   }
 
   #endregion
