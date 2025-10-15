@@ -7,6 +7,7 @@ using System.Linq;
 using System;
 using ScarletCore.Utils;
 using ScarletCore.Systems;
+using ProjectM;
 
 namespace ScarletCore.Services;
 
@@ -40,6 +41,30 @@ public static class PlayerService {
   /// Complete list of all known players (online and offline)
   /// </summary>
   public static readonly List<PlayerData> AllPlayers = [];
+
+  /// <summary>
+  /// Extracts the clean player name by removing any tags in square brackets.
+  /// Tags are always in the format [TAG] and are removed from the beginning of the name.
+  /// </summary>
+  /// <param name="fullName">The full name that may contain tags (e.g., "[Vaaz] Mark")</param>
+  /// <returns>The clean name without tags (e.g., "Mark")</returns>
+  private static string ExtractCleanName(string fullName) {
+    if (string.IsNullOrEmpty(fullName)) return fullName;
+
+    var trimmed = fullName.Trim();
+
+    // Check if the name starts with a tag in square brackets
+    if (trimmed.StartsWith("[")) {
+      var closingBracketIndex = trimmed.IndexOf(']');
+      if (closingBracketIndex > 0 && closingBracketIndex < trimmed.Length - 1) {
+        // Extract everything after the closing bracket and trim whitespace
+        return trimmed.Substring(closingBracketIndex + 1).Trim();
+      }
+    }
+
+    // Return the original name if no tag pattern is found
+    return trimmed;
+  }
 
   /// <summary>
   /// Initializes the player service by loading all existing users from the entity manager
@@ -96,21 +121,22 @@ public static class PlayerService {
     // Extract core data from the user entity
     var networkId = userEntity.Read<NetworkId>();
     var userData = userEntity.Read<User>();
-    var name = userData.CharacterName.Value;
+    var fullName = userData.CharacterName.Value;
+    var cleanName = ExtractCleanName(fullName);
 
     // Check if this is a new player we haven't seen before
     if (!PlayerIds.ContainsKey(userData.PlatformId)) {
       PlayerData newData = new();
 
       // Handle new players based on whether they have a character name set
-      if (string.IsNullOrEmpty(name)) {
+      if (string.IsNullOrEmpty(cleanName)) {
         // New player with no character name - add to unnamed list for later processing
         // This happens when players create an account but haven't chosen a character name yet
         UnnamedPlayers.Add(newData);
       } else {
-        // New player with a name - add directly to the named player index
-        PlayerNames[name.ToLower()] = newData;
-        newData.SetName(name);
+        // New player with a name - add directly to the named player index using clean name
+        PlayerNames[cleanName.ToLower()] = newData;
+        newData.SetName(cleanName);
       }
 
       // Add to all primary indexes
@@ -133,24 +159,24 @@ public static class PlayerService {
       PlayerNetworkIds[networkId] = playerData;
     }
 
-    // Detect name changes by comparing cached name vs current entity name
+    // Detect name changes by comparing cached name vs current clean name
     // CachedName returns the internal _name field before any lazy loading occurs
-    var nameChanged = !string.IsNullOrEmpty(playerData.CachedName) && playerData.Name != name;
+    var nameChanged = !string.IsNullOrEmpty(playerData.CachedName) && playerData.Name != cleanName;
 
     // Detect when an unnamed player has finally set their character name
     // This happens when TryGetByName triggers lazy loading or when player sets name for first time
-    var nameIsNoLongerEmpty = string.IsNullOrEmpty(playerData.CachedName) && !string.IsNullOrEmpty(name);
+    var nameIsNoLongerEmpty = string.IsNullOrEmpty(playerData.CachedName) && !string.IsNullOrEmpty(cleanName);
 
     // Handle name changes and transitions from unnamed to named
     if (nameChanged || nameIsNoLongerEmpty) {
       // Remove old name from the lookup index (if it existed)
       PlayerNames.Remove(playerData.Name.ToLower());
 
-      // Update the internal cached name
-      playerData.SetName(name);
+      // Update the internal cached name with clean name
+      playerData.SetName(cleanName);
 
-      // Add new name to the lookup index
-      PlayerNames[name.ToLower()] = playerData;
+      // Add new clean name to the lookup index
+      PlayerNames[cleanName.ToLower()] = playerData;
 
       // Remove from unnamed players list (handles both name changes and first-time naming)
       UnnamedPlayers.Remove(playerData);
@@ -205,33 +231,69 @@ public static class PlayerService {
   /// <summary>
   /// Attempts to retrieve a player by their character name.
   /// Also handles discovery of unnamed players who have set their name since last update.
+  /// Automatically extracts clean names by removing tags in square brackets.
   /// </summary>
-  /// <param name="name">The character name to search for (case-insensitive)</param>
+  /// <param name="name">The character name to search for (case-insensitive, tags will be removed)</param>
   /// <param name="playerData">The found player data, or null if not found</param>
   /// <returns>True if player was found, false otherwise</returns>
   public static bool TryGetByName(string name, out PlayerData playerData) {
+    // Extract clean name from the search query (remove tags if present)
+    var cleanSearchName = ExtractCleanName(name);
+
     // First, try to get the player from the named players index (fastest lookup)
-    if (PlayerNames.TryGetValue(name.ToLower(), out playerData)) {
+    if (PlayerNames.TryGetValue(cleanSearchName.ToLower(), out playerData)) {
       return true;
     }
 
     // If not found in named players and no unnamed players exist, player doesn't exist
     if (UnnamedPlayers.Count == 0) return false;
 
-    // Search through unnamed players to see if any have the target name
+    // Search through unnamed players to see if any have the target clean name
     // This triggers lazy loading of names for unnamed players
-    playerData = UnnamedPlayers.FirstOrDefault(p => p.Name.ToLower() == name.ToLower());
+    playerData = UnnamedPlayers.FirstOrDefault(p => ExtractCleanName(p.Name).ToLower() == cleanSearchName.ToLower());
 
     var exist = playerData != null;
 
     // If found in unnamed players, promote them to named players
     if (exist) {
-      // Move player from unnamed to named index for future fast lookups
-      PlayerNames[name.ToLower()] = playerData;
+      // Move player from unnamed to named index for future fast lookups using clean name
+      var playerCleanName = ExtractCleanName(playerData.Name);
+      PlayerNames[playerCleanName.ToLower()] = playerData;
       UnnamedPlayers.Remove(playerData);
+
+      // Update the cached name to be the clean name
+      playerData.SetName(playerCleanName);
     }
 
     return exist;
+  }
+
+  public static void RenamePlayer(PlayerData player, FixedString64Bytes newName) {
+    var des = GameSystems.DebugEventsSystem;
+    var networkId = player.NetworkId;
+
+    var renameEvent = new RenameUserDebugEvent {
+      NewName = newName,
+      Target = player.NetworkId
+    };
+
+    var fromCharacter = new FromCharacter {
+      User = player.UserEntity,
+      Character = player.CharacterEntity
+    };
+
+    des.RenameUser(fromCharacter, renameEvent);
+
+    SetPlayerCache(player.UserEntity);
+
+    var attachedBuffer = player.CharacterEntity.ReadBuffer<AttachedBuffer>();
+
+    foreach (var entry in attachedBuffer) {
+      if (entry.PrefabGuid.GuidHash != -892362184) continue;
+      var icon = entry.Entity.Read<PlayerMapIcon>();
+      icon.UserName = newName;
+      entry.Entity.Write(icon);
+    }
   }
 }
 
