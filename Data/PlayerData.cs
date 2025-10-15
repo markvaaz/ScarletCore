@@ -45,24 +45,51 @@ public class PlayerData() {
 
   /// <summary>
   /// Gets the player's character name with lazy loading and caching.
-  /// Converts the FixedString64Bytes to string only when needed and caches the result.
+  /// Converts the FixedString64Bytes to string only when needed and caches the clean result (without tags).
   /// </summary>
   public string Name {
     get {
-      // Lazy load and cache the name to avoid repeated string conversions
-      if (string.IsNullOrEmpty(_name))
-        _name = User.CharacterName.ToString();
+      // Lazy load and cache the clean name to avoid repeated string conversions
+      if (string.IsNullOrEmpty(_name)) {
+        var fullName = User.CharacterName.ToString();
+        _name = ExtractCleanName(fullName);
+      }
       return _name;
     }
   }
 
   /// <summary>
+  /// Extracts the clean player name by removing any tags in square brackets.
+  /// Tags are always in the format [TAG] and are removed from the beginning of the name.
+  /// </summary>
+  /// <param name="fullName">The full name that may contain tags (e.g., "[Vaaz] Mark")</param>
+  /// <returns>The clean name without tags (e.g., "Mark")</returns>
+  private static string ExtractCleanName(string fullName) {
+    if (string.IsNullOrEmpty(fullName)) return fullName;
+
+    var trimmed = fullName.Trim();
+
+    // Check if the name starts with a tag in square brackets
+    if (trimmed.StartsWith("[")) {
+      var closingBracketIndex = trimmed.IndexOf(']');
+      if (closingBracketIndex > 0 && closingBracketIndex < trimmed.Length - 1) {
+        // Extract everything after the closing bracket and trim whitespace
+        return trimmed.Substring(closingBracketIndex + 1).Trim();
+      }
+    }
+
+    // Return the original name if no tag pattern is found
+    return trimmed;
+  }
+
+  /// <summary>
   /// Manually sets the cached player name.
+  /// Automatically extracts the clean name by removing tags if present.
   /// Useful when the name is known from external sources or needs to be updated.
   /// </summary>
-  /// <param name="name">The new name to cache</param>
+  /// <param name="name">The name to cache (tags will be automatically removed)</param>
   public void SetName(string name) {
-    _name = name;
+    _name = ExtractCleanName(name);
   }
 
   /// <summary>
@@ -70,6 +97,12 @@ public class PlayerData() {
   /// Returns null if the name hasn't been loaded or set yet.
   /// </summary>
   public string CachedName => _name;
+
+  /// <summary>
+  /// Gets the full character name including any tags from the entity data.
+  /// This always returns the raw name as stored in the entity, including [TAG] prefixes.
+  /// </summary>
+  public string FullName => User.CharacterName.ToString();
 
   /// <summary>
   /// Gets the player's character entity in the game world.
