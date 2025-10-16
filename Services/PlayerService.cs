@@ -282,6 +282,8 @@ public static class PlayerService {
 
     SetPlayerCache(player.UserEntity);
 
+    if (!player.CharacterEntity.Has<AttachedBuffer>()) return;
+
     var attachedBuffer = player.CharacterEntity.ReadBuffer<AttachedBuffer>();
 
     foreach (var entry in attachedBuffer) {
