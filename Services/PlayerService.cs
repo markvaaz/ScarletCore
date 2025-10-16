@@ -317,6 +317,64 @@ public static class PlayerService {
       entry.Entity.Write(icon);
     }
   }
+
+  /// <summary>
+  /// Sets a name tag for the specified player. Supports both bracket and direct tag formats.
+  /// For bracket tags: any text is allowed (e.g., "[Admin] Name")
+  /// For direct tags: only characters from the Tags array are allowed (e.g., "🆘 Name")
+  /// </summary>
+  /// <param name="player">The player to set the tag for</param>
+  /// <param name="tag">The tag to set. For brackets: any text. For direct: only Tags array characters</param>
+  /// <param name="useBrackets">Whether to wrap the tag in brackets. True for "[Tag] Name", false for "Tag Name"</param>
+  /// <returns>True if the tag was set successfully, false if validation failed</returns>
+  public static bool SetNameTag(PlayerData player, string tag, bool useBrackets = true) {
+    if (player == null || string.IsNullOrEmpty(tag)) return false;
+
+    // If not using brackets, validate that all characters in the tag are from the Tags array
+    if (!useBrackets) {
+      foreach (char c in tag) {
+        string charStr = c.ToString();
+        if (!Tags.Contains(charStr)) {
+          // Invalid character found - not in Tags array
+          return false;
+        }
+      }
+    }
+
+    // Get the current clean name (without any existing tags)
+    var cleanName = ExtractCleanName(player.FullName);
+
+    // Build the new name with tag
+    string newNameWithTag;
+    if (useBrackets) {
+      newNameWithTag = $"[{tag}] {cleanName}";
+    } else {
+      newNameWithTag = $"{tag} {cleanName}";
+    }
+
+    // Rename the player with the new tagged name
+    var newName = new FixedString64Bytes(newNameWithTag);
+    RenamePlayer(player, newName);
+    return true;
+  }
+
+  /// <summary>
+  /// Removes any existing tag from the player's name, leaving only the clean name.
+  /// </summary>
+  /// <param name="player">The player to remove the tag from</param>
+  public static void RemoveNameTag(PlayerData player) {
+    if (player == null) return;
+
+    // Get the current clean name (without any existing tags)
+    var cleanName = ExtractCleanName(player.FullName);
+
+    // If the clean name is the same as full name, no tag exists
+    if (cleanName == player.FullName.Trim()) return;
+
+    // Rename the player with just the clean name
+    var newName = new FixedString64Bytes(cleanName);
+    RenamePlayer(player, newName);
+  }
 }
 
 
