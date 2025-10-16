@@ -16,7 +16,6 @@ namespace ScarletCore.Services;
 /// Handles player lifecycle including connection, disconnection, and name changes.
 /// </summary>
 public static class PlayerService {
-  public static string[] Tags = ["🄰", "🄱", "🄲", "🄳", "🄴", "🄵", "🄶", "🄷", "🄸", "🄹", "🄺", "🄻", "🄼", "🄽", "🄾", "🄿", "🅀", "🅁", "🅂", "🅃", "🅄", "🅅", "🅆", "🅇", "🅈", "🅉", "🅊", "🅋", "🅌", "🅍", "🅎", "🅏", "🅐", "🅑", "🅒", "🅓", "🅔", "🅕", "🅖", "🅗", "🅘", "🅙", "🅚", "🅛", "🅜", "🅝", "🅞", "🅟", "🅠", "🅡", "🅢", "🅣", "🅤", "🅥", "🅦", "🅧", "🅨", "🅩", "🅰", "🅱", "🅲", "🅳", "🅴", "🅵", "🅶", "🅷", "🅸", "🅹", "🅺", "🅻", "🅼", "🅽", "🅾", "🅿", "🆀", "🆁", "🆂", "🆃", "🆄", "🆅", "🆆", "🆇", "🆈", "🆉", "🆊", "🆋", "🆌", "🆍", "🆎", "🆏", "🆐", "🆑", "🆒", "🆓", "🆔", "🆕", "🆖", "🆗", "🆘", "🆙", "🆚", "🆛", "🆜", "🆝", "🆞", "🆟", "🆠", "🆡", "🆢", "🆣", "🆤", "🆥", "🆦", "🆧", "🆨", "🆩", "🆪", "🆫", "🆬", "🆭"];
 
   /// <summary>
   /// Dictionary for fast player lookup by character name (case-insensitive)
@@ -44,54 +43,29 @@ public static class PlayerService {
   public static readonly List<PlayerData> AllPlayers = [];
 
   /// <summary>
-  /// Extracts the clean player name by removing any tags from the beginning of the name.
-  /// Supports two tag formats:
-  /// 1. Square bracket tags: [TAG] or [🆘] or [🅀🄰]
-  /// 2. Direct character tags: 🆘 or 🅀🄰 (using characters from Tags array)
+  /// Extracts the clean player name by removing any tag from the beginning of the name.
+  /// A tag is considered everything before the first space.
+  /// Examples: "🆘 Mark" → "Mark", "[Admin] Player" → "Player", "TAG123 User" → "User"
   /// </summary>
-  /// <param name="fullName">The full name that may contain tags (e.g., "[Vaaz] Mark", "🆘 Mark", "🅀🄰 Mark")</param>
-  /// <returns>The clean name without tags (e.g., "Mark")</returns>
-  private static string ExtractCleanName(string fullName) {
+  /// <param name="fullName">The full name that may contain a tag (e.g., "🆘 Mark", "[Admin] Player")</param>
+  /// <returns>The clean name without tag (e.g., "Mark", "Player")</returns>
+  public static string ExtractCleanName(string fullName) {
     if (string.IsNullOrEmpty(fullName)) return fullName;
 
     var trimmed = fullName.Trim();
 
-    // First, check if the name starts with a tag in square brackets
-    if (trimmed.StartsWith("[")) {
-      var closingBracketIndex = trimmed.IndexOf(']');
-      if (closingBracketIndex > 0 && closingBracketIndex < trimmed.Length - 1) {
-        // Extract everything after the closing bracket and trim whitespace
-        return trimmed.Substring(closingBracketIndex + 1).Trim();
-      }
-    }
+    // Find the first space
+    var spaceIndex = trimmed.IndexOf(' ');
 
-    // Second, check if the name starts with direct tag characters (without brackets)
-    int tagEndIndex = 0;
-    for (int i = 0; i < trimmed.Length; i++) {
-      string currentChar = trimmed[i].ToString();
+    // If no space found, return the whole name (no tag present)
+    if (spaceIndex == -1) return trimmed;
 
-      // Check if current character is in the Tags array
-      if (Tags.Contains(currentChar)) {
-        tagEndIndex = i + 1;
-      } else {
-        // Stop when we hit a character that's not a tag character
-        break;
-      }
-    }
-
-    // If we found tag characters at the beginning, remove them
-    if (tagEndIndex > 0) {
-      return trimmed.Substring(tagEndIndex).Trim();
-    }
-
-    // Return the original name if no tag pattern is found
-    return trimmed;
-  }
-
-  /// <summary>
-  /// Initializes the player service by loading all existing users from the entity manager
-  /// and populating the various lookup caches
-  /// </summary>
+    // Return everything after the first space (the actual name)
+    return trimmed.Substring(spaceIndex + 1).Trim();
+  }  /// <summary>
+     /// Initializes the player service by loading all existing users from the entity manager
+     /// and populating the various lookup caches
+     /// </summary>
   internal static void Initialize() {
     // Clear any existing cache data to ensure clean state
     ClearCache();
@@ -319,38 +293,20 @@ public static class PlayerService {
   }
 
   /// <summary>
-  /// Sets a name tag for the specified player. Supports both bracket and direct tag formats.
-  /// For bracket tags: any text is allowed (e.g., "[Admin] Name")
-  /// For direct tags: only characters from the Tags array are allowed (e.g., "🆘 Name")
+  /// Sets a name tag for the specified player.
+  /// The tag can be any text and will be separated from the name by a space.
   /// </summary>
   /// <param name="player">The player to set the tag for</param>
-  /// <param name="tag">The tag to set. For brackets: any text. For direct: only Tags array characters</param>
-  /// <param name="useBrackets">Whether to wrap the tag in brackets. True for "[Tag] Name", false for "Tag Name"</param>
-  /// <returns>True if the tag was set successfully, false if validation failed</returns>
-  public static bool SetNameTag(PlayerData player, string tag, bool useBrackets = true) {
+  /// <param name="tag">The tag to set (any text is allowed)</param>
+  /// <returns>True if the tag was set successfully, false if player or tag is null/empty</returns>
+  public static bool SetNameTag(PlayerData player, string tag) {
     if (player == null || string.IsNullOrEmpty(tag)) return false;
-
-    // If not using brackets, validate that all characters in the tag are from the Tags array
-    if (!useBrackets) {
-      foreach (char c in tag) {
-        string charStr = c.ToString();
-        if (!Tags.Contains(charStr)) {
-          // Invalid character found - not in Tags array
-          return false;
-        }
-      }
-    }
 
     // Get the current clean name (without any existing tags)
     var cleanName = ExtractCleanName(player.FullName);
 
-    // Build the new name with tag
-    string newNameWithTag;
-    if (useBrackets) {
-      newNameWithTag = $"[{tag}] {cleanName}";
-    } else {
-      newNameWithTag = $"{tag} {cleanName}";
-    }
+    // Build the new name with tag (tag + space + name)
+    string newNameWithTag = $"{tag} {cleanName}";
 
     // Rename the player with the new tagged name
     var newName = new FixedString64Bytes(newNameWithTag);
