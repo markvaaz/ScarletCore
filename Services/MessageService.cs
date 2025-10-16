@@ -6,6 +6,8 @@ using ScarletCore.Data;
 using System.Collections.Generic;
 using System.Linq;
 using ScarletCore.Systems;
+using Stunlock.Core;
+using Unity.Mathematics;
 
 namespace ScarletCore.Services;
 
@@ -33,6 +35,19 @@ public static class MessageService {
       var user = admin.UserEntity.Read<User>();
       ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
     }
+  }
+  public static void SendSCT(PlayerData player, PrefabGUID prefab, string assetGuid, float3 color, int value) {
+    ScrollingCombatTextMessage.Create(
+      GameSystems.EntityManager,
+      GameSystems.EndSimulationEntityCommandBufferSystem.CreateCommandBuffer(),
+      AssetGuid.FromString(assetGuid),
+      player.Position + new float3(0, 0, 0),
+      color,
+      player.CharacterEntity,
+      value,
+      prefab,
+      player.UserEntity
+    );
   }
   #region Enhanced Send Methods
 
