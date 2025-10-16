@@ -41,7 +41,7 @@ public static class MessageService {
       GameSystems.EntityManager,
       GameSystems.EndSimulationEntityCommandBufferSystem.CreateCommandBuffer(),
       AssetGuid.FromString(assetGuid),
-      player.Position + new float3(0, 0, 0),
+      player.Position,
       color,
       player.CharacterEntity,
       value,
