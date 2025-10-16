@@ -16,6 +16,7 @@ namespace ScarletCore.Services;
 /// Handles player lifecycle including connection, disconnection, and name changes.
 /// </summary>
 public static class PlayerService {
+  public static string[] Tags = ["🄰", "🄱", "🄲", "🄳", "🄴", "🄵", "🄶", "🄷", "🄸", "🄹", "🄺", "🄻", "🄼", "🄽", "🄾", "🄿", "🅀", "🅁", "🅂", "🅃", "🅄", "🅅", "🅆", "🅇", "🅈", "🅉", "🅊", "🅋", "🅌", "🅍", "🅎", "🅏", "🅐", "🅑", "🅒", "🅓", "🅔", "🅕", "🅖", "🅗", "🅘", "🅙", "🅚", "🅛", "🅜", "🅝", "🅞", "🅟", "🅠", "🅡", "🅢", "🅣", "🅤", "🅥", "🅦", "🅧", "🅨", "🅩", "🅰", "🅱", "🅲", "🅳", "🅴", "🅵", "🅶", "🅷", "🅸", "🅹", "🅺", "🅻", "🅼", "🅽", "🅾", "🅿", "🆀", "🆁", "🆂", "🆃", "🆄", "🆅", "🆆", "🆇", "🆈", "🆉", "🆊", "🆋", "🆌", "🆍", "🆎", "🆏", "🆐", "🆑", "🆒", "🆓", "🆔", "🆕", "🆖", "🆗", "🆘", "🆙", "🆚", "🆛", "🆜", "🆝", "🆞", "🆟", "🆠", "🆡", "🆢", "🆣", "🆤", "🆥", "🆦", "🆧", "🆨", "🆩", "🆪", "🆫", "🆬", "🆭"];
 
   /// <summary>
   /// Dictionary for fast player lookup by character name (case-insensitive)
@@ -43,23 +44,44 @@ public static class PlayerService {
   public static readonly List<PlayerData> AllPlayers = [];
 
   /// <summary>
-  /// Extracts the clean player name by removing any tags in square brackets.
-  /// Tags are always in the format [TAG] and are removed from the beginning of the name.
+  /// Extracts the clean player name by removing any tags from the beginning of the name.
+  /// Supports two tag formats:
+  /// 1. Square bracket tags: [TAG] or [🆘] or [🅀🄰]
+  /// 2. Direct character tags: 🆘 or 🅀🄰 (using characters from Tags array)
   /// </summary>
-  /// <param name="fullName">The full name that may contain tags (e.g., "[Vaaz] Mark")</param>
+  /// <param name="fullName">The full name that may contain tags (e.g., "[Vaaz] Mark", "🆘 Mark", "🅀🄰 Mark")</param>
   /// <returns>The clean name without tags (e.g., "Mark")</returns>
   private static string ExtractCleanName(string fullName) {
     if (string.IsNullOrEmpty(fullName)) return fullName;
 
     var trimmed = fullName.Trim();
 
-    // Check if the name starts with a tag in square brackets
+    // First, check if the name starts with a tag in square brackets
     if (trimmed.StartsWith("[")) {
       var closingBracketIndex = trimmed.IndexOf(']');
       if (closingBracketIndex > 0 && closingBracketIndex < trimmed.Length - 1) {
         // Extract everything after the closing bracket and trim whitespace
         return trimmed.Substring(closingBracketIndex + 1).Trim();
       }
+    }
+
+    // Second, check if the name starts with direct tag characters (without brackets)
+    int tagEndIndex = 0;
+    for (int i = 0; i < trimmed.Length; i++) {
+      string currentChar = trimmed[i].ToString();
+
+      // Check if current character is in the Tags array
+      if (Tags.Contains(currentChar)) {
+        tagEndIndex = i + 1;
+      } else {
+        // Stop when we hit a character that's not a tag character
+        break;
+      }
+    }
+
+    // If we found tag characters at the beginning, remove them
+    if (tagEndIndex > 0) {
+      return trimmed.Substring(tagEndIndex).Trim();
     }
 
     // Return the original name if no tag pattern is found
