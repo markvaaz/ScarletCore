@@ -43,29 +43,51 @@ public static class PlayerService {
   public static readonly List<PlayerData> AllPlayers = [];
 
   /// <summary>
-  /// Extracts the clean player name by removing any tag from the beginning of the name.
-  /// A tag is considered everything before the first space.
-  /// Examples: "🆘 Mark" → "Mark", "[Admin] Player" → "Player", "TAG123 User" → "User"
+  /// Extracts the clean player name by removing all tags from the beginning of the name.
+  /// Tags are separated by spaces and the last word is considered the actual name.
+  /// Examples: "tag1 Mark" → "Mark", "tag3 tag2 tag1 Player" → "Player"
   /// </summary>
-  /// <param name="fullName">The full name that may contain a tag (e.g., "🆘 Mark", "[Admin] Player")</param>
-  /// <returns>The clean name without tag (e.g., "Mark", "Player")</returns>
+  /// <param name="fullName">The full name that may contain tags (e.g., "tag1 Mark", "tag3 tag2 tag1 Player")</param>
+  /// <returns>The clean name without tags (e.g., "Mark", "Player")</returns>
   public static string ExtractCleanName(string fullName) {
     if (string.IsNullOrEmpty(fullName)) return fullName;
 
     var trimmed = fullName.Trim();
 
-    // Find the first space
-    var spaceIndex = trimmed.IndexOf(' ');
+    // Split by spaces and take the last part as the actual name
+    var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-    // If no space found, return the whole name (no tag present)
-    if (spaceIndex == -1) return trimmed;
+    // If only one part, it's just a name without tags
+    if (parts.Length <= 1) return trimmed;
 
-    // Return everything after the first space (the actual name)
-    return trimmed.Substring(spaceIndex + 1).Trim();
-  }  /// <summary>
-     /// Initializes the player service by loading all existing users from the entity manager
-     /// and populating the various lookup caches
-     /// </summary>
+    // Return the last part (the actual name)
+    return parts[parts.Length - 1];
+  }
+
+  /// <summary>
+  /// Extracts all tags from a full name, returning them in order from left to right.
+  /// </summary>
+  /// <param name="fullName">The full name that may contain tags</param>
+  /// <returns>Array of tags, or empty array if no tags</returns>
+  public static string[] ExtractTags(string fullName) {
+    if (string.IsNullOrEmpty(fullName)) return [];
+
+    var trimmed = fullName.Trim();
+    var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    // If only one part or no parts, no tags exist
+    if (parts.Length <= 1) return [];
+
+    // Return all parts except the last one (which is the name)
+    var tags = new string[parts.Length - 1];
+    Array.Copy(parts, tags, parts.Length - 1);
+    return tags;
+  }
+
+  /// <summary>
+  /// Initializes the player service by loading all existing users from the entity manager
+  /// and populating the various lookup caches
+  /// </summary>
   internal static void Initialize() {
     // Clear any existing cache data to ensure clean state
     ClearCache();
@@ -313,43 +335,148 @@ public static class PlayerService {
   }
 
   /// <summary>
-  /// Sets a name tag for the specified player.
-  /// The tag can be any text and will be separated from the name by a space.
+  /// Sets a name tag for the specified player at the given index.
+  /// Tags are indexed from right to left (closest to name = index 0).
+  /// Format: "tag2 tag1 tag0 Name" where tag0 is index 0, tag1 is index 1, etc.
   /// </summary>
   /// <param name="player">The player to set the tag for</param>
-  /// <param name="tag">The tag to set (any text is allowed)</param>
-  /// <returns>True if the tag was set successfully, false if player or tag is null/empty</returns>
-  public static bool SetNameTag(PlayerData player, string tag) {
+  /// <param name="tag">The tag to set (cannot contain spaces)</param>
+  /// <param name="tagIndex">The index position (0 = closest to name, 1 = second closest, etc.)</param>
+  /// <returns>True if the tag was set successfully, false if validation failed</returns>
+  public static bool SetNameTag(PlayerData player, string tag, int tagIndex = 0) {
     if (player == null || string.IsNullOrEmpty(tag)) return false;
 
-    // Get the current clean name (without any existing tags)
-    var cleanName = ExtractCleanName(player.FullName);
+    // Validate that tag doesn't contain spaces (required for multiple tag support)
+    if (tag.Contains(' ')) return false;
 
-    // Build the new name with tag (tag + space + name)
-    string newNameWithTag = $"{tag} {cleanName}";
+    if (tagIndex < 0) return false;
+
+    // Get current clean name and existing tags
+    var cleanName = ExtractCleanName(player.FullName);
+    var existingTags = ExtractTags(player.FullName).ToList();
+
+    // Extend the tags list if necessary to accommodate the new index
+    while (existingTags.Count <= tagIndex) {
+      existingTags.Add("");
+    }
+
+    // Set the tag at the specified index
+    existingTags[tagIndex] = tag;
+
+    // Remove empty tags from the end to keep the list clean
+    while (existingTags.Count > 0 && string.IsNullOrEmpty(existingTags[existingTags.Count - 1])) {
+      existingTags.RemoveAt(existingTags.Count - 1);
+    }
+
+    // Build the new name: "tag2 tag1 tag0 Name" (reverse order)
+    var tagParts = new List<string>();
+    for (int i = existingTags.Count - 1; i >= 0; i--) {
+      if (!string.IsNullOrEmpty(existingTags[i])) {
+        tagParts.Add(existingTags[i]);
+      }
+    }
+
+    // Combine tags and name
+    string newFullName;
+    if (tagParts.Count > 0) {
+      newFullName = $"{string.Join(" ", tagParts)} {cleanName}";
+    } else {
+      newFullName = cleanName;
+    }
 
     // Rename the player with the new tagged name
-    var newName = new FixedString64Bytes(newNameWithTag);
+    var newName = new FixedString64Bytes(newFullName);
     RenamePlayer(player, newName);
     return true;
   }
 
   /// <summary>
-  /// Removes any existing tag from the player's name, leaving only the clean name.
+  /// Removes a specific tag by index from the player's name.
+  /// Tags are indexed from right to left (closest to name = index 0).
   /// </summary>
   /// <param name="player">The player to remove the tag from</param>
-  public static void RemoveNameTag(PlayerData player) {
+  /// <param name="tagIndex">The index of the tag to remove (0 = closest to name)</param>
+  /// <returns>True if a tag was removed, false if no tag at that index</returns>
+  public static bool RemoveNameTag(PlayerData player, int tagIndex) {
+    if (player == null || tagIndex < 0) return false;
+
+    // Get current clean name and existing tags
+    var cleanName = ExtractCleanName(player.FullName);
+    var existingTags = ExtractTags(player.FullName).ToList();
+
+    // Check if the index is valid
+    if (tagIndex >= existingTags.Count) return false;
+
+    // Remove the tag at the specified index
+    existingTags.RemoveAt(tagIndex);
+
+    // Build the new name: "tag2 tag1 tag0 Name" (reverse order)
+    var tagParts = new List<string>();
+    for (int i = existingTags.Count - 1; i >= 0; i--) {
+      if (!string.IsNullOrEmpty(existingTags[i])) {
+        tagParts.Add(existingTags[i]);
+      }
+    }
+
+    // Combine tags and name
+    string newFullName;
+    if (tagParts.Count > 0) {
+      newFullName = $"{string.Join(" ", tagParts)} {cleanName}";
+    } else {
+      newFullName = cleanName;
+    }
+
+    // Rename the player with the new name
+    var newName = new FixedString64Bytes(newFullName);
+    RenamePlayer(player, newName);
+    return true;
+  }
+
+  /// <summary>
+  /// Removes all tags from the player's name, leaving only the clean name.
+  /// </summary>
+  /// <param name="player">The player to remove all tags from</param>
+  public static void RemoveAllNameTags(PlayerData player) {
     if (player == null) return;
 
     // Get the current clean name (without any existing tags)
     var cleanName = ExtractCleanName(player.FullName);
 
-    // If the clean name is the same as full name, no tag exists
+    // If the clean name is the same as full name, no tags exist
     if (cleanName == player.FullName.Trim()) return;
 
     // Rename the player with just the clean name
     var newName = new FixedString64Bytes(cleanName);
     RenamePlayer(player, newName);
+  }
+
+  /// <summary>
+  /// Gets a specific tag by index from the player's name.
+  /// Tags are indexed from right to left (closest to name = index 0).
+  /// </summary>
+  /// <param name="player">The player to get the tag from</param>
+  /// <param name="tagIndex">The index of the tag to get (0 = closest to name)</param>
+  /// <returns>The tag at the specified index, or null if no tag at that index</returns>
+  public static string GetNameTag(PlayerData player, int tagIndex) {
+    if (player == null || tagIndex < 0) return null;
+
+    var existingTags = ExtractTags(player.FullName);
+
+    if (tagIndex >= existingTags.Length) return null;
+
+    return existingTags[tagIndex];
+  }
+
+  /// <summary>
+  /// Gets all tags from the player's name.
+  /// Returns tags in order from closest to name (index 0) to farthest (highest index).
+  /// </summary>
+  /// <param name="player">The player to get tags from</param>
+  /// <returns>Array of tags, or empty array if no tags</returns>
+  public static string[] GetAllNameTags(PlayerData player) {
+    if (player == null) return [];
+
+    return ExtractTags(player.FullName);
   }
 }
 
