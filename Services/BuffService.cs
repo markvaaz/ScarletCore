@@ -59,6 +59,19 @@ public static class BuffService {
 
       // Handle custom duration settings
       if (duration > 0) {
+        // Ensure the buff has LifeTime and Age components for proper duration management
+        if (!buffEntity.Has<LifeTime>()) {
+          buffEntity.AddWith((ref LifeTime lifeTime) => {
+            lifeTime.Duration = 0f; // Default duration
+            lifeTime.EndAction = LifeTimeEndAction.Destroy; // Default end action
+          });
+        }
+
+        if (!buffEntity.Has<Age>()) {
+          buffEntity.AddWith((ref Age age) => {
+            age.Value = 0f; // Initialize age to 0
+          });
+        }
         // Set a specific duration for the buff
         var lifeTime = buffEntity.Read<LifeTime>();
 
