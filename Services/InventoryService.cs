@@ -769,4 +769,97 @@ public class InventoryService {
     if (!TryGetItemSlot(fromInventory, itemPrefab, out var fromSlot)) return false;
     return TransferItemBetweenEntities(fromInventory, toInventory, fromSlot, amount);
   }
+
+  /// <summary>
+  /// Swaps two slots between inventories (or within the same inventory).
+  /// Allows swapping even when both inventories are the same entity.
+  /// Properly updates ItemEntity.ContainerEntity for unique items.
+  /// </summary>
+  public static bool SwapItemBetweenSlots(Entity fromEntity, Entity toEntity, int fromSlot, int toSlot) {
+    try {
+      // Validate inventories exist
+      if (!HasInventory(fromEntity)) {
+        Log.Error("Source entity has no inventory");
+        return false;
+      }
+
+      if (!HasInventory(toEntity)) {
+        Log.Error("Destination entity has no inventory");
+        return false;
+      }
+
+      if (!TryGetInventoryEntity(fromEntity, out var fromInventory)) {
+        Log.Error("Failed to get source inventory entity");
+        return false;
+      }
+
+      if (!TryGetInventoryEntity(toEntity, out var toInventory)) {
+        Log.Error("Failed to get destination inventory entity");
+        return false;
+      }
+
+      var fromBuffer = GetInventoryItems(fromInventory);
+      var toBuffer = GetInventoryItems(toInventory);
+
+      if (fromBuffer.Equals(default) || toBuffer.Equals(default)) {
+        Log.Error("One or both inventory buffers not found");
+        return false;
+      }
+
+      if (fromSlot < 0 || fromSlot >= fromBuffer.Length) {
+        Log.Error($"Source slot index out of range: {fromSlot}");
+        return false;
+      }
+
+      if (toSlot < 0 || toSlot >= toBuffer.Length) {
+        Log.Error($"Destination slot index out of range: {toSlot}");
+        return false;
+      }
+
+      // If both inventories are the same and slots are identical, nothing to do
+      if (fromInventory.Equals(toInventory) && fromSlot == toSlot) {
+        return true;
+      }
+
+      // Capture entries
+      var entryFrom = fromBuffer[fromSlot];
+      var entryTo = toBuffer[toSlot];
+
+      // Swap the buffer entries
+      fromBuffer[fromSlot] = entryTo;
+      toBuffer[toSlot] = entryFrom;
+
+      // Update ItemEntity.ContainerEntity for any moved unique items
+      try {
+        // Entry moved from source -> destination is now in toBuffer[toSlot]
+        var movedTo = toBuffer[toSlot];
+        var movedToEntity = movedTo.ItemEntity.GetEntityOnServer();
+        if (!movedToEntity.Equals(Entity.Null) && movedToEntity.Has<InventoryItem>()) {
+          movedToEntity.With((ref InventoryItem invItem) => {
+            invItem.ContainerEntity = toInventory;
+          });
+        }
+
+        // Entry moved from destination -> source is now in fromBuffer[fromSlot]
+        var movedFrom = fromBuffer[fromSlot];
+        var movedFromEntity = movedFrom.ItemEntity.GetEntityOnServer();
+        if (!movedFromEntity.Equals(Entity.Null) && movedFromEntity.Has<InventoryItem>()) {
+          movedFromEntity.With((ref InventoryItem invItem) => {
+            invItem.ContainerEntity = fromInventory;
+          });
+        }
+      } catch (Exception e) {
+        // Rollback swap on failure to update item entities
+        fromBuffer[fromSlot] = entryFrom;
+        toBuffer[toSlot] = entryTo;
+        Log.Error($"Failed to update moved item entities during swap: {e}");
+        return false;
+      }
+
+      return true;
+    } catch (Exception e) {
+      Log.Error($"Error swapping slots between inventories: {e}");
+      return false;
+    }
+  }
 }
