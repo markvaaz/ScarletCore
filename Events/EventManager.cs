@@ -1,515 +1,412 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using Stunlock.Network;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using ScarletCore.Data;
-using ProjectM.Network;
-using Unity.Entities;
-using Unity.Collections;
-using ProjectM;
-using ProjectM.Gameplay.Systems;
-using ProjectM.Gameplay.WarEvents;
-using ProjectM.Shared.WarEvents;
 using ScarletCore.Utils;
+using Unity.Collections;
+using Unity.Entities;
+using System.Linq.Expressions;
+
 namespace ScarletCore.Events;
 
-/// <summary>
-/// Central event system for ScarletCore that allows other mods to subscribe to various game events
-/// </summary>
 public static class EventManager {
-  #region System Events
+  private static readonly Dictionary<PrefixEvents, List<Action<NativeArray<Entity>>>> _prefixHandlers = new();
+  private static readonly Dictionary<PostfixEvents, List<Action<NativeArray<Entity>>>> _postfixHandlers = new();
+  private static readonly Dictionary<PlayerEvents, List<Action<PlayerData>>> _playerHandlers = new();
+  private static readonly Dictionary<ServerEvents, List<Action>> _serverHandlers = new();
 
-  /// <summary>
-  /// Event fired when ScarletCore initializes
-  /// </summary>
-  public static event EventHandler<InitializeEventArgs> OnInitialize;
-  #endregion
-
-  #region Chat Events
-
-  /// <summary>
-  /// Event fired when a chat message is sent
-  /// </summary>
-  public static event EventHandler<ChatMessageEventArgs> OnChatMessage;
-
-  #endregion
-  #region User Connection Events
-
-  /// <summary>
-  /// Event fired when a user successfully connects to the server
-  /// </summary>
-  public static event EventHandler<UserConnectedEventArgs> OnUserConnected;
-
-  /// <summary>
-  /// Event fired when a user disconnects from the server
-  /// </summary>
-  public static event EventHandler<UserDisconnectedEventArgs> OnUserDisconnected;
-
-  /// <summary>
-  /// Event fired when a user is kicked from the server
-  /// </summary>
-  public static event EventHandler<UserKickedEventArgs> OnUserKicked;
-
-  /// <summary>
-  /// Event fired when a user is banned from the server
-  /// </summary>
-  public static event EventHandler<UserBannedEventArgs> OnUserBanned;
-
-  #endregion
-  #region Death Events
-  /// <summary>
-  /// Event fired when entities die
-  /// </summary>
-  public static event EventHandler<DeathEventArgs> OnAnyDeath;
-
-  /// <summary>
-  /// Event fired when unfiltered deaths occur
-  /// </summary>
-  public static event EventHandler<DeathEventArgs> OnOtherDeath;
-
-  /// <summary>
-  /// Event fired when players die
-  /// </summary>
-  public static event EventHandler<DeathEventArgs> OnPlayerDeath;
-  /// <summary>
-  /// Event fired when V Blood units die
-  /// </summary>
-  public static event EventHandler<DeathEventArgs> OnVBloodDeath;
-
-  /// <summary>
-  /// Event fired when servants die
-  /// </summary>
-  public static event EventHandler<DeathEventArgs> OnServantDeath;
-  #endregion
-
-  #region Unit Spawn Events
-
-  /// <summary>
-  /// Event fired when units spawn
-  /// </summary>
-  public static event EventHandler<UnitSpawnEventArgs> OnUnitSpawn;
-
-  #endregion
-
-  #region Damage Events
-
-  /// <summary>
-  /// Event fired when damage is dealt
-  /// </summary>
-  public static event EventHandler<DamageEventArgs> OnDealDamage;
-
-  #endregion
-
-  #region War Events
-
-  /// <summary>
-  /// Event fired when war events start
-  /// </summary>
-  public static event EventHandler<WarEventStartedEventArgs> OnWarEventsStarted;
-
-  /// <summary>
-  /// Event fired when all war events end
-  /// </summary>
-  public static event EventHandler OnWarEventsEnded;
-
-  #endregion
-
-  #region Player Downed Events
-
-  /// <summary>
-  /// Event fired when players/vampires are downed
-  /// </summary>
-  public static event EventHandler<PlayerDownedEventArgs> OnPlayerDowned;
-
-  #endregion
-
-  #region Event Invocation Methods
-
-  /// <summary>
-  /// Invokes the OnInitialize event safely
-  /// </summary>
-  /// <param name="isFirstInitialization">Whether this is the first initialization</param>
-  internal static void InvokeInitialize() {
-    try {
-      var args = new InitializeEventArgs();
-      OnInitialize?.Invoke(null, args);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnInitialize event: {ex}");
-    }
+  private sealed class EventHandlerInfo {
+    public Delegate Original;
+    public Action<object> FastInvoker;
+    public Type ExpectedType;
+    public bool IsNullable;
   }
 
-  /// <summary>
-  /// Invokes the OnChatMessage event safely
-  /// </summary>
-  /// <param name="player">The PlayerData of the sender</param>
-  /// <param name="message">The content of the chat message</param>
-  /// <param name="messageType">The type of chat message (All, Global, Whisper, etc.)</param>
-  /// <param name="targetPlayer">The PlayerData of the target user (if applicable, e.g., for whispers)</param>
-  /// <returns>The event args with cancellation state</returns>
-  internal static ChatMessageEventArgs InvokeChatMessage(PlayerData player, string message, ChatMessageType messageType, PlayerData targetPlayer = null, ChatMessageSystem instance = null) {
-    try {
-      var args = new ChatMessageEventArgs(player, message, messageType, targetPlayer);
-      OnChatMessage?.Invoke(instance, args);
+  private static readonly ConcurrentDictionary<string, List<EventHandlerInfo>> _customHandlers = new();
+  private static readonly object _customLock = new();
 
-      return args;
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnChatMessage event: {ex}");
-      return new ChatMessageEventArgs(player, message, messageType, targetPlayer);
+  // --- Built-in methods (optimized) ---
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void On(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
+    if (callback == null) return;
+    if (!_prefixHandlers.TryGetValue(eventType, out var list)) {
+      list = new List<Action<NativeArray<Entity>>>(4);
+      _prefixHandlers[eventType] = list;
     }
+    list.Add(callback);
   }
 
-  /// <summary>
-  /// Invokes the OnUserConnected event safely
-  /// </summary>
-  /// <param name="player">The PlayerData of the connected user</param>
-  internal static void InvokeUserConnected(PlayerData player, ServerBootstrapSystem instance = null) {
-    try {
-      var args = new UserConnectedEventArgs(player);
-      OnUserConnected?.Invoke(instance, args);
-
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnUserConnected event: {ex}");
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool Off(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
+    if (callback == null) return false;
+    if (_prefixHandlers.TryGetValue(eventType, out var list)) {
+      var removed = list.Remove(callback);
+      if (removed && list.Count == 0) _prefixHandlers.Remove(eventType);
+      return removed;
     }
-  }
-  /// <summary>
-  /// Invokes the OnUserDisconnected event safely
-  /// </summary>
-  /// <param name="player">The PlayerData of the disconnected user</param>
-  /// <param name="reason">The disconnection reason</param>
-  internal static void InvokeUserDisconnected(PlayerData player, ConnectionStatusChangeReason reason, ServerBootstrapSystem instance = null) {
-    try {
-      var args = new UserDisconnectedEventArgs(player, reason);
-      OnUserDisconnected?.Invoke(instance, args);
-
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnUserDisconnected event: {ex}");
-    }
-  }
-  /// <summary>
-  /// Invokes the OnUserKicked event safely
-  /// </summary>
-  /// <param name="player">The PlayerData of the kicked user</param>
-  /// <param name="instance">The ServerBootstrapSystem instance</param>
-  internal static void InvokeUserKicked(PlayerData player, ProjectM.ServerBootstrapSystem instance = null) {
-    try {
-      var args = new UserKickedEventArgs(player, instance);
-      OnUserKicked?.Invoke(instance, args);
-
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnUserKicked event: {ex}");
-    }
+    return false;
   }
 
-  /// <summary>
-  /// Invokes the OnUserBanned event safely
-  /// </summary>
-  /// <param name="player">The PlayerData of the banned user</param>
-  /// <param name="instance">The ServerBootstrapSystem instance</param>
-  internal static void InvokeUserBanned(PlayerData player, ProjectM.ServerBootstrapSystem instance = null) {
-    try {
-      var args = new UserBannedEventArgs(player, instance);
-      OnUserBanned?.Invoke(instance, args);
-
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnUserBanned event: {ex}");
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void On(PostfixEvents eventType, Action<NativeArray<Entity>> callback) {
+    if (callback == null) return;
+    if (!_postfixHandlers.TryGetValue(eventType, out var list)) {
+      list = new List<Action<NativeArray<Entity>>>(4);
+      _postfixHandlers[eventType] = list;
     }
+    list.Add(callback);
   }
 
-  /// <summary>
-  /// Invokes the OnAnyDeath event safely with a batch of deaths
-  /// </summary>
-  /// <param name="deaths">List of death information</param>
-  internal static void InvokeAnyDeath(List<DeathInfo> deaths, DeathEventListenerSystem instance = null) {
-    try {
-      if (deaths == null || deaths.Count == 0) return;
-
-      var args = new DeathEventArgs(deaths);
-      OnAnyDeath?.Invoke(instance, args);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnAnyDeath event: {ex}");
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool Off(PostfixEvents eventType, Action<NativeArray<Entity>> callback) {
+    if (callback == null) return false;
+    if (_postfixHandlers.TryGetValue(eventType, out var list)) {
+      var removed = list.Remove(callback);
+      if (removed && list.Count == 0) _postfixHandlers.Remove(eventType);
+      return removed;
     }
+    return false;
   }
 
-  /// <summary>
-  /// Invokes the OnOtherDeath event safely with a batch of Other deaths
-  /// </summary>
-  /// <param name="deaths">List of Other death information</param>
-  internal static void InvokeOtherDeath(List<DeathInfo> deaths, DeathEventListenerSystem instance = null) {
-    try {
-      if (deaths == null || deaths.Count == 0) return;
-
-      var args = new DeathEventArgs(deaths);
-      OnOtherDeath?.Invoke(instance, args);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnOtherDeath event: {ex}");
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void On(PlayerEvents eventType, Action<PlayerData> callback) {
+    if (callback == null) return;
+    if (!_playerHandlers.TryGetValue(eventType, out var list)) {
+      list = new List<Action<PlayerData>>(4);
+      _playerHandlers[eventType] = list;
     }
+    list.Add(callback);
   }
 
-  /// <summary>
-  /// Invokes the OnPlayerDeath event safely with a batch of player deaths
-  /// </summary>
-  /// <param name="deaths">List of player death information</param>
-  internal static void InvokePlayerDeath(List<DeathInfo> deaths, DeathEventListenerSystem instance = null) {
-    try {
-      if (deaths == null || deaths.Count == 0) return;
-
-      var args = new DeathEventArgs(deaths);
-      OnPlayerDeath?.Invoke(instance, args);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnPlayerDeath event: {ex}");
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool Off(PlayerEvents eventType, Action<PlayerData> callback) {
+    if (callback == null) return false;
+    if (_playerHandlers.TryGetValue(eventType, out var list)) {
+      var removed = list.Remove(callback);
+      if (removed && list.Count == 0) _playerHandlers.Remove(eventType);
+      return removed;
     }
+    return false;
   }
 
-  /// <summary>
-  /// Invokes the OnVBloodDeath event safely with a batch of V Blood deaths
-  /// </summary>
-  /// <param name="deaths">List of V Blood death information</param>
-  internal static void InvokeVBloodDeath(List<DeathInfo> deaths, DeathEventListenerSystem instance = null) {
-    try {
-      if (deaths == null || deaths.Count == 0) return;
-
-      var args = new DeathEventArgs(deaths);
-      OnVBloodDeath?.Invoke(instance, args);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnVBloodDeath event: {ex}");
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void On(ServerEvents eventType, Action callback) {
+    if (callback == null) return;
+    if (!_serverHandlers.TryGetValue(eventType, out var list)) {
+      list = new List<Action>(4);
+      _serverHandlers[eventType] = list;
     }
+    list.Add(callback);
   }
 
-  /// <summary>
-  /// Invokes the OnServantDeath event safely with a batch of servant deaths
-  /// </summary>
-  /// <param name="deaths">List of servant death information</param>
-  internal static void InvokeServantDeath(List<DeathInfo> deaths, DeathEventListenerSystem instance = null) {
-    try {
-      if (deaths == null || deaths.Count == 0) return;
-
-      var args = new DeathEventArgs(deaths);
-      OnServantDeath?.Invoke(instance, args);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnServantDeath event: {ex}");
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool Off(ServerEvents eventType, Action callback) {
+    if (callback == null) return false;
+    if (_serverHandlers.TryGetValue(eventType, out var list)) {
+      var removed = list.Remove(callback);
+      if (removed && list.Count == 0) _serverHandlers.Remove(eventType);
+      return removed;
     }
+    return false;
   }
 
-  /// <summary>
-  /// Invokes the OnDealDamage event safely with a batch of damage instances
-  /// </summary>
-  /// <param name="damageInstances">List of damage information</param>
-  internal static void InvokeDealDamage(List<DamageInfo> damageInstances, StatChangeSystem instance = null) {
-    try {
-      if (damageInstances == null || damageInstances.Count == 0) return;
-
-      var args = new DamageEventArgs(damageInstances);
-      OnDealDamage?.Invoke(instance, args);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnDealDamage event: {ex}");
-    }
-  }
-
-  /// <summary>
-  /// Invokes the OnUnitSpawn event safely with a batch of unit spawns
-  /// </summary>
-  /// <param name="unitSpawns">List of unit spawn information</param>
-  internal static void InvokeUnitSpawn(List<Entity> unitSpawns, UnitSpawnerReactSystem instance = null) {
-    try {
-      if (unitSpawns == null || unitSpawns.Count == 0) return;
-
-      var args = new UnitSpawnEventArgs(unitSpawns);
-      OnUnitSpawn?.Invoke(instance, args);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnUnitSpawn event: {ex}");
-    }
-  }
-
-  /// <summary>
-  /// Invokes the OnWarEventsStarted event safely with a batch of war events
-  /// </summary>
-  /// <param name="warEvents">List of war events that started</param>
-  internal static void InvokeWarEventsStarted(List<WarEvent> warEvents, WarEventSystem instance = null) {
-    try {
-      if (warEvents == null || warEvents.Count == 0) return;
-
-      var args = new WarEventStartedEventArgs(warEvents);
-      OnWarEventsStarted?.Invoke(instance, args);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnWarEventsStarted event: {ex}");
-    }
-  }
-
-  /// <summary>
-  /// Invokes the OnWarEventsEnded event safely
-  /// </summary>
-  internal static void InvokeWarEventsEnded(WarEventSystem instance = null) {
-    try {
-      OnWarEventsEnded?.Invoke(instance, null);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnWarEventsEnded event: {ex}");
-    }
-  }
-
-  /// <summary>
-  /// Invokes the OnPlayerDowned event safely with a batch of downed entities
-  /// </summary>
-  /// <param name="downedEntities">List of entities that were downed</param>
-  internal static void InvokeVampireDowned(NativeArray<Entity> downedEntities, VampireDownedServerEventSystem instance = null) {
-    try {
-      if (downedEntities.Length == 0) return;
-
-      var entityList = new List<Entity>();
-      foreach (var entity in downedEntities) {
-        entityList.Add(entity);
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Once(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
+    if (callback == null) return;
+    Action<NativeArray<Entity>> wrapped = null;
+    wrapped = (entities) => {
+      try {
+        callback(entities);
+      } finally {
+        Off(eventType, wrapped);
       }
+    };
+    On(eventType, wrapped);
+  }
 
-      var args = new PlayerDownedEventArgs(entityList);
-      OnPlayerDowned?.Invoke(instance, args);
-    } catch (Exception ex) {
-      Log.Error($"Error invoking OnPlayerDowned event: {ex}");
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Once(PostfixEvents eventType, Action<NativeArray<Entity>> callback) {
+    if (callback == null) return;
+    Action<NativeArray<Entity>> wrapped = null;
+    wrapped = (entities) => {
+      try {
+        callback(entities);
+      } finally {
+        Off(eventType, wrapped);
+      }
+    };
+    On(eventType, wrapped);
+  }
+
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Once(PlayerEvents eventType, Action<PlayerData> callback) {
+    if (callback == null) return;
+    Action<PlayerData> wrapped = null;
+    wrapped = (pdata) => {
+      try {
+        callback(pdata);
+      } finally {
+        Off(eventType, wrapped);
+      }
+    };
+    On(eventType, wrapped);
+  }
+
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Once(ServerEvents eventType, Action callback) {
+    if (callback == null) return;
+    Action wrapped = null;
+    wrapped = () => {
+      try {
+        callback();
+      } finally {
+        Off(eventType, wrapped);
+      }
+    };
+    On(eventType, wrapped);
+  }
+
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Emit(PrefixEvents eventType, NativeArray<Entity> entityArray) {
+    if (!_prefixHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
+    for (int i = 0; i < handlers.Count; i++) {
+      try { handlers[i](entityArray); } catch (Exception ex) { Log.Error($"EventManager: Error in prefix '{eventType}': {ex}"); }
     }
   }
-  #endregion
-  #region Event Management
 
-  /// <summary>
-  /// Gets the number of subscribers for the OnInitialize event
-  /// </summary>
-  public static int InitializeSubscriberCount => OnInitialize?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnChatMessage event
-  /// </summary>
-  public static int ChatMessageSubscriberCount => OnChatMessage?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnUserConnected event
-  /// </summary>
-  public static int UserConnectedSubscriberCount => OnUserConnected?.GetInvocationList()?.Length ?? 0;
-  /// <summary>
-  /// Gets the number of subscribers for the OnUserDisconnected event
-  /// </summary>
-  public static int UserDisconnectedSubscriberCount => OnUserDisconnected?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnUserKicked event
-  /// </summary>
-  public static int UserKickedSubscriberCount => OnUserKicked?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnUserBanned event
-  /// </summary>
-  public static int UserBannedSubscriberCount => OnUserBanned?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnAnyDeath event
-  /// </summary>
-  public static int AnyDeathSubscriberCount => OnAnyDeath?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnOtherDeath event
-  /// </summary>
-  public static int OtherDeathSubscriberCount => OnOtherDeath?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnPlayerDeath event
-  /// </summary>
-  public static int PlayerDeathSubscriberCount => OnPlayerDeath?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnVBloodDeath event
-  /// </summary>
-  public static int VBloodDeathSubscriberCount => OnVBloodDeath?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnServantDeath event
-  /// </summary>
-  public static int ServantDeathSubscriberCount => OnServantDeath?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnDealDamage event
-  /// </summary>
-  public static int DealDamageSubscriberCount => OnDealDamage?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnUnitSpawn event
-  /// </summary>
-  public static int UnitSpawnSubscriberCount => OnUnitSpawn?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnWarEventsStarted event
-  /// </summary>
-  public static int WarEventsStartedSubscriberCount => OnWarEventsStarted?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Gets the number of subscribers for the OnWarEventsEnded event
-  /// </summary>
-  public static int WarEventsEndedSubscriberCount => OnWarEventsEnded?.GetInvocationList()?.Length ?? 0;
-  /// <summary>
-  /// Gets the number of subscribers for the OnPlayerDowned event
-  /// </summary>
-  public static int PlayerDownedSubscriberCount => OnPlayerDowned?.GetInvocationList()?.Length ?? 0;
-
-  /// <summary>
-  /// Clears all event subscribers (use with caution)
-  /// </summary>
-  public static void ClearAllSubscribers() {
-    OnInitialize = null;
-    OnChatMessage = null;
-    OnUserConnected = null;
-    OnUserDisconnected = null;
-    OnUserKicked = null;
-    OnUserBanned = null;
-    OnAnyDeath = null;
-    OnOtherDeath = null;
-    OnPlayerDeath = null;
-    OnVBloodDeath = null;
-    OnServantDeath = null;
-    OnDealDamage = null;
-    OnUnitSpawn = null;
-    OnWarEventsStarted = null;
-    OnWarEventsEnded = null;
-    OnPlayerDowned = null;
-    Log.Warning("All ScarletEvents subscribers have been cleared");
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Emit(PostfixEvents eventType, NativeArray<Entity> entityArray) {
+    if (!_postfixHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
+    for (int i = 0; i < handlers.Count; i++) {
+      try { handlers[i](entityArray); } catch (Exception ex) { Log.Error($"EventManager: Error in postfix '{eventType}': {ex}"); }
+    }
   }
 
-  /// <summary>
-  /// Removes all event subscribers from a specific assembly from all ScarletCore events.
-  /// </summary>
-  /// <param name="assembly">Assembly whose event handlers should be removed</param>
-  public static void UnregisterAssembly(System.Reflection.Assembly assembly) {
-    if (assembly == null) return;
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Emit(PlayerEvents eventType, PlayerData playerData) {
+    if (!_playerHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
+    for (int i = 0; i < handlers.Count; i++) {
+      try { handlers[i](playerData); } catch (Exception ex) { Log.Error($"EventManager: Error in player '{eventType}': {ex}"); }
+    }
+  }
 
-    void RemoveHandlers<T>(ref EventHandler<T> evt) where T : EventArgs {
-      if (evt == null) return;
-      foreach (var d in evt.GetInvocationList()) {
-        if (d.Method.DeclaringType != null && d.Method.DeclaringType.Assembly == assembly) {
-          evt -= (EventHandler<T>)d;
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Emit(ServerEvents eventType) {
+    if (!_serverHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
+    for (int i = 0; i < handlers.Count; i++) {
+      try { handlers[i](); } catch (Exception ex) { Log.Error($"EventManager: Error in server '{eventType}': {ex}"); }
+    }
+  }
+
+  // --- Custom event methods (optimized) ---
+  private static EventHandlerInfo CreateHandlerInfo(Delegate callback) {
+    var invokeMethod = callback.GetType().GetMethod("Invoke");
+    var parameters = invokeMethod.GetParameters();
+
+    Type expectedType = null;
+    bool isNullable = true;
+    Action<object> fastInvoker;
+
+    if (parameters.Length == 0) {
+      fastInvoker = _ => callback.DynamicInvoke();
+    } else if (parameters.Length == 1) {
+      expectedType = parameters[0].ParameterType;
+      isNullable = !expectedType.IsValueType || Nullable.GetUnderlyingType(expectedType) != null;
+
+      var dataParam = Expression.Parameter(typeof(object), "data");
+      var convertedParam = Expression.Convert(dataParam, expectedType);
+      var invokeExpr = Expression.Invoke(Expression.Constant(callback), convertedParam);
+      var lambda = Expression.Lambda<Action<object>>(invokeExpr, dataParam);
+
+      fastInvoker = lambda.Compile();
+    } else {
+      expectedType = typeof(object[]);
+      fastInvoker = data => {
+        if (data is object[] arr && arr.Length == parameters.Length) {
+          callback.DynamicInvoke(arr);
+        } else {
+          Log.Warning($"EventManager: Parameter count mismatch for multi-param delegate");
+        }
+      };
+    }
+
+    return new EventHandlerInfo {
+      Original = callback,
+      FastInvoker = fastInvoker,
+      ExpectedType = expectedType,
+      IsNullable = isNullable
+    };
+  }
+
+  public static void On(string eventName, Delegate callback) {
+    if (string.IsNullOrWhiteSpace(eventName)) {
+      Log.Warning("EventManager: Event name cannot be null or empty");
+      return;
+    }
+    if (callback == null) {
+      Log.Warning("EventManager: Callback cannot be null");
+      return;
+    }
+
+    var handlerInfo = CreateHandlerInfo(callback);
+
+    lock (_customLock) {
+      if (!_customHandlers.TryGetValue(eventName, out var handlers)) {
+        handlers = new List<EventHandlerInfo>(4);
+        _customHandlers[eventName] = handlers;
+      }
+      handlers.Add(handlerInfo);
+    }
+  }
+
+  public static bool Off(string eventName, Delegate callback) {
+    if (string.IsNullOrWhiteSpace(eventName) || callback == null) return false;
+
+    lock (_customLock) {
+      if (_customHandlers.TryGetValue(eventName, out var handlers)) {
+        int index = handlers.FindIndex(h => ReferenceEquals(h.Original, callback));
+        if (index >= 0) {
+          handlers.RemoveAt(index);
+          if (handlers.Count == 0) _customHandlers.TryRemove(eventName, out _);
+          return true;
         }
       }
     }
-
-    void RemoveHandlersSimple(ref EventHandler evt) {
-      if (evt == null) return;
-      foreach (var d in evt.GetInvocationList()) {
-        if (d.Method.DeclaringType != null && d.Method.DeclaringType.Assembly == assembly) {
-          evt -= (EventHandler)d;
-        }
-      }
-    }
-
-    RemoveHandlers(ref OnInitialize);
-    RemoveHandlers(ref OnChatMessage);
-    RemoveHandlers(ref OnUserConnected);
-    RemoveHandlers(ref OnUserDisconnected);
-    RemoveHandlers(ref OnUserKicked);
-    RemoveHandlers(ref OnUserBanned);
-    RemoveHandlers(ref OnAnyDeath);
-    RemoveHandlers(ref OnOtherDeath);
-    RemoveHandlers(ref OnPlayerDeath);
-    RemoveHandlers(ref OnVBloodDeath);
-    RemoveHandlers(ref OnServantDeath);
-    RemoveHandlers(ref OnDealDamage);
-    RemoveHandlers(ref OnUnitSpawn);
-    RemoveHandlers(ref OnWarEventsStarted);
-    RemoveHandlersSimple(ref OnWarEventsEnded);
-    RemoveHandlers(ref OnPlayerDowned);
+    return false;
   }
 
-  #endregion
+  public static void Once(string eventName, Delegate callback) {
+    if (string.IsNullOrWhiteSpace(eventName) || callback == null) return;
+
+    Delegate wrapped = null;
+    var invokeMethod = callback.GetType().GetMethod("Invoke");
+    var parameters = invokeMethod.GetParameters();
+
+    if (parameters.Length == 0) {
+      wrapped = new Action(() => {
+        try { callback.DynamicInvoke(); } finally { Off(eventName, wrapped); }
+      });
+    } else if (parameters.Length == 1) {
+      wrapped = new Action<object>(data => {
+        try { callback.DynamicInvoke(data); } finally { Off(eventName, wrapped); }
+      });
+    } else {
+      wrapped = callback;
+    }
+
+    On(eventName, wrapped);
+  }
+
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Emit(string eventName, object data = null) {
+    if (string.IsNullOrWhiteSpace(eventName)) {
+      Log.Warning("EventManager: Event name cannot be null or empty");
+      return;
+    }
+
+    EventHandlerInfo[] handlersToExecute;
+    lock (_customLock) {
+      if (!_customHandlers.TryGetValue(eventName, out var handlers) || handlers.Count == 0) return;
+      handlersToExecute = handlers.ToArray();
+    }
+
+    for (int i = 0; i < handlersToExecute.Length; i++) {
+      var handler = handlersToExecute[i];
+      try {
+        if (handler.ExpectedType != null) {
+          if (data == null) {
+            if (!handler.IsNullable) {
+              Log.Warning($"EventManager: Cannot pass null to non-nullable type for '{eventName}'");
+              continue;
+            }
+          } else if (!handler.ExpectedType.IsAssignableFrom(data.GetType())) {
+            Log.Warning($"EventManager: Type mismatch for '{eventName}'. Expected {handler.ExpectedType.Name}, got {data.GetType().Name}");
+            continue;
+          }
+        }
+
+        handler.FastInvoker(data);
+      } catch (Exception ex) {
+        Log.Error($"EventManager: Error executing callback for '{eventName}': {ex}");
+      }
+    }
+  }
+
+  // --- Utility Methods ---
+
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static int GetSubscriberCount(string eventName) {
+    if (string.IsNullOrWhiteSpace(eventName)) return 0;
+    lock (_customLock) {
+      return _customHandlers.TryGetValue(eventName, out var handlers) ? handlers.Count : 0;
+    }
+  }
+
+  // Overloads for built-in event enums so callers (patches) can early-exit
+  public static int GetSubscriberCount(PrefixEvents eventType) {
+    return _prefixHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
+  }
+
+  public static int GetSubscriberCount(PostfixEvents eventType) {
+    return _postfixHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
+  }
+
+  public static int GetSubscriberCount(PlayerEvents eventType) {
+    return _playerHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
+  }
+
+  public static int GetSubscriberCount(ServerEvents eventType) {
+    return _serverHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
+  }
+
+  public static IEnumerable<string> GetRegisteredEvents() {
+    lock (_customLock) {
+      return _customHandlers.Keys.ToList();
+    }
+  }
+
+  public static bool ClearEvent(string eventName) {
+    if (string.IsNullOrWhiteSpace(eventName)) return false;
+    lock (_customLock) {
+      return _customHandlers.TryRemove(eventName, out _);
+    }
+  }
+
+  public static void ClearAllEvents() {
+    lock (_customLock) {
+      int count = _customHandlers.Count;
+      _customHandlers.Clear();
+      Log.Warning($"EventManager: Cleared all {count} custom events");
+    }
+  }
+
+  public static Dictionary<string, int> GetEventStatistics() {
+    var stats = new Dictionary<string, int>();
+    lock (_customLock) {
+      foreach (var kv in _customHandlers) stats[kv.Key] = kv.Value.Count;
+    }
+    return stats;
+  }
+
+  public static int UnregisterAssembly(Assembly assembly) {
+    if (assembly == null) return 0;
+    int removed = 0;
+
+    lock (_customLock) {
+      var keysToRemove = new List<string>();
+      foreach (var kv in _customHandlers) {
+        var handlers = kv.Value;
+        int before = handlers.Count;
+        handlers.RemoveAll(h => h.Original.Method?.DeclaringType?.Assembly == assembly);
+        removed += before - handlers.Count;
+        if (handlers.Count == 0) keysToRemove.Add(kv.Key);
+      }
+      foreach (var k in keysToRemove) _customHandlers.TryRemove(k, out _);
+    }
+
+    return removed;
+  }
 }

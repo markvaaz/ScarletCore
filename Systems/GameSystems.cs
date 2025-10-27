@@ -6,6 +6,7 @@ using ProjectM;
 using ProjectM.CastleBuilding;
 using ScarletCore.Services;
 using ProjectM.Network;
+using ScarletCore.Events;
 
 namespace ScarletCore.Systems;
 
@@ -167,7 +168,15 @@ public static class GameSystems {
 
     PlayerService.Initialize();
 
-    Events.EventManager.InvokeInitialize();
+    EventManager.Emit(ServerEvents.OnInitialize);
+  }
+
+  public static void OnInitialize(Action action) {
+    if (Initialized) {
+      action.DynamicInvoke();
+    } else {
+      EventManager.On(ServerEvents.OnInitialize, action);
+    }
   }
 
   static World GetServerWorld() {

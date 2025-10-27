@@ -4,50 +4,48 @@ using HarmonyLib;
 using ProjectM.Gameplay.WarEvents;
 using ProjectM.Shared.WarEvents;
 using ScarletCore.Events;
+using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Unity.Collections;
 
 namespace ScarletCore.Patches;
 
-[HarmonyPatch(typeof(WarEventSystem), nameof(WarEventSystem.OnUpdate))]
+[HarmonyPatch]
 public static class WarEventSystemPatch {
-  // Static flag to track whether war events are currently active
-  // Prevents firing duplicate start/end events when status hasn't changed
-  private static bool isActive = false;
+  [HarmonyPatch(typeof(WarEventSystem), nameof(WarEventSystem.OnUpdate))]
   [HarmonyPrefix]
   public static void Prefix(WarEventSystem __instance) {
-    // Early exit optimization - skip processing if no mods are listening to war event changes
-    if (EventManager.WarEventsStartedSubscriberCount == 0 && EventManager.WarEventsEndedSubscriberCount == 0) return;
-
-    // Always allocate the array to check actual war events
-    var activeWarEvents = __instance.__query_303314001_0.ToComponentDataArray<WarEvent>(Allocator.Temp);
+    if (!GameSystems.Initialized) return;
+    // Early exit if no subscribers
+    if (EventManager.GetSubscriberCount(PrefixEvents.OnWarEvent) == 0) return;
+    var activeWarEvents = __instance.__query_303314001_0.ToEntityArray(Allocator.Temp);
 
     try {
-      // Check if there are active war events based on array length
-      bool hasActiveEvents = activeWarEvents.Length > 0;
+      if (activeWarEvents.Length == 0) return;
 
-      // State transition: Active -> Inactive
-      if (isActive && !hasActiveEvents) {
-        EventManager.InvokeWarEventsEnded(__instance);
-        isActive = false;
-        return;
-      }
+      EventManager.Emit(PrefixEvents.OnWarEvent, activeWarEvents);
+    } catch (Exception ex) {
+      // Log any errors that occur during war event processing
+      // Don't let exceptions crash the main game loop
+      Log.Error($"Error processing WarEventSystem: {ex}");
+    } finally {
+      // Always dispose the native array to prevent memory leaks
+      activeWarEvents.Dispose();
+    }
+  }
 
-      // State transition: Inactive -> Active
-      if (!isActive && hasActiveEvents) {
-        isActive = true;
+  [HarmonyPatch(typeof(WarEventSystem), nameof(WarEventSystem.OnUpdate))]
+  [HarmonyPostfix]
+  public static void Postfix(WarEventSystem __instance) {
+    if (!GameSystems.Initialized) return;
+    // Early exit if no subscribers
+    if (EventManager.GetSubscriberCount(PostfixEvents.OnWarEvent) == 0) return;
+    var activeWarEvents = __instance.__query_303314001_0.ToEntityArray(Allocator.Temp);
 
-        // Create a list to hold war event data for subscribers
-        var warEvents = new List<WarEvent>(activeWarEvents.Length);
+    try {
+      if (activeWarEvents.Length == 0) return;
 
-        // Convert the native array to a managed list for easier handling
-        foreach (var e in activeWarEvents) {
-          warEvents.Add(e);
-        }
-
-        // Fire the war events started event with all active events
-        EventManager.InvokeWarEventsStarted(warEvents, __instance);
-      }
+      EventManager.Emit(PostfixEvents.OnWarEvent, activeWarEvents);
     } catch (Exception ex) {
       // Log any errors that occur during war event processing
       // Don't let exceptions crash the main game loop

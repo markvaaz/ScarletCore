@@ -56,8 +56,9 @@ internal static class OnUserConnectedPatch {
 				return;
 			}
 
-			// Fire the user connected event for subscribers
-			EventManager.InvokeUserConnected(playerData, __instance);
+			// Fire the user connected event for subscribers (only if there are listeners)
+			if (EventManager.GetSubscriberCount(PlayerEvents.PlayerJoined) > 0)
+				EventManager.Emit(PlayerEvents.PlayerJoined, playerData);
 		} catch (Exception e) {
 			// Log connection errors without crashing the server
 			Log.Error($"An error occurred while connecting player: {e.Message}");
@@ -110,17 +111,20 @@ internal static class OnUserDisconnectedPatch {
 				return;
 			}
 
-			// Fire the general user disconnected event
-			EventManager.InvokeUserDisconnected(playerData, connectionStatusReason, __instance);
+			// Fire the general user disconnected event (only if there are listeners)
+			if (EventManager.GetSubscriberCount(PlayerEvents.PlayerLeft) > 0)
+				EventManager.Emit(PlayerEvents.PlayerLeft, playerData);
 
 			// Fire specific events based on disconnection reason
 			// This allows mods to handle kicks and bans differently
 			if (connectionStatusReason == ConnectionStatusChangeReason.Kicked) {
-				EventManager.InvokeUserKicked(playerData, __instance);
+				if (EventManager.GetSubscriberCount(PlayerEvents.PlayerKicked) > 0)
+					EventManager.Emit(PlayerEvents.PlayerKicked, playerData);
 			}
 
 			if (connectionStatusReason == ConnectionStatusChangeReason.Banned) {
-				EventManager.InvokeUserBanned(playerData, __instance);
+				if (EventManager.GetSubscriberCount(PlayerEvents.PlayerBanned) > 0)
+					EventManager.Emit(PlayerEvents.PlayerBanned, playerData);
 			}
 		} catch (Exception e) {
 			// Log disconnection processing errors without crashing

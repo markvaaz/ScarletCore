@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using ProjectM;
 using ScarletCore.Events;
+using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Unity.Collections;
 using Unity.Entities;
@@ -16,22 +17,17 @@ internal class UnitSpawnerReactSystemPatch {
 
   [HarmonyPatch(typeof(UnitSpawnerReactSystem), nameof(UnitSpawnerReactSystem.OnUpdate))]
   [HarmonyPrefix]
-  internal static bool Prefix(UnitSpawnerReactSystem __instance) {
+  internal static void Prefix(UnitSpawnerReactSystem __instance) {
+    if (!GameSystems.Initialized) return;
     // Early exit if no subscribers and no post actions to process
-    if (EventManager.UnitSpawnSubscriberCount == 0 && PostActions.Count == 0) return true;
+    if (PostActions.Count == 0) return;
 
     // Get all entities that were spawned in this frame
     var entityQuery = __instance._Query.ToEntityArray(Allocator.Temp);
 
     try {
-      if (entityQuery.Length == 0) return true; // No entities spawned this frame, nothing to process
-      // Collections to track spawned entities and their spawn information
-      var spawnedEntities = new List<Entity>();
-
       // Process each spawned entity
       foreach (var entity in entityQuery) {
-        spawnedEntities.Add(entity);
-
         // Skip post-action processing if no actions are registered
         if (PostActions.Count == 0) continue;
 
@@ -67,7 +63,9 @@ internal class UnitSpawnerReactSystemPatch {
       }
 
       // Fire the unit spawn event for subscribers (batch processing for performance)
-      EventManager.InvokeUnitSpawn(spawnedEntities, __instance);
+      if (EventManager.GetSubscriberCount(PrefixEvents.OnUnitSpawned) > 0) {
+        EventManager.Emit(PrefixEvents.OnUnitSpawned, entityQuery);
+      }
     } catch (Exception exception) {
       // Log any exceptions that occur during processing
       Log.Error(exception);
@@ -75,7 +73,25 @@ internal class UnitSpawnerReactSystemPatch {
       // Always dispose the entity query to prevent memory leaks
       entityQuery.Dispose();
     }
+  }
 
-    return true;
+  [HarmonyPatch(typeof(UnitSpawnerReactSystem), nameof(UnitSpawnerReactSystem.OnUpdate))]
+  [HarmonyPostfix]
+  internal static void Postfix(UnitSpawnerReactSystem __instance) {
+    if (!GameSystems.Initialized) return;
+    // Get all entities that were spawned in this frame
+    var entityQuery = __instance._Query.ToEntityArray(Allocator.Temp);
+
+    try {
+      if (entityQuery.Length == 0) return;
+      if (EventManager.GetSubscriberCount(PostfixEvents.OnUnitSpawned) == 0) return;
+      EventManager.Emit(PostfixEvents.OnUnitSpawned, entityQuery);
+    } catch (Exception exception) {
+      // Log any exceptions that occur during processing
+      Log.Error(exception);
+    } finally {
+      // Always dispose the entity query to prevent memory leaks
+      entityQuery.Dispose();
+    }
   }
 }
