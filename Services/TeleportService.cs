@@ -17,6 +17,16 @@ public static class TeleportService {
 
   #region Basic Teleportation
 
+  public static bool Teleport(Entity entity, float3 position) {
+    if (!BuffService.TryApplyBuff(entity, new(150521246), 0, out var buffEntity)) return false;
+
+    buffEntity.With((ref TeleportBuff teleportBuff) => {
+      teleportBuff.EndPosition = position;
+    });
+
+    return true;
+  }
+
   /// <summary>
   /// Teleports an entity to another entity's position.
   /// </summary>
