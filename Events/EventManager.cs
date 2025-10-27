@@ -396,15 +396,60 @@ public static class EventManager {
     int removed = 0;
 
     lock (_customLock) {
-      var keysToRemove = new List<string>();
       foreach (var kv in _customHandlers) {
         var handlers = kv.Value;
-        int before = handlers.Count;
-        handlers.RemoveAll(h => h.Original.Method?.DeclaringType?.Assembly == assembly);
-        removed += before - handlers.Count;
-        if (handlers.Count == 0) keysToRemove.Add(kv.Key);
+        for (int i = handlers.Count - 1; i >= 0; i--) {
+          if (handlers[i].Original.Method?.DeclaringType?.Assembly == assembly) {
+            handlers.RemoveAt(i);
+            removed++;
+          }
+        }
+        if (handlers.Count == 0) _customHandlers.TryRemove(kv.Key, out _);
       }
-      foreach (var k in keysToRemove) _customHandlers.TryRemove(k, out _);
+    }
+
+    foreach (var kv in _prefixHandlers) {
+      var handlers = kv.Value;
+      for (int i = handlers.Count - 1; i >= 0; i--) {
+        if (handlers[i].Method?.DeclaringType?.Assembly == assembly) {
+          handlers.RemoveAt(i);
+          removed++;
+        }
+      }
+      if (handlers.Count == 0) _prefixHandlers.Remove(kv.Key);
+    }
+
+    foreach (var kv in _postfixHandlers) {
+      var handlers = kv.Value;
+      for (int i = handlers.Count - 1; i >= 0; i--) {
+        if (handlers[i].Method?.DeclaringType?.Assembly == assembly) {
+          handlers.RemoveAt(i);
+          removed++;
+        }
+      }
+      if (handlers.Count == 0) _postfixHandlers.Remove(kv.Key);
+    }
+
+    foreach (var kv in _playerHandlers) {
+      var handlers = kv.Value;
+      for (int i = handlers.Count - 1; i >= 0; i--) {
+        if (handlers[i].Method?.DeclaringType?.Assembly == assembly) {
+          handlers.RemoveAt(i);
+          removed++;
+        }
+      }
+      if (handlers.Count == 0) _playerHandlers.Remove(kv.Key);
+    }
+
+    foreach (var kv in _serverHandlers) {
+      var handlers = kv.Value;
+      for (int i = handlers.Count - 1; i >= 0; i--) {
+        if (handlers[i].Method?.DeclaringType?.Assembly == assembly) {
+          handlers.RemoveAt(i);
+          removed++;
+        }
+      }
+      if (handlers.Count == 0) _serverHandlers.Remove(kv.Key);
     }
 
     return removed;
