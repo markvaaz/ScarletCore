@@ -13,6 +13,7 @@ using Unity.Entities;
 
 namespace ScarletCore.Patches;
 
+[HarmonyPatch]
 public static class InteractPatch {
   [HarmonyPatch(typeof(InteractValidateAndStopSystemServer), nameof(InteractValidateAndStopSystemServer.OnUpdate))]
   [HarmonyPrefix]

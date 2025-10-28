@@ -6,6 +6,7 @@ using Unity.Collections;
 
 namespace ScarletCore.Patches;
 
+[HarmonyPatch]
 internal static class AbilityRunScriptsSystemPatch {
   [HarmonyPatch(typeof(AbilityRunScriptsSystem), nameof(AbilityRunScriptsSystem.OnUpdate))]
   [HarmonyPriority(Priority.First)]
