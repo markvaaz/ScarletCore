@@ -8,7 +8,8 @@ public enum PlayerEvents {
   PlayerJoined,
   PlayerLeft,
   PlayerKicked,
-  PlayerBanned
+  PlayerBanned,
+  CharacterCreated
 }
 
 public enum PrefixEvents {

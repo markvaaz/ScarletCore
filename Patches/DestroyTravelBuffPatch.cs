@@ -2,6 +2,7 @@ using System;
 using HarmonyLib;
 using ProjectM;
 using ScarletCore.Events;
+using ScarletCore.Services;
 using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Unity.Collections;
@@ -31,11 +32,25 @@ public class Destroy_TravelBuffSystem_Patch {
   [HarmonyPostfix]
   private static void Postfix(Destroy_TravelBuffSystem __instance) {
     if (!GameSystems.Initialized) return;
-    // Early exit if no subscribers
-    if (EventManager.GetSubscriberCount(PostfixEvents.OnDestroyTravelBuff) == 0) return;
+
     var query = __instance.__query_615927226_0.ToEntityArray(Allocator.Temp);
     try {
       if (query.Length == 0) return;
+      foreach (var entity in query) {
+        var GUID = entity.GetPrefabGuid();
+
+        if (GUID.GuidHash != 722466953) continue;
+
+        var owner = entity.Read<EntityOwner>().Owner;
+
+        if (!owner.IsPlayer()) return;
+
+        var player = owner.GetPlayerData();
+
+        PlayerService.SetPlayerCache(player.UserEntity);
+
+        EventManager.Emit(PlayerEvents.CharacterCreated, player);
+      }
       EventManager.Emit(PostfixEvents.OnDestroyTravelBuff, query);
     } catch (Exception ex) {
       Log.Error($"Error processing Destroy_TravelBuffSystem: {ex}");
