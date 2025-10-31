@@ -143,6 +143,10 @@ public static class Log {
   }
 
   public static void Components(Entity entity) {
+    if (!entity.Exists()) {
+      Warning("Cannot log components for non-existing entity.");
+      return;
+    }
     var components = GameSystems.EntityManager.GetComponentTypes(entity);
     foreach (var component in components) {
       Info(component);
