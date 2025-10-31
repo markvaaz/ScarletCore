@@ -17,15 +17,15 @@ public static class SpawnerService {
   #region Public Methods
 
   /// <summary>
-  /// Spawns entities at a specific position with validation and error handling
+  /// Spawns entities at a specific position with validation and error handling.
   /// </summary>
-  /// <param name="prefabGUID">The prefab GUID of the entity to spawn</param>
-  /// <param name="position">The position to spawn at</param>
-  /// <param name="count">Number of entities to spawn (default: 1)</param>
-  /// <param name="minRange">Minimum spawn range (default: 1)</param>
-  /// <param name="maxRange">Maximum spawn range (default: 8)</param>
-  /// <param name="lifeTime">How long the entities should live (0 = permanent, default: 0)</param>
-  /// <returns>True if spawn was successful</returns>
+  /// <param name="prefabGUID">The prefab GUID of the entity to spawn.</param>
+  /// <param name="position">The position to spawn at.</param>
+  /// <param name="count">Number of entities to spawn (default: 1; must be &gt; 0).</param>
+  /// <param name="minRange">Minimum spawn offset from <paramref name="position"/> (default: 0; must be &gt;= 0).</param>
+  /// <param name="maxRange">Maximum spawn offset from <paramref name="position"/> (default: 0; must be &gt;= <paramref name="minRange"/>).</param>
+  /// <param name="lifeTime">How long the entities should live in seconds (0 = permanent, default: 0).</param>
+  /// <returns>True if spawn was successful.</returns>
   public static bool Spawn(PrefabGUID prefabGUID, float3 position, float minRange = 0f, float maxRange = 0f, float lifeTime = 0f, int count = 1) {
     try {
       // Validate parameters
@@ -57,15 +57,16 @@ public static class SpawnerService {
   }
 
   /// <summary>
-  /// Immediately spawns a single entity at the specified position
+  /// Immediately instantiates a single entity and teleports it to a randomized position
+  /// around the provided <paramref name="position"/> using the provided range values.
   /// </summary>
-  /// <param name="prefabGUID">The prefab GUID of the entity to spawn</param>
-  /// <param name="position">The position to spawn at</param>
-  /// <param name="minRange">Minimum spawn range (default: 1)</param>
-  /// <param name="maxRange">Maximum spawn range (default: 1)</param>
-  /// <param name="lifeTime">How long the entity should live (0 = permanent, default: 0)</param>
-  /// <param name="owner">The owner entity (default: default)</param>
-  /// <returns>The spawned entity or Entity.Null if failed</returns>
+  /// <param name="prefabGUID">The prefab GUID of the entity to spawn.</param>
+  /// <param name="position">The center position to spawn at.</param>
+  /// <param name="minRange">Minimum spawn offset from <paramref name="position"/> (default: 0; must be &gt;= 0).</param>
+  /// <param name="maxRange">Maximum spawn offset from <paramref name="position"/> (default: 0; must be &gt;= <paramref name="minRange"/>).</param>
+  /// <param name="lifeTime">How long the entity should live in seconds (0 = permanent, default: 0).</param>
+  /// <param name="owner">The owner entity (default: <c>default</c>).</param>
+  /// <returns>The spawned entity or <see cref="Entity.Null"/> if failed.</returns>
   public static Entity ImmediateSpawn(PrefabGUID prefabGUID, float3 position, float minRange = 0f, float maxRange = 0f, float lifeTime = 0f, Entity owner = default) {
     if (prefabGUID.GuidHash == 0) {
       Log.Warning("Invalid prefab GUID provided to SpawnerService.ImmediateSpawn");
@@ -100,17 +101,18 @@ public static class SpawnerService {
   }
 
   /// <summary>
-  /// Immediately spawns multiple entities around the specified position
+  /// Immediately instantiates multiple entities and teleports each to a randomized
+  /// position around the provided <paramref name="position"/>.
   /// </summary>
-  /// <param name="prefabGUID">The prefab GUID of the entity to spawn</param>
-  /// <param name="position">The center position to spawn around</param>
-  /// <param name="count">Number of entities to spawn</param>
-  /// <param name="minRange">Minimum spawn range (default: 1)</param>
-  /// <param name="maxRange">Maximum spawn range (default: 8)</param>
-  /// <param name="lifeTime">How long the entities should live (0 = permanent, default: 0)</param>
-  /// <param name="owner">The owner entity (default: default)</param>
-  /// <returns>List of spawned entities (empty if failed)</returns>
-  public static List<Entity> ImmediateSpawn(PrefabGUID prefabGUID, float3 position, float minRange = 1f, float maxRange = 8f, float lifeTime = 0f, int count = 1, Entity owner = default) {
+  /// <param name="prefabGUID">The prefab GUID of the entity to spawn.</param>
+  /// <param name="position">The center position to spawn around.</param>
+  /// <param name="count">Number of entities to spawn (must be &gt; 0).</param>
+  /// <param name="minRange">Minimum spawn offset from <paramref name="position"/> (must be &gt;= 0).</param>
+  /// <param name="maxRange">Maximum spawn offset from <paramref name="position"/> (must be &gt;= <paramref name="minRange"/>).</param>
+  /// <param name="lifeTime">How long the entities should live in seconds (0 = permanent).</param>
+  /// <param name="owner">The owner entity (default: <c>default</c>).</param>
+  /// <returns>List of spawned entities (empty if failed).</returns>
+  public static List<Entity> ImmediateSpawn(PrefabGUID prefabGUID, float3 position, float minRange, float maxRange, float lifeTime, int count, Entity owner = default) {
     var entities = new List<Entity>();
 
     if (prefabGUID.GuidHash == 0) {
@@ -154,15 +156,16 @@ public static class SpawnerService {
   }
 
   /// <summary>
-  /// Spawns a copy of an entity by directly instantiating from the prefab collection
+  /// Spawns a copy of an entity by instantiating the prefab from the prefab collection
+  /// and teleporting it to a randomized position around the provided <paramref name="position"/>.
   /// </summary>
-  /// <param name="prefabGUID">The prefab GUID of the entity to spawn</param>
-  /// <param name="position">The position to spawn at</param>
-  /// <param name="minRange">Minimum spawn range (default: 1)</param>
-  /// <param name="maxRange">Maximum spawn range (default: 1)</param>
-  /// <param name="lifeTime">How long the entity should live (0 = permanent, default: 0)</param>
-  /// <returns>The spawned entity or Entity.Null if failed</returns>
-  public static Entity SpawnCopy(PrefabGUID prefabGUID, float3 position, float minRange = 1, float maxRange = 1, float lifeTime = 0f) {
+  /// <param name="prefabGUID">The prefab GUID of the entity to spawn.</param>
+  /// <param name="position">The center position to spawn at.</param>
+  /// <param name="minRange">Minimum spawn offset from <paramref name="position"/> (default: 0; must be &gt;= 0).</param>
+  /// <param name="maxRange">Maximum spawn offset from <paramref name="position"/> (default: 0; must be &gt;= <paramref name="minRange"/>).</param>
+  /// <param name="lifeTime">How long the entity should live in seconds (0 = permanent, default: 0).</param>
+  /// <returns>The spawned entity or <see cref="Entity.Null"/> if failed.</returns>
+  public static Entity SpawnCopy(PrefabGUID prefabGUID, float3 position, float minRange = 0, float maxRange = 0, float lifeTime = 0f) {
     if (prefabGUID.GuidHash == 0) {
       Log.Warning("Invalid prefab GUID provided to SpawnerService.SpawnCopy");
       return Entity.Null;
@@ -203,16 +206,18 @@ public static class SpawnerService {
   }
 
   /// <summary>
-  /// Spawns multiple copies of an entity around the specified position
+  /// Spawns multiple copies of an entity by instantiating the prefab from the
+  /// prefab collection and teleporting each copy to a randomized position
+  /// around the provided <paramref name="position"/>.
   /// </summary>
-  /// <param name="prefabGUID">The prefab GUID of the entity to spawn</param>
-  /// <param name="position">The center position to spawn around</param>
-  /// <param name="count">Number of entities to spawn</param>
-  /// <param name="minRange">Minimum spawn range (default: 1)</param>
-  /// <param name="maxRange">Maximum spawn range (default: 8)</param>
-  /// <param name="lifeTime">How long the entities should live (0 = permanent, default: 0)</param>
-  /// <returns>List of spawned entities (empty if failed)</returns>
-  public static List<Entity> SpawnCopy(PrefabGUID prefabGUID, float3 position, float minRange = 1, float maxRange = 8, float lifeTime = 0f, int count = 1) {
+  /// <param name="prefabGUID">The prefab GUID of the entity to spawn.</param>
+  /// <param name="position">The center position to spawn around.</param>
+  /// <param name="count">Number of entities to spawn (must be &gt; 0).</param>
+  /// <param name="minRange">Minimum spawn offset from <paramref name="position"/> (must be &gt;= 0).</param>
+  /// <param name="maxRange">Maximum spawn offset from <paramref name="position"/> (must be &gt;= <paramref name="minRange"/>).</param>
+  /// <param name="lifeTime">How long the entities should live in seconds (0 = permanent).</param>
+  /// <returns>List of spawned entities (empty if failed).</returns>
+  public static List<Entity> SpawnCopy(PrefabGUID prefabGUID, float3 position, float minRange, float maxRange, float lifeTime, int count) {
     var entities = new List<Entity>();
 
     if (prefabGUID.GuidHash == 0) {
