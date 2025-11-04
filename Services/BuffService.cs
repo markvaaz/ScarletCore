@@ -123,34 +123,55 @@ public static class BuffService {
   /// <returns>True if the buff was successfully applied and cleaned, false otherwise</returns>
   public static bool TryApplyCleanBuff(Entity entity, PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
     var entityManager = GameSystems.EntityManager;
-    var componentTypes = new ComponentType[] {
-      ComponentType.ReadWrite<SpellModSetComponent>(),
-      ComponentType.ReadWrite<SpellModArithmetic>(),
-      ComponentType.ReadWrite<GetOwnerTeamOnSpawn>(),
-      ComponentType.ReadWrite<DealDamageOnGameplayEvent>(),
-      ComponentType.ReadWrite<CreateGameplayEventsOnTick>(),
-      ComponentType.ReadWrite<GameplayEventListeners>(),
-      ComponentType.ReadWrite<ModifyMovementSpeedBuff>(),
-      ComponentType.ReadWrite<ModifyMovementSpeedBuffModification>(),
-      ComponentType.ReadWrite<CreateGameplayEventsOnHit>(),
-      ComponentType.ReadWrite<CreateGameplayEventsOnTick>(),
-      ComponentType.ReadWrite<PlaySequenceOnGameplayEvent>(),
-      ComponentType.ReadWrite<RunScriptOnGameplayEvent>(),
-      ComponentType.ReadWrite<AbsorbBuff>(),
-      ComponentType.ReadWrite<MultiplyAbsorbCapBySpellPower>(),
-      ComponentType.ReadWrite<AmplifyBuff>(),
-      ComponentType.ReadWrite<BuffModificationFlagData>(),
-    };
 
     if (!TryApplyBuff(entity, prefabGUID, duration, out buffEntity) || !buffEntity.Exists()) {
       return false;
     }
 
-    foreach (var type in componentTypes) {
-      if (entityManager.HasComponent(buffEntity, type)) {
-        entityManager.RemoveComponent(buffEntity, type);
+    // For each known gameplay-related component we either remove it or, if it is a buffer type,
+    // clear its contents so the buffer component remains but is empty. This prevents removing
+    // buffer components which may be expected to exist while avoiding side-effects from their data.
+    // Use the typed helpers available in ECSExtensions to perform operations safely.
+
+    // Work on a local copy of the buff entity because we can't capture the out parameter
+    // inside a nested local function (C# restriction on ref/out capture).
+    var targetEntity = buffEntity;
+
+    // Helper local to clear buffer or remove component based on whether T implements IBufferElementData
+    void ClearOrRemove<T>() where T : struct {
+      if (!targetEntity.Has<T>()) return;
+
+      if (typeof(IBufferElementData).IsAssignableFrom(typeof(T))) {
+        // Clear the dynamic buffer contents
+        try {
+          var buf = targetEntity.ReadBuffer<T>();
+          buf.Clear();
+        } catch {
+          // If reading/clearing fails for any reason, fall back to removing the component
+          targetEntity.Remove<T>();
+        }
+      } else {
+        // Non-buffer component: remove it
+        targetEntity.Remove<T>();
       }
     }
+
+    // Explicitly handle each component type we want cleaned up.
+    ClearOrRemove<SpellModSetComponent>();
+    ClearOrRemove<SpellModArithmetic>();
+    ClearOrRemove<GetOwnerTeamOnSpawn>();
+    ClearOrRemove<DealDamageOnGameplayEvent>();
+    ClearOrRemove<CreateGameplayEventsOnTick>();
+    ClearOrRemove<GameplayEventListeners>();
+    ClearOrRemove<ModifyMovementSpeedBuff>();
+    ClearOrRemove<ModifyMovementSpeedBuffModification>();
+    ClearOrRemove<CreateGameplayEventsOnHit>();
+    ClearOrRemove<PlaySequenceOnGameplayEvent>();
+    ClearOrRemove<RunScriptOnGameplayEvent>();
+    ClearOrRemove<AbsorbBuff>();
+    ClearOrRemove<MultiplyAbsorbCapBySpellPower>();
+    ClearOrRemove<AmplifyBuff>();
+    ClearOrRemove<BuffModificationFlagData>();
 
     return true;
   }
