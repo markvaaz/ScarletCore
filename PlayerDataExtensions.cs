@@ -32,4 +32,8 @@ public static class PlayerDataExtensions {
   public static PlayerData GetPlayerData(this NetworkId networkId) {
     return PlayerService.TryGetByNetworkId(networkId, out PlayerData playerData) ? playerData : null;
   }
+
+  public static PlayerData GetPlayerData(this User user) {
+    return PlayerService.TryGetById(user.PlatformId, out PlayerData playerData) ? playerData : null;
+  }
 }
