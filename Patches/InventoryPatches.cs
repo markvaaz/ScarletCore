@@ -45,4 +45,40 @@ internal static class InventoryPatches {
       query.Dispose();
     }
   }
+
+  [HarmonyPatch(typeof(MoveItemBetweenInventoriesSystem), nameof(MoveItemBetweenInventoriesSystem.OnUpdate))]
+  [HarmonyPrefix]
+  public static void Prefix(MoveItemBetweenInventoriesSystem __instance) {
+    if (!GameSystems.Initialized) return;
+    // Early exit if no subscribers
+    if (EventManager.GetSubscriberCount(PrefixEvents.OnMoveItem) == 0) return;
+    var query = __instance._MoveItemBetweenInventoriesEventQuery.ToEntityArray(Allocator.Temp);
+
+    try {
+      if (query.Length == 0) return;
+      EventManager.Emit(PrefixEvents.OnMoveItem, query);
+    } catch (System.Exception ex) {
+      Log.Error($"Error in MoveItemBetweenInventoriesSystemPatch: {ex.Message}");
+    } finally {
+      query.Dispose();
+    }
+  }
+
+  [HarmonyPatch(typeof(MoveItemBetweenInventoriesSystem), nameof(MoveItemBetweenInventoriesSystem.OnUpdate))]
+  [HarmonyPostfix]
+  public static void Postfix(MoveItemBetweenInventoriesSystem __instance) {
+    if (!GameSystems.Initialized) return;
+    // Early exit if no subscribers
+    if (EventManager.GetSubscriberCount(PostfixEvents.OnMoveItem) == 0) return;
+    var query = __instance._MoveItemBetweenInventoriesEventQuery.ToEntityArray(Allocator.Temp);
+
+    try {
+      if (query.Length == 0) return;
+      EventManager.Emit(PostfixEvents.OnMoveItem, query);
+    } catch (System.Exception ex) {
+      Log.Error($"Error in MoveItemBetweenInventoriesSystemPatch: {ex.Message}");
+    } finally {
+      query.Dispose();
+    }
+  }
 }

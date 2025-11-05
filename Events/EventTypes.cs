@@ -29,7 +29,8 @@ public enum PrefixEvents {
   OnShapeshift,
   OnWaypointTeleport,
   OnDestroyTravelBuff,
-  OnInventoryChanged
+  OnInventoryChanged,
+  OnMoveItem
 }
 
 public enum PostfixEvents {
@@ -49,5 +50,6 @@ public enum PostfixEvents {
   OnShapeshift,
   OnWaypointTeleport,
   OnDestroyTravelBuff,
-  OnInventoryChanged
+  OnInventoryChanged,
+  OnMoveItem
 }
