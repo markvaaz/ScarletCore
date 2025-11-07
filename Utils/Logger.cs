@@ -96,41 +96,41 @@ public static class Log {
   /// <summary>
   /// Logs a debug message
   /// </summary>
-  /// <param name="message">The message to log</param>
-  public static void Debug(object message) {
-    MLS?.LogDebug(message);
+  /// <param name="messages">The messages to log</param>
+  public static void Debug(params object[] messages) {
+    MLS?.LogDebug(string.Join(" ", messages));
   }
 
   /// <summary>
   /// Logs an info message
   /// </summary>
-  /// <param name="message">The message to log</param>
-  public static void Info(object message) {
-    MLS?.LogInfo(message);
+  /// <param name="messages">The messages to log</param>
+  public static void Info(params object[] messages) {
+    MLS?.LogInfo(string.Join(" ", messages));
   }
 
   /// <summary>
   /// Logs a warning message
   /// </summary>
-  /// <param name="message">The message to log</param>
-  public static void Warning(object message) {
-    MLS?.LogWarning(message);
+  /// <param name="messages">The messages to log</param>
+  public static void Warning(params object[] messages) {
+    MLS?.LogWarning(string.Join(" ", messages));
   }
 
   /// <summary>
   /// Logs an error message
   /// </summary>
-  /// <param name="message">The message to log</param>
-  public static void Error(object message) {
-    MLS?.LogError(message);
+  /// <param name="messages">The messages to log</param>
+  public static void Error(params object[] messages) {
+    MLS?.LogError(string.Join(" ", messages));
   }
 
   /// <summary>
   /// Logs a fatal error message
   /// </summary>
-  /// <param name="message">The message to log</param>
-  public static void Fatal(object message) {
-    MLS?.LogFatal(message);
+  /// <param name="messages">The messages to log</param>
+  public static void Fatal(params object[] messages) {
+    MLS?.LogFatal(string.Join(" ", messages));
   }
 
   /// <summary>
