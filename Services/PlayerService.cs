@@ -101,7 +101,7 @@ public static class PlayerService {
     var cleanName = ExtractCleanName(fullName);
 
     // Check if this is a new player we haven't seen before
-    if (!PlayerIds.ContainsKey(userData.PlatformId)) {
+    if (!PlayerIds.TryGetValue(userData.PlatformId, out PlayerData playerData)) {
       PlayerData newData = new();
 
       // Handle new players based on whether they have a character name set
@@ -115,13 +115,12 @@ public static class PlayerService {
         PlayerNames[cleanName.ToLower()] = newData;
       }
 
+      playerData = newData;
+
       // Add to all primary indexes
-      PlayerIds[userData.PlatformId] = newData;
+      PlayerIds[userData.PlatformId] = playerData;
       AllPlayers.Add(newData);
     }
-
-    // Get the existing player data from cache
-    var playerData = PlayerIds[userData.PlatformId];
 
     // Update the entity reference (important as entities can change between sessions)
     playerData.UserEntity = userEntity;
@@ -242,7 +241,7 @@ public static class PlayerService {
       // Skip if still empty
       if (string.IsNullOrEmpty(unnamedPlayerCleanName)) continue;
 
-      if (unnamedPlayerCleanName.ToLower() == normalizedSearchName) {
+      if (unnamedPlayerCleanName.Equals(normalizedSearchName, StringComparison.CurrentCultureIgnoreCase)) {
         // Found the player - promote them to named players
         playerData = unnamedPlayer;
 
@@ -264,7 +263,6 @@ public static class PlayerService {
 
   public static void RenamePlayer(PlayerData player, FixedString64Bytes newName) {
     var des = GameSystems.DebugEventsSystem;
-    var networkId = player.NetworkId;
 
     var renameEvent = new RenameUserDebugEvent {
       NewName = newName,
@@ -361,7 +359,7 @@ public static class PlayerService {
     // Find the first tag that matches (searching from tag0 upwards)
     var indexToRemove = -1;
     for (int i = 0; i < tags.Count; i++) {
-      if (tags[i].ToLower() == normalizedTagText) {
+      if (tags[i].Equals(normalizedTagText, StringComparison.CurrentCultureIgnoreCase)) {
         indexToRemove = i;
         break;
       }
@@ -420,7 +418,7 @@ public static class PlayerService {
     if (lastSpaceIndex == -1) return trimmed;
 
     // Return everything after the last space (the actual name)
-    return trimmed.Substring(lastSpaceIndex + 1).Trim();
+    return trimmed[(lastSpaceIndex + 1)..].Trim();
   }
 
   /// <summary>
@@ -430,21 +428,21 @@ public static class PlayerService {
   /// <param name="fullName">The full name with tags</param>
   /// <returns>List of tags indexed from right to left (tag0 first)</returns>
   public static List<string> ExtractTags(string fullName) {
-    if (string.IsNullOrEmpty(fullName)) return new List<string>();
+    if (string.IsNullOrEmpty(fullName)) return [];
 
     var trimmed = fullName.Trim();
     var lastSpaceIndex = trimmed.LastIndexOf(' ');
 
     // No tags if no space found
-    if (lastSpaceIndex == -1) return new List<string>();
+    if (lastSpaceIndex == -1) return [];
 
     // Get everything before the last space (all tags)
-    var tagsSection = trimmed.Substring(0, lastSpaceIndex).Trim();
+    var tagsSection = trimmed[..lastSpaceIndex].Trim();
 
-    if (string.IsNullOrEmpty(tagsSection)) return new List<string>();
+    if (string.IsNullOrEmpty(tagsSection)) return [];
 
     // Split by space and reverse to get right-to-left ordering
-    var tags = tagsSection.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+    var tags = tagsSection.Split([' '], StringSplitOptions.RemoveEmptyEntries);
     var tagList = new List<string>(tags);
     tagList.Reverse(); // Reverse to get tag0 first (rightmost tag)
 
@@ -495,7 +493,7 @@ public static class PlayerService {
   /// <param name="player">The player to get tags from</param>
   /// <returns>List of tags ordered by index</returns>
   public static List<string> GetAllTags(PlayerData player) {
-    if (player == null) return new List<string>();
+    if (player == null) return [];
     return ExtractTags(player.FullName);
   }
 
@@ -522,7 +520,7 @@ public static class PlayerService {
     tags[tagIndex] = tag.Trim();
 
     // Remove any null placeholders that may have been created
-    tags = tags.Where(t => !string.IsNullOrEmpty(t)).ToList();
+    tags = [.. tags.Where(t => !string.IsNullOrEmpty(t))];
 
     // Build and apply the new name
     var newFullName = BuildFullName(cleanName, tags);

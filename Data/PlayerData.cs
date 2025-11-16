@@ -139,6 +139,12 @@ public class PlayerData() {
   }
 
   /// <summary>
+  /// Gets the player's current input state including movement, abilities, and actions.
+  /// Provides access to the EntityInput component which contains all player input data.
+  /// </summary>
+  public EntityInput Input => CharacterEntity.Read<EntityInput>();
+
+  /// <summary>
   /// Gets the player's inventory items as a dynamic buffer.
   /// Provides access to all items currently in the player's inventory.
   /// </summary>
