@@ -13,6 +13,12 @@ namespace ScarletCore.Utils;
 /// Static logger utility for easier access to Plugin.LogInstance.
 /// </summary>
 public static class Log {
+  /// <summary>
+  /// Gets or sets whether debug mode is enabled for enhanced logging with caller information.
+  /// When false, caller information is not included to save performance.
+  /// </summary>
+  public static bool DebugMode { get; set; } = false;
+
   // Cache of resolved ManualLogSource per assembly to avoid repeated reflection
   private static readonly ConcurrentDictionary<Assembly, ManualLogSource> _assemblyLogCache = new();
 
@@ -94,11 +100,43 @@ public static class Log {
   }
 
   /// <summary>
+  /// Gets the calling method information for enhanced logging
+  /// </summary>
+  /// <returns>Formatted string with class and method name</returns>
+  private static string GetCallerInfo() {
+    try {
+      var thisAssembly = typeof(Log).Assembly;
+      var frames = new StackTrace(skipFrames: 2, fNeedFileInfo: true).GetFrames();
+      if (frames == null) return string.Empty;
+
+      foreach (var frame in frames) {
+        var method = frame.GetMethod();
+        if (method == null) continue;
+        var declType = method.DeclaringType;
+        if (declType == null) continue;
+        var asm = declType.Assembly;
+        if (asm == thisAssembly) continue;
+        // Skip framework assemblies
+        if (asm.FullName != null && (asm.FullName.StartsWith("System", StringComparison.Ordinal) || asm.FullName.StartsWith("Microsoft", StringComparison.Ordinal))) continue;
+
+        var lineNumber = frame.GetFileLineNumber();
+        var lineInfo = lineNumber > 0 ? $":L{lineNumber}" : "";
+        return $"[{declType.Name}.{method.Name}{lineInfo}]";
+      }
+    } catch {
+      // ignore and return empty
+    }
+    return string.Empty;
+  }
+
+  /// <summary>
   /// Logs a debug message
   /// </summary>
   /// <param name="messages">The messages to log</param>
   public static void Debug(params object[] messages) {
-    MLS?.LogDebug(string.Join(" ", messages));
+    var callerInfo = DebugMode ? GetCallerInfo() : "";
+    var message = string.Join(" ", messages);
+    MLS?.LogDebug(DebugMode ? $"{callerInfo} {message}" : message.ToString());
   }
 
   /// <summary>
@@ -106,7 +144,9 @@ public static class Log {
   /// </summary>
   /// <param name="messages">The messages to log</param>
   public static void Info(params object[] messages) {
-    MLS?.LogInfo(string.Join(" ", messages));
+    var callerInfo = DebugMode ? GetCallerInfo() : "";
+    var message = string.Join(" ", messages);
+    MLS?.LogInfo(DebugMode ? $"{callerInfo} {message}" : message.ToString());
   }
 
   /// <summary>
@@ -114,7 +154,9 @@ public static class Log {
   /// </summary>
   /// <param name="messages">The messages to log</param>
   public static void Warning(params object[] messages) {
-    MLS?.LogWarning(string.Join(" ", messages));
+    var callerInfo = DebugMode ? GetCallerInfo() : "";
+    var message = string.Join(" ", messages);
+    MLS?.LogWarning(DebugMode ? $"{callerInfo} {message}" : message.ToString());
   }
 
   /// <summary>
@@ -122,7 +164,9 @@ public static class Log {
   /// </summary>
   /// <param name="messages">The messages to log</param>
   public static void Error(params object[] messages) {
-    MLS?.LogError(string.Join(" ", messages));
+    var callerInfo = DebugMode ? GetCallerInfo() : "";
+    var message = string.Join(" ", messages);
+    MLS?.LogError(DebugMode ? $"{callerInfo} {message}" : message.ToString());
   }
 
   /// <summary>
@@ -130,7 +174,9 @@ public static class Log {
   /// </summary>
   /// <param name="messages">The messages to log</param>
   public static void Fatal(params object[] messages) {
-    MLS?.LogFatal(string.Join(" ", messages));
+    var callerInfo = DebugMode ? GetCallerInfo() : "";
+    var message = string.Join(" ", messages);
+    MLS?.LogFatal(DebugMode ? $"{callerInfo} {message}" : message.ToString());
   }
 
   /// <summary>
@@ -139,7 +185,8 @@ public static class Log {
   /// <param name="level">The log level</param>
   /// <param name="message">The message to log</param>
   public static void LogLevel(LogLevel level, object message) {
-    MLS?.Log(level, message);
+    var callerInfo = DebugMode ? GetCallerInfo() : "";
+    MLS?.Log(level, DebugMode ? $"{callerInfo} {message}" : message.ToString());
   }
 
   public static void Components(Entity entity) {
