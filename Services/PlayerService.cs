@@ -176,14 +176,7 @@ public static class PlayerService {
   /// </summary>
   /// <returns>List of online players</returns>
   public static List<PlayerData> GetAllConnected() {
-    List<PlayerData> connectedPlayers = [];
-    foreach (var player in AllPlayers) {
-      if (player.IsOnline) {
-        connectedPlayers.Add(player);
-      }
-    }
-
-    return connectedPlayers;
+    return [.. PlayerNetworkIds.Values];
   }
 
   /// <summary>
