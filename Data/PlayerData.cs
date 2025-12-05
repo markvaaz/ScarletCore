@@ -120,7 +120,7 @@ public class PlayerData() {
   /// Gets the date and time when the player connected to the server.
   /// Converts from UTC ticks to local DateTime for easier handling.
   /// </summary>
-  public DateTime ConnectedSince => new DateTime(User.TimeLastConnected, DateTimeKind.Utc).ToLocalTime();
+  public DateTime LastConnected => new DateTime(User.TimeLastConnected, DateTimeKind.Utc).ToLocalTime();
 
   /// <summary>
   /// Gets the player's clan name if they belong to one.
