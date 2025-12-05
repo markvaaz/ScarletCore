@@ -313,7 +313,7 @@ public class InventoryService {
   /// <returns>A dynamic buffer of inventory items, or default if no inventory exists</returns>
   public static DynamicBuffer<InventoryBuffer> GetInventoryItems(Entity entity) {
     if (!TryGetInventoryEntity(entity, out var inventoryEntity)) return default;
-    return EntityManager.GetBuffer<InventoryBuffer>(inventoryEntity);
+    return inventoryEntity.ReadBuffer<InventoryBuffer>();
   }
 
   /// <summary>
