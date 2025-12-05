@@ -216,7 +216,7 @@ public static class Log {
     Info($"  Network ID: {playerData.NetworkId}");
     Info($"  Is Online: {playerData.IsOnline}");
     Info($"  Is Admin: {playerData.IsAdmin}");
-    Info($"  Connected Since: {playerData.ConnectedSince}");
+    Info($"  Connected Since: {playerData.LastConnected}");
     Info($"  Clan Name: {playerData.ClanName ?? "No Clan"}");
     Info($"  User Entity: {playerData.UserEntity}");
     Info($"  Character Entity: {playerData.CharacterEntity}");
