@@ -306,6 +306,47 @@ public static class ClanService {
   }
 
   /// <summary>
+  /// Sets the motto for a specified clan.
+  /// </summary>
+  /// <param name="clanName">The name of the clan to update</param>
+  /// <param name="motto">The new motto text to set for the clan</param>
+  public static void SetMotto(string clanName, string motto) {
+    // Check if the clan exists
+    if (!TryGetClanEntity(clanName, out var clanEntity)) {
+      Log.Error($"Clan '{clanName}' does not exist.");
+      return;
+    }
+
+    var clanTeam = clanEntity.Read<ClanTeam>();
+    clanTeam.Motto = motto;
+    clanEntity.Write(clanTeam);
+  }
+
+  /// <summary>
+  /// Disbands a clan by destroying its entity.
+  /// This permanently removes the clan and all its data.
+  /// </summary>
+  /// <param name="clanName">The name of the clan to disband</param>
+  public static void DisbandClan(string clanName) {
+    // Check if the clan exists
+    if (!TryGetClanEntity(clanName, out var clanEntity)) {
+      Log.Error($"Clan '{clanName}' does not exist.");
+      return;
+    }
+
+    clanEntity.Destroy();
+  }
+
+  /// <summary>
+  /// Removes the clan tag from a player's character name.
+  /// This only removes the visual tag display and does not remove the player from the clan.
+  /// </summary>
+  /// <param name="playerData">The player data of the player to remove the tag from</param>
+  public static void RemoveTagFromPlayer(PlayerData playerData) {
+    ClanUtility.SetCharacterClanName(GameSystems.EntityManager, playerData.UserEntity, new(""));
+  }
+
+  /// <summary>
   /// Attempts to find a clan entity by name.
   /// WARNING: There is a bug in this method - the comparison logic is inverted.
   /// </summary>
@@ -318,7 +359,7 @@ public static class ClanService {
     foreach (var clan in clans) {
       // BUG: This comparison is inverted - should use != instead of ==
       // Currently this will skip matching clans and return non-matching ones
-      if (clan.Read<ClanTeam>().Name.ToString().ToLower() != clanName.ToLower()) continue;
+      if (!clan.Read<ClanTeam>().Name.ToString().Equals(clanName, System.StringComparison.CurrentCultureIgnoreCase)) continue;
 
       // Get clan members to verify clan is active
       var members = clan.ReadBuffer<ClanMemberStatus>();
