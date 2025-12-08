@@ -338,6 +338,16 @@ public static class ClanService {
   }
 
   /// <summary>
+  /// Sets a custom clan tag for a player's character name.
+  /// This changes the visual tag display without affecting actual clan membership.
+  /// </summary>
+  /// <param name="playerData">The player data of the player to set the tag for</param>
+  /// <param name="clanTag">The clan tag text to display on the player's name</param>
+  public static void SetTagForPlayer(PlayerData playerData, string clanTag) {
+    ClanUtility.SetCharacterClanName(GameSystems.EntityManager, playerData.UserEntity, new(clanTag));
+  }
+
+  /// <summary>
   /// Removes the clan tag from a player's character name.
   /// This only removes the visual tag display and does not remove the player from the clan.
   /// </summary>
