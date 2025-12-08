@@ -51,6 +51,7 @@ public class Destroy_TravelBuffSystem_Patch {
 
         EventManager.Emit(PlayerEvents.CharacterCreated, player);
       }
+      if (EventManager.GetSubscriberCount(PostfixEvents.OnDestroyTravelBuff) == 0) return;
       EventManager.Emit(PostfixEvents.OnDestroyTravelBuff, query);
     } catch (Exception ex) {
       Log.Error($"Error processing Destroy_TravelBuffSystem: {ex}");
