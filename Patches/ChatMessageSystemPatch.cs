@@ -1,12 +1,9 @@
-using ProjectM.Network;
 using ProjectM;
 using Unity.Entities;
 using HarmonyLib;
 using Unity.Collections;
 using System;
-using ScarletCore.Services;
 using ScarletCore.Events;
-using ScarletCore.Data;
 using ScarletCore.Utils;
 using ScarletCore.Systems;
 
@@ -15,6 +12,7 @@ namespace ScarletCore.Patches;
 [HarmonyPatch]
 public static class ChatMessageSystemPatch {
   [HarmonyPatch(typeof(ChatMessageSystem), nameof(ChatMessageSystem.OnUpdate))]
+  [HarmonyPriority(Priority.First)]
   [HarmonyPrefix]
   public static void Prefix(ChatMessageSystem __instance) {
     if (!GameSystems.Initialized) return;
