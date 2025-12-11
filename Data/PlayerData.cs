@@ -2,13 +2,11 @@ using Unity.Entities;
 using ProjectM.Network;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using ProjectM;
 using Unity.Mathematics;
 using ScarletCore.Services;
 using Stunlock.Core;
-using ScarletCore.Utils;
 
 namespace ScarletCore.Data;
 
