@@ -3,19 +3,19 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>ScarletCore</AssemblyName>
     <Description>Framework and utilities for all Scarlet mods in V Rising</Description>
-    <Version>1.3.17</Version>
+    <Version>1.3.19</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RootNamespace>ScarletCore</RootNamespace>
     <PackageId>ScarletCore</PackageId>
-    <AssemblyVersion>1.3.17.0</AssemblyVersion>
-    <FileVersion>1.3.17.0</FileVersion>
+    <AssemblyVersion>1.3.19.0</AssemblyVersion>
+    <FileVersion>1.3.19.0</FileVersion>
     <Authors>markvaaz</Authors>
   </PropertyGroup>
   <PropertyGroup> 
     <BepInExPluginGuid>markvaaz.ScarletCore</BepInExPluginGuid>
     <BepInExPluginName>ScarletCore</BepInExPluginName>
-    <BepInExPluginVersion>1.3.17</BepInExPluginVersion>
+    <BepInExPluginVersion>1.3.19</BepInExPluginVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.733" IncludeAssets="compile" />
@@ -27,6 +27,11 @@
   <!-- ignore the Wiki folder -->
   <ItemGroup>
     <None Remove="Wiki\**" />
+  </ItemGroup>
+
+  <!-- Include Localization files as embedded resources in DLL -->
+  <ItemGroup>
+    <EmbeddedResource Include="Localization\**\*.*" />
   </ItemGroup>
   
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
