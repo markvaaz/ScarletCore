@@ -8,6 +8,7 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
 using ScarletCore.Systems;
+using ScarletCore.Services;
 
 namespace ScarletCore;
 
@@ -232,5 +233,12 @@ public static class ECSExtensions {
   }
   public static Entity GetBuffTarget(this Entity entity) {
     return CreateGameplayEventServerUtility.GetBuffTarget(EntityManager, entity);
+  }
+
+  /// <summary>
+  /// Get the localized name for a PrefabGUID
+  /// </summary>
+  public static string LocalizedName(this PrefabGUID prefabGuid) {
+    return LocalizationService.GetText(prefabGuid);
   }
 }

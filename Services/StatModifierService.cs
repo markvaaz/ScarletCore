@@ -1,5 +1,4 @@
 using ProjectM;
-using ScarletCore.Data;
 using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Stunlock.Core;
@@ -10,6 +9,7 @@ namespace ScarletCore.Services;
 public class Modifier {
   public float Value { get; set; }
   public UnitStatType StatType { get; set; }
+  public ModificationType ModificationType { get; set; } = ModificationType.Add;
 }
 
 public static class StatModifierService {
@@ -73,18 +73,18 @@ public static class StatModifierService {
     foreach (var mod in modifiers) {
       var totalValue = mod.Value;
       if (totalValue != 0) {
-        var modifier = CreateModifier(mod.StatType, totalValue);
+        var modifier = CreateModifier(mod.StatType, totalValue, mod.ModificationType);
         modifiersBuffer.Add(modifier);
       }
     }
   }
 
-  private static ModifyUnitStatBuff_DOTS CreateModifier(UnitStatType statType, float value) {
+  private static ModifyUnitStatBuff_DOTS CreateModifier(UnitStatType statType, float value, ModificationType modificationType) {
     return new ModifyUnitStatBuff_DOTS() {
       AttributeCapType = AttributeCapType.Uncapped,
       StatType = statType,
       Value = value,
-      ModificationType = ModificationType.Add,
+      ModificationType = modificationType,
       Modifier = 1,
       Id = ModificationIDs.Create().NewModificationId()
     };

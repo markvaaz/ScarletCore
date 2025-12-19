@@ -1,7 +1,16 @@
-﻿using BepInEx;
+﻿using System;
+using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
+using ProjectM.Network;
+using ScarletCore.Data;
+using ScarletCore.Events;
+using ScarletCore.Services;
+using ScarletCore.Systems;
+using ScarletCore.Utils;
+using Stunlock.Localization;
+using Unity.Entities;
 
 namespace ScarletCore;
 
@@ -11,6 +20,7 @@ public class Plugin : BasePlugin {
   public static Harmony Harmony => _harmony;
   public static Plugin Instance { get; private set; }
   public static ManualLogSource LogInstance { get; private set; }
+  public static Settings Settings { get; private set; }
 
   public override void Load() {
     Instance = this;
@@ -20,7 +30,12 @@ public class Plugin : BasePlugin {
     _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
     _harmony.PatchAll(System.Reflection.Assembly.GetExecutingAssembly());
 
-    Log.LogInfo("ScarletCore event listener auto-initialization setup complete");
+    Settings = new Settings(MyPluginInfo.PLUGIN_GUID, Instance);
+
+    Settings.Section("Language")
+      .Add("language", "english", $"Language code for localization. Available languages: {string.Join(", ", LocalizationService.AvailableLanguages)}");
+
+    GameSystems.OnInitialize(LocalizationService.Initialize);
   }
 
   public override bool Unload() {
