@@ -146,7 +146,15 @@ public static class Log {
   public static void Info(params object[] messages) {
     var callerInfo = DebugMode ? GetCallerInfo() : "";
     var message = string.Join(" ", messages);
-    MLS?.LogInfo(DebugMode ? $"{callerInfo} {message}" : message.ToString());
+    var coloredMessage = $"\x1b[38;2;222;254;255m{message}\x1b[0m";
+    MLS?.LogInfo(DebugMode ? $"{callerInfo} {coloredMessage}" : coloredMessage);
+  }
+
+  public static void Message(params object[] messages) {
+    var callerInfo = DebugMode ? GetCallerInfo() : "";
+    var message = string.Join(" ", messages);
+    var coloredMessage = $"\x1b[38;2;222;254;255m{message}\x1b[0m";
+    MLS?.LogMessage(DebugMode ? $"{callerInfo} {coloredMessage}" : coloredMessage);
   }
 
   /// <summary>
