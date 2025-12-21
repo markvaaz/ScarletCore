@@ -1,7 +1,8 @@
 namespace ScarletCore.Events;
 
 public enum ServerEvents {
-  OnInitialize
+  OnInitialize,
+  OnSave
 }
 
 public enum PlayerEvents {
