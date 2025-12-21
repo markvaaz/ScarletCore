@@ -28,7 +28,7 @@ public class Database {
   private int _maxBackups = 10;
 
   // Auto-backup per-instance
-  private Action<string> _autoBackupHandler;
+  // Auto-backup uses an instance method handler
   private bool _autoBackupEnabled;
   private string _autoBackupLocation;
 
@@ -61,7 +61,6 @@ public class Database {
 
     _databaseName = pluginGuid;
     // auto-backup handler defaults
-    _autoBackupHandler = null;
     _autoBackupEnabled = false;
   }
 
@@ -72,17 +71,8 @@ public class Database {
   public void EnableAutoBackup(string backupLocation = null) {
     if (_autoBackupEnabled) return;
     _autoBackupLocation = backupLocation;
-
-    // Use async void lambda for event handler (event-based fire-and-forget)
-    _autoBackupHandler = async (saveName) => {
-      try {
-        await CreateBackup(_autoBackupLocation);
-      } catch (Exception ex) {
-        Log.Error($"Auto-backup failed for '{_databaseName}': {ex.Message}");
-      }
-    };
-
-    EventManager.On(ServerEvents.OnSave, _autoBackupHandler);
+    // Register instance method as handler (async void for fire-and-forget)
+    EventManager.On(ServerEvents.OnSave, AutoBackupHandler);
     _autoBackupEnabled = true;
   }
 
@@ -92,10 +82,20 @@ public class Database {
   public void DisableAutoBackup() {
     if (!_autoBackupEnabled) return;
     try {
-      EventManager.Off(ServerEvents.OnSave, _autoBackupHandler);
+      EventManager.Off(ServerEvents.OnSave, AutoBackupHandler);
     } catch { }
-    _autoBackupHandler = null;
     _autoBackupEnabled = false;
+  }
+
+  // Instance handler used for auto-backups. Using `async void` because the
+  // event system expects an `Action<string>` and this is fire-and-forget.
+  [EventPriority(-999)]
+  private async void AutoBackupHandler(string saveName) {
+    try {
+      await CreateBackup(_autoBackupLocation);
+    } catch (Exception ex) {
+      Log.Error($"Auto-backup failed for '{_databaseName}': {ex.Message}");
+    }
   }
 
   /// <summary>

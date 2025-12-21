@@ -13,10 +13,20 @@ using System.Linq.Expressions;
 namespace ScarletCore.Events;
 
 public static class EventManager {
-  private static readonly Dictionary<PrefixEvents, List<Action<NativeArray<Entity>>>> _prefixHandlers = new();
-  private static readonly Dictionary<PostfixEvents, List<Action<NativeArray<Entity>>>> _postfixHandlers = new();
-  private static readonly Dictionary<PlayerEvents, List<Action<PlayerData>>> _playerHandlers = new();
-  private static readonly Dictionary<ServerEvents, List<Delegate>> _serverHandlers = new();
+  private sealed class PrioritizedHandler<T>(T handler) where T : Delegate {
+    public T Handler = handler;
+    public int Priority = GetPriority(handler);
+
+    private static int GetPriority(T handler) {
+      var attr = handler.Method.GetCustomAttribute<EventPriorityAttribute>();
+      return attr?.Priority ?? 0;
+    }
+  }
+
+  private static readonly Dictionary<PrefixEvents, List<PrioritizedHandler<Action<NativeArray<Entity>>>>> _prefixHandlers = [];
+  private static readonly Dictionary<PostfixEvents, List<PrioritizedHandler<Action<NativeArray<Entity>>>>> _postfixHandlers = [];
+  private static readonly Dictionary<PlayerEvents, List<PrioritizedHandler<Action<PlayerData>>>> _playerHandlers = [];
+  private static readonly Dictionary<ServerEvents, List<PrioritizedHandler<Delegate>>> _serverHandlers = [];
 
   private sealed class EventHandlerInfo {
     public Delegate Original;
@@ -28,24 +38,30 @@ public static class EventManager {
   private static readonly ConcurrentDictionary<string, List<EventHandlerInfo>> _customHandlers = new();
   private static readonly object _customLock = new();
 
-  // --- Built-in methods (optimized) ---
+  // --- Built-in methods (optimized with priority) ---
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void On(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return;
     if (!_prefixHandlers.TryGetValue(eventType, out var list)) {
-      list = new List<Action<NativeArray<Entity>>>(4);
+      list = new List<PrioritizedHandler<Action<NativeArray<Entity>>>>(4);
       _prefixHandlers[eventType] = list;
     }
-    list.Add(callback);
+    var ph = new PrioritizedHandler<Action<NativeArray<Entity>>>(callback);
+    int idx = list.FindIndex(h => h.Priority < ph.Priority);
+    if (idx >= 0) list.Insert(idx, ph);
+    else list.Add(ph);
   }
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool Off(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return false;
     if (_prefixHandlers.TryGetValue(eventType, out var list)) {
-      var removed = list.Remove(callback);
-      if (removed && list.Count == 0) _prefixHandlers.Remove(eventType);
-      return removed;
+      int idx = list.FindIndex(h => ReferenceEquals(h.Handler, callback));
+      if (idx >= 0) {
+        list.RemoveAt(idx);
+        if (list.Count == 0) _prefixHandlers.Remove(eventType);
+        return true;
+      }
     }
     return false;
   }
@@ -54,19 +70,25 @@ public static class EventManager {
   public static void On(PostfixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return;
     if (!_postfixHandlers.TryGetValue(eventType, out var list)) {
-      list = new List<Action<NativeArray<Entity>>>(4);
+      list = new List<PrioritizedHandler<Action<NativeArray<Entity>>>>(4);
       _postfixHandlers[eventType] = list;
     }
-    list.Add(callback);
+    var ph = new PrioritizedHandler<Action<NativeArray<Entity>>>(callback);
+    int idx = list.FindIndex(h => h.Priority < ph.Priority);
+    if (idx >= 0) list.Insert(idx, ph);
+    else list.Add(ph);
   }
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool Off(PostfixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return false;
     if (_postfixHandlers.TryGetValue(eventType, out var list)) {
-      var removed = list.Remove(callback);
-      if (removed && list.Count == 0) _postfixHandlers.Remove(eventType);
-      return removed;
+      int idx = list.FindIndex(h => ReferenceEquals(h.Handler, callback));
+      if (idx >= 0) {
+        list.RemoveAt(idx);
+        if (list.Count == 0) _postfixHandlers.Remove(eventType);
+        return true;
+      }
     }
     return false;
   }
@@ -75,19 +97,25 @@ public static class EventManager {
   public static void On(PlayerEvents eventType, Action<PlayerData> callback) {
     if (callback == null) return;
     if (!_playerHandlers.TryGetValue(eventType, out var list)) {
-      list = new List<Action<PlayerData>>(4);
+      list = new List<PrioritizedHandler<Action<PlayerData>>>(4);
       _playerHandlers[eventType] = list;
     }
-    list.Add(callback);
+    var ph = new PrioritizedHandler<Action<PlayerData>>(callback);
+    int idx = list.FindIndex(h => h.Priority < ph.Priority);
+    if (idx >= 0) list.Insert(idx, ph);
+    else list.Add(ph);
   }
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool Off(PlayerEvents eventType, Action<PlayerData> callback) {
     if (callback == null) return false;
     if (_playerHandlers.TryGetValue(eventType, out var list)) {
-      var removed = list.Remove(callback);
-      if (removed && list.Count == 0) _playerHandlers.Remove(eventType);
-      return removed;
+      int idx = list.FindIndex(h => ReferenceEquals(h.Handler, callback));
+      if (idx >= 0) {
+        list.RemoveAt(idx);
+        if (list.Count == 0) _playerHandlers.Remove(eventType);
+        return true;
+      }
     }
     return false;
   }
@@ -96,29 +124,38 @@ public static class EventManager {
   public static void On(ServerEvents eventType, Action callback) {
     if (callback == null) return;
     if (!_serverHandlers.TryGetValue(eventType, out var list)) {
-      list = new List<Delegate>(4);
+      list = new List<PrioritizedHandler<Delegate>>(4);
       _serverHandlers[eventType] = list;
     }
-    list.Add(callback);
+    var ph = new PrioritizedHandler<Delegate>(callback);
+    int idx = list.FindIndex(h => h.Priority < ph.Priority);
+    if (idx >= 0) list.Insert(idx, ph);
+    else list.Add(ph);
   }
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void On(ServerEvents eventType, Action<string> callback) {
     if (callback == null) return;
     if (!_serverHandlers.TryGetValue(eventType, out var list)) {
-      list = new List<Delegate>(4);
+      list = new List<PrioritizedHandler<Delegate>>(4);
       _serverHandlers[eventType] = list;
     }
-    list.Add(callback);
+    var ph = new PrioritizedHandler<Delegate>(callback);
+    int idx = list.FindIndex(h => h.Priority < ph.Priority);
+    if (idx >= 0) list.Insert(idx, ph);
+    else list.Add(ph);
   }
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool Off(ServerEvents eventType, Action callback) {
     if (callback == null) return false;
     if (_serverHandlers.TryGetValue(eventType, out var list)) {
-      var removed = list.Remove(callback);
-      if (removed && list.Count == 0) _serverHandlers.Remove(eventType);
-      return removed;
+      int idx = list.FindIndex(h => ReferenceEquals(h.Handler, callback));
+      if (idx >= 0) {
+        list.RemoveAt(idx);
+        if (list.Count == 0) _serverHandlers.Remove(eventType);
+        return true;
+      }
     }
     return false;
   }
@@ -127,9 +164,12 @@ public static class EventManager {
   public static bool Off(ServerEvents eventType, Action<string> callback) {
     if (callback == null) return false;
     if (_serverHandlers.TryGetValue(eventType, out var list)) {
-      var removed = list.Remove(callback);
-      if (removed && list.Count == 0) _serverHandlers.Remove(eventType);
-      return removed;
+      int idx = list.FindIndex(h => ReferenceEquals(h.Handler, callback));
+      if (idx >= 0) {
+        list.RemoveAt(idx);
+        if (list.Count == 0) _serverHandlers.Remove(eventType);
+        return true;
+      }
     }
     return false;
   }
@@ -137,70 +177,70 @@ public static class EventManager {
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Once(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return;
-    Action<NativeArray<Entity>> wrapped = null;
-    wrapped = (entities) => {
+    void wrapped(NativeArray<Entity> entities) {
       try {
         callback(entities);
       } finally {
         Off(eventType, wrapped);
       }
-    };
+    }
+
     On(eventType, wrapped);
   }
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Once(PostfixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return;
-    Action<NativeArray<Entity>> wrapped = null;
-    wrapped = (entities) => {
+    void wrapped(NativeArray<Entity> entities) {
       try {
         callback(entities);
       } finally {
         Off(eventType, wrapped);
       }
-    };
+    }
+
     On(eventType, wrapped);
   }
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Once(PlayerEvents eventType, Action<PlayerData> callback) {
     if (callback == null) return;
-    Action<PlayerData> wrapped = null;
-    wrapped = (pdata) => {
+    void wrapped(PlayerData pdata) {
       try {
         callback(pdata);
       } finally {
         Off(eventType, wrapped);
       }
-    };
+    }
+
     On(eventType, wrapped);
   }
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Once(ServerEvents eventType, Action callback) {
     if (callback == null) return;
-    Action wrapped = null;
-    wrapped = () => {
+    void wrapped() {
       try {
         callback();
       } finally {
         Off(eventType, wrapped);
       }
-    };
+    }
+
     On(eventType, wrapped);
   }
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Once(ServerEvents eventType, Action<string> callback) {
     if (callback == null) return;
-    Action<string> wrapped = null;
-    wrapped = (data) => {
+    void wrapped(string data) {
       try {
         callback(data);
       } finally {
         Off(eventType, wrapped);
       }
-    };
+    }
+
     On(eventType, wrapped);
   }
 
@@ -208,7 +248,7 @@ public static class EventManager {
   public static void Emit(PrefixEvents eventType, NativeArray<Entity> entityArray) {
     if (!_prefixHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
     for (int i = 0; i < handlers.Count; i++) {
-      try { handlers[i](entityArray); } catch (Exception ex) { Log.Error($"EventManager: Error in prefix '{eventType}': {ex}"); }
+      try { handlers[i].Handler(entityArray); } catch (Exception ex) { Log.Error($"EventManager: Error in prefix '{eventType}': {ex}"); }
     }
   }
 
@@ -216,7 +256,7 @@ public static class EventManager {
   public static void Emit(PostfixEvents eventType, NativeArray<Entity> entityArray) {
     if (!_postfixHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
     for (int i = 0; i < handlers.Count; i++) {
-      try { handlers[i](entityArray); } catch (Exception ex) { Log.Error($"EventManager: Error in postfix '{eventType}': {ex}"); }
+      try { handlers[i].Handler(entityArray); } catch (Exception ex) { Log.Error($"EventManager: Error in postfix '{eventType}': {ex}"); }
     }
   }
 
@@ -224,7 +264,7 @@ public static class EventManager {
   public static void Emit(PlayerEvents eventType, PlayerData playerData) {
     if (!_playerHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
     for (int i = 0; i < handlers.Count; i++) {
-      try { handlers[i](playerData); } catch (Exception ex) { Log.Error($"EventManager: Error in player '{eventType}': {ex}"); }
+      try { handlers[i].Handler(playerData); } catch (Exception ex) { Log.Error($"EventManager: Error in player '{eventType}': {ex}"); }
     }
   }
 
@@ -233,9 +273,9 @@ public static class EventManager {
     if (!_serverHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
     for (int i = 0; i < handlers.Count; i++) {
       try {
-        if (handlers[i] is Action action) {
+        if (handlers[i].Handler is Action action) {
           action();
-        } else if (handlers[i] is Action<string> actionWithParam) {
+        } else if (handlers[i].Handler is Action<string> actionWithParam) {
           actionWithParam(null);
         }
       } catch (Exception ex) { Log.Error($"EventManager: Error in server '{eventType}': {ex}"); }
@@ -247,9 +287,9 @@ public static class EventManager {
     if (!_serverHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
     for (int i = 0; i < handlers.Count; i++) {
       try {
-        if (handlers[i] is Action action) {
+        if (handlers[i].Handler is Action action) {
           action();
-        } else if (handlers[i] is Action<string> actionWithParam) {
+        } else if (handlers[i].Handler is Action<string> actionWithParam) {
           actionWithParam(data);
         }
       } catch (Exception ex) { Log.Error($"EventManager: Error in server '{eventType}': {ex}"); }
@@ -365,7 +405,7 @@ public static class EventManager {
     EventHandlerInfo[] handlersToExecute;
     lock (_customLock) {
       if (!_customHandlers.TryGetValue(eventName, out var handlers) || handlers.Count == 0) return;
-      handlersToExecute = handlers.ToArray();
+      handlersToExecute = [.. handlers];
     }
 
     for (int i = 0; i < handlersToExecute.Length; i++) {
@@ -400,7 +440,6 @@ public static class EventManager {
     }
   }
 
-  // Overloads for built-in event enums so callers (patches) can early-exit
   public static int GetSubscriberCount(PrefixEvents eventType) {
     return _prefixHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
   }
@@ -419,7 +458,7 @@ public static class EventManager {
 
   public static IEnumerable<string> GetRegisteredEvents() {
     lock (_customLock) {
-      return _customHandlers.Keys.ToList();
+      return [.. _customHandlers.Keys];
     }
   }
 
@@ -466,7 +505,7 @@ public static class EventManager {
     foreach (var kv in _prefixHandlers) {
       var handlers = kv.Value;
       for (int i = handlers.Count - 1; i >= 0; i--) {
-        if (handlers[i].Method?.DeclaringType?.Assembly == assembly) {
+        if (handlers[i].Handler.Method?.DeclaringType?.Assembly == assembly) {
           handlers.RemoveAt(i);
           removed++;
         }
@@ -477,7 +516,7 @@ public static class EventManager {
     foreach (var kv in _postfixHandlers) {
       var handlers = kv.Value;
       for (int i = handlers.Count - 1; i >= 0; i--) {
-        if (handlers[i].Method?.DeclaringType?.Assembly == assembly) {
+        if (handlers[i].Handler.Method?.DeclaringType?.Assembly == assembly) {
           handlers.RemoveAt(i);
           removed++;
         }
@@ -488,7 +527,7 @@ public static class EventManager {
     foreach (var kv in _playerHandlers) {
       var handlers = kv.Value;
       for (int i = handlers.Count - 1; i >= 0; i--) {
-        if (handlers[i].Method?.DeclaringType?.Assembly == assembly) {
+        if (handlers[i].Handler.Method?.DeclaringType?.Assembly == assembly) {
           handlers.RemoveAt(i);
           removed++;
         }
@@ -499,7 +538,7 @@ public static class EventManager {
     foreach (var kv in _serverHandlers) {
       var handlers = kv.Value;
       for (int i = handlers.Count - 1; i >= 0; i--) {
-        if (handlers[i] is Delegate d && d.Method?.DeclaringType?.Assembly == assembly) {
+        if (handlers[i].Handler is Delegate d && d.Method?.DeclaringType?.Assembly == assembly) {
           handlers.RemoveAt(i);
           removed++;
         }
