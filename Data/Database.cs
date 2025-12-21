@@ -25,7 +25,7 @@ public class Database {
   // Temp storage moved to SharedData service
 
   // Maximum number of backups to keep
-  private int _maxBackups = 10;
+  private int _maxBackups = 50;
 
   // Auto-backup per-instance
   // Auto-backup uses an instance method handler
@@ -41,7 +41,7 @@ public class Database {
   /// </summary>
   public int MaxBackups {
     get => _maxBackups;
-    set => _maxBackups = value > 0 ? value : 10; // Ensure positive value
+    set => _maxBackups = value > 0 ? value : 50; // Ensure positive value
   }
 
   /// <summary>
@@ -92,7 +92,7 @@ public class Database {
   [EventPriority(-999)]
   private async void AutoBackupHandler(string saveName) {
     try {
-      await CreateBackup(_autoBackupLocation);
+      await CreateBackup(_autoBackupLocation, saveName);
     } catch (Exception ex) {
       Log.Error($"Auto-backup failed for '{_databaseName}': {ex.Message}");
     }
@@ -403,8 +403,9 @@ public class Database {
   /// Creates a backup of all database files by compressing them into a ZIP archive
   /// </summary>
   /// <param name="backupLocation">Optional custom backup location. If null, saves to the BepInEx config directory</param>
+  /// <param name="saveName">Optional save name to include in the backup filename</param>
   /// <returns>Task that returns the path to the created backup file, or null if backup failed</returns>
-  public async Task<string> CreateBackup(string backupLocation = null) {
+  public async Task<string> CreateBackup(string backupLocation = null, string saveName = null) {
     return await Task.Run(() => {
       try {
         var configPath = GetConfigPath();
@@ -421,9 +422,18 @@ public class Database {
           return null;
         }
 
-        // Generate backup filename with timestamp
+        // Generate backup filename with timestamp and optional save name (sanitized)
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-        var backupFileName = $"{_databaseName}_backup_{timestamp}.zip";
+        string safeSaveName = null;
+        if (!string.IsNullOrWhiteSpace(saveName)) {
+          // Replace invalid filename chars with underscore and collapse runs
+          var parts = saveName.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries);
+          safeSaveName = string.Join("_", parts);
+        }
+
+        var backupFileName = safeSaveName == null
+          ? $"{_databaseName}_backup_{timestamp}.zip"
+          : $"{_databaseName}_backup_{safeSaveName}_{timestamp}.zip";
 
         // Determine backup location
         var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath;
@@ -450,7 +460,7 @@ public class Database {
           }
         }
 
-        Log.Info($"Database backup created successfully");
+        Log.Info($"Database backup created successfully for '{_databaseName}': {fullBackupPath}");
         return fullBackupPath;
       } catch (Exception ex) {
         Log.Error($"Failed to create database backup: {ex.Message}");
@@ -538,8 +548,8 @@ public class Database {
         .OrderBy(fileInfo => fileInfo.CreationTime)
         .ToArray();
 
-      // Calculate how many files to delete
-      int filesToDelete = sortedFiles.Length - maxBackups + 1; // +1 because we're about to create a new one
+      // Calculate how many files to delete so we end up with at most `maxBackups` files
+      int filesToDelete = sortedFiles.Length - maxBackups;
 
       // Delete the oldest files
       for (int i = 0; i < filesToDelete && i < sortedFiles.Length; i++) {
