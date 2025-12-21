@@ -66,6 +66,11 @@ public class Database {
     return Path.Combine(BepInEx.Paths.ConfigPath, _databaseName);
   }
 
+  public string GetFullPath(string path) {
+    var configPath = GetConfigPath();
+    return Path.Combine(configPath, $"{path}.json");
+  }
+
   /// <summary>
   /// Gets the cache key for a specific path and this database
   /// </summary>
@@ -197,14 +202,15 @@ public class Database {
   }
 
   /// <summary>
-  /// Checks if a data file exists
+  /// Checks if a data file or directory exists
   /// </summary>
-  /// <param name="path">File name/path (without extension)</param>
-  /// <returns>True if file exists</returns>
+  /// <param name="path">File name/path (without extension) or directory path</param>
+  /// <returns>True if file or directory exists</returns>
   public bool Has(string path) {
     var configPath = GetConfigPath();
     string filePath = Path.Combine(configPath, $"{path}.json");
-    return File.Exists(filePath);
+    string directoryPath = Path.Combine(configPath, path);
+    return File.Exists(filePath) || Directory.Exists(directoryPath);
   }
 
   /// <summary>
@@ -231,6 +237,75 @@ public class Database {
 
     return false;
   }
+  /// <summary>
+  /// Gets all file paths in a folder
+  /// </summary>
+  /// <param name="folderPath">Folder path relative to database root</param>
+  /// <param name="includeSubdirectories">Whether to include files in subdirectories</param>
+  /// <returns>Array of file paths (without .json extension) relative to database root</returns>
+  public string[] GetFilesInFolder(string folderPath = "", bool includeSubdirectories = false) {
+    var configPath = GetConfigPath();
+    string fullFolderPath = string.IsNullOrEmpty(folderPath)
+      ? configPath
+      : Path.Combine(configPath, folderPath);
+
+    try {
+      if (!Directory.Exists(fullFolderPath)) {
+        return [];
+      }
+
+      var searchOption = includeSubdirectories ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+      var files = Directory.GetFiles(fullFolderPath, "*.json", searchOption);
+
+      // Convert to relative paths and remove .json extension
+      var relativePaths = files.Select(file => {
+        var relativePath = Path.GetRelativePath(configPath, file);
+        // Remove .json extension
+        if (relativePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) {
+          relativePath = relativePath[..^5];
+        }
+        return relativePath;
+      }).ToArray();
+
+      return relativePaths;
+    } catch (Exception ex) {
+      Log.Error($"An error occurred while getting files in folder: {ex.Message}");
+      return [];
+    }
+  }
+
+  /// <summary>
+  /// Gets all directory paths in a folder
+  /// </summary>
+  /// <param name="folderPath">Folder path relative to database root</param>
+  /// <param name="includeSubdirectories">Whether to include subdirectories recursively</param>
+  /// <returns>Array of directory paths relative to database root</returns>
+  public string[] GetDirectoriesInFolder(string folderPath = "", bool includeSubdirectories = false) {
+    var configPath = GetConfigPath();
+    string fullFolderPath = string.IsNullOrEmpty(folderPath)
+      ? configPath
+      : Path.Combine(configPath, folderPath);
+
+    try {
+      if (!Directory.Exists(fullFolderPath)) {
+        return [];
+      }
+
+      var searchOption = includeSubdirectories ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+      var directories = Directory.GetDirectories(fullFolderPath, "*", searchOption);
+
+      // Convert to relative paths
+      var relativePaths = directories.Select(dir =>
+        Path.GetRelativePath(configPath, dir)
+      ).ToArray();
+
+      return relativePaths;
+    } catch (Exception ex) {
+      Log.Error($"An error occurred while getting directories in folder: {ex.Message}");
+      return [];
+    }
+  }
+
   /// <summary>
   /// Clears the cache for all data or specific path
   /// </summary>
@@ -312,13 +387,14 @@ public class Database {
 
         // Determine backup location
         var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath;
-        var fullBackupPath = Path.Combine(backupPath, backupFileName);
+        var backupFolderPath = Path.Combine(backupPath, $"{_databaseName} Backups");
+        var fullBackupPath = Path.Combine(backupFolderPath, backupFileName);
 
         // Create backup directory if it doesn't exist
-        Directory.CreateDirectory(Path.Combine(backupPath, $"{_databaseName} Backups"));
+        Directory.CreateDirectory(backupFolderPath);
 
         // Clean up old backups before creating new one
-        CleanupOldBackups(backupPath, _maxBackups);
+        CleanupOldBackups(backupFolderPath, _maxBackups);
 
         // Save all cached data before creating backup
         SaveAll();
