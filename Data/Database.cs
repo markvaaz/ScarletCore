@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using ScarletCore.Utils;
+using ScarletCore.Events;
 
 namespace ScarletCore.Data;
 
@@ -21,16 +22,19 @@ public class Database {
   // Database name (folder name)
   private readonly string _databaseName;
 
-  // Temp storage instance
-  private readonly TempStorage _temp;
+  // Temp storage moved to SharedData service
 
   // Maximum number of backups to keep
   private int _maxBackups = 10;
 
+  // Auto-backup per-instance
+  private Action<string> _autoBackupHandler;
+  private bool _autoBackupEnabled;
+  private string _autoBackupLocation;
+
   /// <summary>
-  /// Gets the temporary storage instance for this database
+  /// Temporary storage now provided by the SharedData service.
   /// </summary>
-  public TempStorage Temp => _temp;
 
   /// <summary>
   /// Gets or sets the maximum number of backups to keep (default: 10)
@@ -56,8 +60,44 @@ public class Database {
       throw new ArgumentException("Database name cannot be null or empty", nameof(pluginGuid));
 
     _databaseName = pluginGuid;
-    _temp = new TempStorage(pluginGuid);
+    // auto-backup handler defaults
+    _autoBackupHandler = null;
+    _autoBackupEnabled = false;
   }
+
+  /// <summary>
+  /// Enable automatic backups for this database instance. When enabled, each server save triggers a backup.
+  /// </summary>
+  /// <param name="backupLocation">Optional backup folder (defaults to BepInEx config path)</param>
+  public void EnableAutoBackup(string backupLocation = null) {
+    if (_autoBackupEnabled) return;
+    _autoBackupLocation = backupLocation;
+
+    // Use async void lambda for event handler (event-based fire-and-forget)
+    _autoBackupHandler = async (saveName) => {
+      try {
+        await CreateBackup(_autoBackupLocation);
+      } catch (Exception ex) {
+        Log.Error($"Auto-backup failed for '{_databaseName}': {ex.Message}");
+      }
+    };
+
+    EventManager.On(ServerEvents.OnSave, _autoBackupHandler);
+    _autoBackupEnabled = true;
+  }
+
+  /// <summary>
+  /// Disable automatic backups for this database instance.
+  /// </summary>
+  public void DisableAutoBackup() {
+    if (!_autoBackupEnabled) return;
+    try {
+      EventManager.Off(ServerEvents.OnSave, _autoBackupHandler);
+    } catch { }
+    _autoBackupHandler = null;
+    _autoBackupEnabled = false;
+  }
+
   /// <summary>
   /// Gets the configuration path for this database instance
   /// </summary>
@@ -87,7 +127,7 @@ public class Database {
     var configPath = GetConfigPath();
     string filePath = Path.Combine(configPath, $"{path}.json"); try {
       Directory.CreateDirectory(Path.GetDirectoryName(filePath));
-      string jsonData = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+      string jsonData = JsonSerializer.Serialize(data, _jsonOptions);
       File.WriteAllText(filePath, jsonData);
 
       // Updates cache after successful save
@@ -344,10 +384,10 @@ public class Database {
       if (kvp.Key.StartsWith(prefix)) {
         try {
           // Extract the path from the cache key
-          string path = kvp.Key.Substring(prefix.Length);
+          string path = kvp.Key[prefix.Length..];
           string filePath = Path.Combine(configPath, $"{path}.json"); Directory.CreateDirectory(Path.GetDirectoryName(filePath));
 
-          string jsonData = JsonSerializer.Serialize(kvp.Value, new JsonSerializerOptions { WriteIndented = true });
+          string jsonData = JsonSerializer.Serialize(kvp.Value, _jsonOptions);
           File.WriteAllText(filePath, jsonData);
 
           // Update cache timestamp after successful save
@@ -517,132 +557,5 @@ public class Database {
     }
   }
 
-  /// <summary>
-  /// Temporary data storage that exists only in memory and is lost on restart
-  /// </summary>
-  public class TempStorage {
-    // Exclusive cache for temporary data
-    private readonly Dictionary<string, object> _tempCache = [];
-    private readonly string _databaseName;
-
-    internal TempStorage(string databaseName) {
-      _databaseName = databaseName;
-    }
-
-    /// <summary>
-    /// Gets the temporary cache key for a specific key and this database
-    /// </summary>
-    private string GetTempCacheKey(string key) {
-      return $"temp:{_databaseName}:{key}";
-    }    /// <summary>
-         /// Sets temporary data in memory cache only
-         /// </summary>
-         /// <typeparam name="T">Type of data to set</typeparam>
-         /// <param name="key">Key to store the data</param>
-         /// <param name="data">Data to store temporarily</param>
-    public void Set<T>(string key, T data) {
-      string cacheKey = GetTempCacheKey(key);
-      _tempCache[cacheKey] = data;
-    }
-
-    /// <summary>
-    /// Gets temporary data from memory cache
-    /// </summary>
-    /// <typeparam name="T">Type of data to get</typeparam>
-    /// <param name="key">Key of the data to retrieve</param>
-    /// <returns>Cached data or default value if not found</returns>
-    public T Get<T>(string key) {
-      string cacheKey = GetTempCacheKey(key);
-
-      if (_tempCache.ContainsKey(cacheKey) && _tempCache[cacheKey] is T cachedData) {
-        return cachedData;
-      }
-
-      return default;
-    }
-
-    /// <summary>
-    /// Gets temporary data from memory cache or creates it if it doesn't exist
-    /// </summary>
-    /// <typeparam name="T">Type of data to get or create</typeparam>
-    /// <param name="key">Key of the data to retrieve or create</param>
-    /// <param name="factory">Factory function to create the data if it doesn't exist</param>
-    /// <returns>Existing cached data or newly created data</returns>
-    public T GetOrCreate<T>(string key, Func<T> factory) {
-      string cacheKey = GetTempCacheKey(key);
-
-      if (_tempCache.ContainsKey(cacheKey) && _tempCache[cacheKey] is T cachedData) {
-        return cachedData;
-      }
-
-      var newData = factory();
-      _tempCache[cacheKey] = newData;
-      return newData;
-    }
-
-    /// <summary>
-    /// Gets temporary data from memory cache or creates it using default constructor if it doesn't exist
-    /// </summary>
-    /// <typeparam name="T">Type of data to get or create (must have parameterless constructor)</typeparam>
-    /// <param name="key">Key of the data to retrieve or create</param>
-    /// <returns>Existing cached data or newly created data</returns>
-    public T GetOrCreate<T>(string key) where T : new() {
-      return GetOrCreate(key, () => new T());
-    }
-
-    /// <summary>
-    /// Checks if temporary data exists for the given key
-    /// </summary>
-    /// <param name="key">Key to check</param>
-    /// <returns>True if data exists in temporary cache</returns>
-    public bool Has(string key) {
-      string cacheKey = GetTempCacheKey(key);
-      return _tempCache.ContainsKey(cacheKey);
-    }
-
-    /// <summary>
-    /// Removes temporary data for the given key
-    /// </summary>
-    /// <param name="key">Key to remove</param>
-    /// <returns>True if data was removed</returns>
-    public bool Remove(string key) {
-      string cacheKey = GetTempCacheKey(key);
-      return _tempCache.Remove(cacheKey);
-    }
-
-    /// <summary>
-    /// Clears all temporary data for this database
-    /// </summary>
-    public void Clear() {
-      var prefix = $"temp:{_databaseName}:";
-
-      var keysToRemove = new List<string>();
-      foreach (var key in _tempCache.Keys) {
-        if (key.StartsWith(prefix)) {
-          keysToRemove.Add(key);
-        }
-      }
-
-      foreach (var key in keysToRemove) {
-        _tempCache.Remove(key);
-      }
-    }
-
-    /// <summary>
-    /// Gets all temporary data keys for this database
-    /// </summary>
-    /// <returns>List of keys without the database prefix</returns>
-    public List<string> GetKeys() {
-      var prefix = $"temp:{_databaseName}:";
-
-      var keys = new List<string>();
-      foreach (var key in _tempCache.Keys) {
-        if (key.StartsWith(prefix)) {
-          keys.Add(key.Substring(prefix.Length));
-        }
-      }
-
-      return keys;
-    }
-  }
+  // TempStorage moved to Services/SharedData.cs
 }
