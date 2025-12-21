@@ -38,6 +38,8 @@ public static class GameSystems {
     }
   }
 
+  public static double ServerTime => _server.Time.ElapsedTime;
+
   public static EntityManager EntityManager {
     get {
       if (!Initialized) throw NotInitializedException;
