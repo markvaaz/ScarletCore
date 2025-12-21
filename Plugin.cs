@@ -3,14 +3,9 @@ using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
-using ProjectM.Network;
 using ScarletCore.Data;
-using ScarletCore.Events;
 using ScarletCore.Services;
 using ScarletCore.Systems;
-using ScarletCore.Utils;
-using Stunlock.Localization;
-using Unity.Entities;
 
 namespace ScarletCore;
 
