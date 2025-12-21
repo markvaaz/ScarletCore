@@ -16,7 +16,7 @@ public static class EventManager {
   private static readonly Dictionary<PrefixEvents, List<Action<NativeArray<Entity>>>> _prefixHandlers = new();
   private static readonly Dictionary<PostfixEvents, List<Action<NativeArray<Entity>>>> _postfixHandlers = new();
   private static readonly Dictionary<PlayerEvents, List<Action<PlayerData>>> _playerHandlers = new();
-  private static readonly Dictionary<ServerEvents, List<Action>> _serverHandlers = new();
+  private static readonly Dictionary<ServerEvents, List<Delegate>> _serverHandlers = new();
 
   private sealed class EventHandlerInfo {
     public Delegate Original;
@@ -96,7 +96,17 @@ public static class EventManager {
   public static void On(ServerEvents eventType, Action callback) {
     if (callback == null) return;
     if (!_serverHandlers.TryGetValue(eventType, out var list)) {
-      list = new List<Action>(4);
+      list = new List<Delegate>(4);
+      _serverHandlers[eventType] = list;
+    }
+    list.Add(callback);
+  }
+
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void On(ServerEvents eventType, Action<string> callback) {
+    if (callback == null) return;
+    if (!_serverHandlers.TryGetValue(eventType, out var list)) {
+      list = new List<Delegate>(4);
       _serverHandlers[eventType] = list;
     }
     list.Add(callback);
@@ -104,6 +114,17 @@ public static class EventManager {
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool Off(ServerEvents eventType, Action callback) {
+    if (callback == null) return false;
+    if (_serverHandlers.TryGetValue(eventType, out var list)) {
+      var removed = list.Remove(callback);
+      if (removed && list.Count == 0) _serverHandlers.Remove(eventType);
+      return removed;
+    }
+    return false;
+  }
+
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool Off(ServerEvents eventType, Action<string> callback) {
     if (callback == null) return false;
     if (_serverHandlers.TryGetValue(eventType, out var list)) {
       var removed = list.Remove(callback);
@@ -170,6 +191,20 @@ public static class EventManager {
   }
 
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Once(ServerEvents eventType, Action<string> callback) {
+    if (callback == null) return;
+    Action<string> wrapped = null;
+    wrapped = (data) => {
+      try {
+        callback(data);
+      } finally {
+        Off(eventType, wrapped);
+      }
+    };
+    On(eventType, wrapped);
+  }
+
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(PrefixEvents eventType, NativeArray<Entity> entityArray) {
     if (!_prefixHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
     for (int i = 0; i < handlers.Count; i++) {
@@ -197,7 +232,27 @@ public static class EventManager {
   public static void Emit(ServerEvents eventType) {
     if (!_serverHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
     for (int i = 0; i < handlers.Count; i++) {
-      try { handlers[i](); } catch (Exception ex) { Log.Error($"EventManager: Error in server '{eventType}': {ex}"); }
+      try {
+        if (handlers[i] is Action action) {
+          action();
+        } else if (handlers[i] is Action<string> actionWithParam) {
+          actionWithParam(null);
+        }
+      } catch (Exception ex) { Log.Error($"EventManager: Error in server '{eventType}': {ex}"); }
+    }
+  }
+
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Emit(ServerEvents eventType, string data) {
+    if (!_serverHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
+    for (int i = 0; i < handlers.Count; i++) {
+      try {
+        if (handlers[i] is Action action) {
+          action();
+        } else if (handlers[i] is Action<string> actionWithParam) {
+          actionWithParam(data);
+        }
+      } catch (Exception ex) { Log.Error($"EventManager: Error in server '{eventType}': {ex}"); }
     }
   }
 
@@ -444,7 +499,7 @@ public static class EventManager {
     foreach (var kv in _serverHandlers) {
       var handlers = kv.Value;
       for (int i = handlers.Count - 1; i >= 0; i--) {
-        if (handlers[i].Method?.DeclaringType?.Assembly == assembly) {
+        if (handlers[i] is Delegate d && d.Method?.DeclaringType?.Assembly == assembly) {
           handlers.RemoveAt(i);
           removed++;
         }
