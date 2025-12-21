@@ -92,6 +92,7 @@ public class Database {
   [EventPriority(-999)]
   private async void AutoBackupHandler(string saveName) {
     try {
+      saveName = saveName.Replace(".save", ""); // Remove extension if present
       await CreateBackup(_autoBackupLocation, saveName);
     } catch (Exception ex) {
       Log.Error($"Auto-backup failed for '{_databaseName}': {ex.Message}");
