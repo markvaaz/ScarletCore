@@ -29,7 +29,7 @@ public static class LocalizationService {
   private static readonly ConcurrentDictionary<int, string> _prefabToGuid = new();
 
   /// <summary>
-  /// Custom localization keys created at runtime. Key -> (language -> text)
+  /// Custom localization keys created at runtime. Composite key (assembly:key) -> (language -> text)
   /// </summary>
   private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _customKeys = new(StringComparer.OrdinalIgnoreCase);
 
@@ -246,13 +246,27 @@ public static class LocalizationService {
   }
 
   /// <summary>
+  /// Builds a composite key from assembly name and key string.
+  /// Format: "AssemblyName:key"
+  /// </summary>
+  private static string BuildCompositeKey(Assembly assembly, string key) {
+    var assemblyName = assembly.GetName().Name;
+    return $"{assemblyName}:{key}";
+  }
+
+  /// <summary>
   /// Register a new custom localization key with translations for multiple languages.
   /// Language codes should match the server/player language keys (e.g. "english", "portuguese").
+  /// The key is automatically prefixed with the calling assembly name to avoid conflicts.
   /// </summary>
+  /// <param name="key">The localization key (will be prefixed with assembly name)</param>
+  /// <param name="translations">Dictionary mapping language codes to translated text</param>
   public static void NewKey(string key, IDictionary<string, string> translations) {
     if (string.IsNullOrWhiteSpace(key) || translations == null || translations.Count == 0) return;
 
-    var normalizedKey = key.Trim();
+    var callingAssembly = Assembly.GetCallingAssembly();
+    var compositeKey = BuildCompositeKey(callingAssembly, key.Trim());
+
     var map = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     foreach (var kv in translations) {
@@ -262,7 +276,7 @@ public static class LocalizationService {
 
     if (map.IsEmpty) return;
 
-    _customKeys[normalizedKey] = map;
+    _customKeys[compositeKey] = map;
   }
 
   /// <summary>
@@ -273,9 +287,12 @@ public static class LocalizationService {
   ///   "english": { "help message": "help message" }
   /// }
   /// The outer key is the language code and the value is a map of (key -> translated text).
+  /// Keys are automatically prefixed with the calling assembly name.
   /// </summary>
   public static void LoadCustomKeys(IDictionary<string, IDictionary<string, string>> languageMap) {
     if (languageMap == null || languageMap.Count == 0) return;
+
+    var callingAssembly = Assembly.GetCallingAssembly();
 
     foreach (var langEntry in languageMap) {
       if (string.IsNullOrWhiteSpace(langEntry.Key) || langEntry.Value == null) continue;
@@ -288,25 +305,31 @@ public static class LocalizationService {
         var normalizedKey = kv.Key.Trim();
         if (string.IsNullOrEmpty(normalizedKey)) continue;
 
-        var map = _customKeys.GetOrAdd(normalizedKey, _ => new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        var compositeKey = BuildCompositeKey(callingAssembly, normalizedKey);
+        var map = _customKeys.GetOrAdd(compositeKey, _ => new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
         map[lang] = kv.Value;
       }
     }
 
-    Log.Info($"Loaded custom localization keys: {_customKeys.Count}");
+    Log.Info($"Loaded custom localization keys for {callingAssembly.GetName().Name}: {languageMap.SelectMany(x => x.Value.Keys).Distinct().Count()} unique keys");
   }
 
   /// <summary>
   /// Get a localized string for a player from a custom key. Falls back to server language, then first available language.
   /// Returns the key string if not found.
+  /// The key is automatically prefixed with the calling assembly name.
   /// </summary>
+  /// <param name="player">The player to get the localized text for</param>
+  /// <param name="key">The localization key (will be prefixed with assembly name)</param>
+  /// <returns>The localized text, or the key if not found</returns>
   public static string Get(PlayerData player, string key) {
     if (string.IsNullOrWhiteSpace(key)) return string.Empty;
     if (!_initialized) Initialize();
 
-    var normalizedKey = key.Trim();
+    var callingAssembly = Assembly.GetCallingAssembly();
+    var compositeKey = BuildCompositeKey(callingAssembly, key.Trim());
 
-    if (!_customKeys.TryGetValue(normalizedKey, out var translations) || translations == null || translations.IsEmpty) {
+    if (!_customKeys.TryGetValue(compositeKey, out var translations) || translations == null || translations.IsEmpty) {
       return key;
     }
 
@@ -321,6 +344,68 @@ public static class LocalizationService {
     // Last resort: return first available translation
     var first = translations.Values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
     return first ?? key;
+  }
+
+  /// <summary>
+  /// Get a localized string directly by composite key (assembly:key format).
+  /// This method is for internal use or when you need to access keys from other assemblies.
+  /// Falls back to server language, then first available language.
+  /// </summary>
+  /// <param name="player">The player to get the localized text for</param>
+  /// <param name="compositeKey">The full composite key in format "AssemblyName:key"</param>
+  /// <returns>The localized text, or the key portion if not found</returns>
+  public static string GetByCompositeKey(PlayerData player, string compositeKey) {
+    if (string.IsNullOrWhiteSpace(compositeKey)) return string.Empty;
+    if (!_initialized) Initialize();
+
+    if (!_customKeys.TryGetValue(compositeKey, out var translations) || translations == null || translations.IsEmpty) {
+      // Return just the key portion (after the colon) if not found
+      var parts = compositeKey.Split(':', 2);
+      return parts.Length > 1 ? parts[1] : compositeKey;
+    }
+
+    var playerLang = GetPlayerLanguage(player) ?? Plugin.Settings.Get<string>("DefaultPlayerLanguage") ?? _currentServerLanguage;
+    playerLang = playerLang.ToLower().Trim();
+
+    if (translations.TryGetValue(playerLang, out var text) && !string.IsNullOrEmpty(text)) return text;
+
+    if (!string.Equals(playerLang, _currentServerLanguage, StringComparison.OrdinalIgnoreCase) && translations.TryGetValue(_currentServerLanguage, out var serverText) && !string.IsNullOrEmpty(serverText)) return serverText;
+
+    var first = translations.Values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
+    var parts2 = compositeKey.Split(':', 2);
+    return first ?? (parts2.Length > 1 ? parts2[1] : compositeKey);
+  }
+
+  /// <summary>
+  /// Get all registered custom keys for a specific assembly.
+  /// Returns the key names without the assembly prefix.
+  /// </summary>
+  /// <param name="assembly">The assembly to get keys for (null for calling assembly)</param>
+  /// <returns>Collection of key names</returns>
+  public static IEnumerable<string> GetKeysForAssembly(Assembly assembly = null) {
+    if (!_initialized) Initialize();
+
+    assembly ??= Assembly.GetCallingAssembly();
+    var assemblyName = assembly.GetName().Name;
+    var prefix = $"{assemblyName}:";
+
+    return _customKeys.Keys
+      .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+      .Select(k => k[prefix.Length..]);
+  }
+
+  /// <summary>
+  /// Check if a custom key exists for the calling assembly.
+  /// </summary>
+  /// <param name="key">The key to check (without assembly prefix)</param>
+  /// <returns>True if the key exists, false otherwise</returns>
+  public static bool HasCustomKey(string key) {
+    if (string.IsNullOrWhiteSpace(key)) return false;
+    if (!_initialized) Initialize();
+
+    var callingAssembly = Assembly.GetCallingAssembly();
+    var compositeKey = BuildCompositeKey(callingAssembly, key.Trim());
+    return _customKeys.ContainsKey(compositeKey);
   }
 
   /// <summary>
@@ -415,6 +500,11 @@ public static class LocalizationService {
   /// Get total count of prefab mappings
   /// </summary>
   public static int PrefabMappingCount => PrefabMappings.Count;
+
+  /// <summary>
+  /// Get total count of custom localization keys across all assemblies
+  /// </summary>
+  public static int CustomKeyCount => _customKeys.Count;
 
   /// <summary>
   /// Change the current language at runtime.
