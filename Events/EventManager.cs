@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using ScarletCore.Data;
@@ -38,6 +37,14 @@ public static class EventManager {
   private static readonly ConcurrentDictionary<string, List<EventHandlerInfo>> _customHandlers = new();
   private static readonly object _customLock = new();
 
+  // Helper method to compare delegates by method and target instead of reference
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  private static bool AreDelegatesEqual(Delegate a, Delegate b) {
+    if (ReferenceEquals(a, b)) return true;
+    if (a == null || b == null) return false;
+    return a.Method.Equals(b.Method) && Equals(a.Target, b.Target);
+  }
+
   // --- Built-in methods (optimized with priority) ---
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void On(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
@@ -56,7 +63,7 @@ public static class EventManager {
   public static bool Off(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return false;
     if (_prefixHandlers.TryGetValue(eventType, out var list)) {
-      int idx = list.FindIndex(h => ReferenceEquals(h.Handler, callback));
+      int idx = list.FindIndex(h => AreDelegatesEqual(h.Handler, callback));
       if (idx >= 0) {
         list.RemoveAt(idx);
         if (list.Count == 0) _prefixHandlers.Remove(eventType);
@@ -83,7 +90,7 @@ public static class EventManager {
   public static bool Off(PostfixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return false;
     if (_postfixHandlers.TryGetValue(eventType, out var list)) {
-      int idx = list.FindIndex(h => ReferenceEquals(h.Handler, callback));
+      int idx = list.FindIndex(h => AreDelegatesEqual(h.Handler, callback));
       if (idx >= 0) {
         list.RemoveAt(idx);
         if (list.Count == 0) _postfixHandlers.Remove(eventType);
@@ -110,7 +117,7 @@ public static class EventManager {
   public static bool Off(PlayerEvents eventType, Action<PlayerData> callback) {
     if (callback == null) return false;
     if (_playerHandlers.TryGetValue(eventType, out var list)) {
-      int idx = list.FindIndex(h => ReferenceEquals(h.Handler, callback));
+      int idx = list.FindIndex(h => AreDelegatesEqual(h.Handler, callback));
       if (idx >= 0) {
         list.RemoveAt(idx);
         if (list.Count == 0) _playerHandlers.Remove(eventType);
@@ -150,7 +157,7 @@ public static class EventManager {
   public static bool Off(ServerEvents eventType, Action callback) {
     if (callback == null) return false;
     if (_serverHandlers.TryGetValue(eventType, out var list)) {
-      int idx = list.FindIndex(h => ReferenceEquals(h.Handler, callback));
+      int idx = list.FindIndex(h => AreDelegatesEqual(h.Handler, callback));
       if (idx >= 0) {
         list.RemoveAt(idx);
         if (list.Count == 0) _serverHandlers.Remove(eventType);
@@ -164,7 +171,7 @@ public static class EventManager {
   public static bool Off(ServerEvents eventType, Action<string> callback) {
     if (callback == null) return false;
     if (_serverHandlers.TryGetValue(eventType, out var list)) {
-      int idx = list.FindIndex(h => ReferenceEquals(h.Handler, callback));
+      int idx = list.FindIndex(h => AreDelegatesEqual(h.Handler, callback));
       if (idx >= 0) {
         list.RemoveAt(idx);
         if (list.Count == 0) _serverHandlers.Remove(eventType);
@@ -362,7 +369,7 @@ public static class EventManager {
 
     lock (_customLock) {
       if (_customHandlers.TryGetValue(eventName, out var handlers)) {
-        int index = handlers.FindIndex(h => ReferenceEquals(h.Original, callback));
+        int index = handlers.FindIndex(h => AreDelegatesEqual(h.Original, callback));
         if (index >= 0) {
           handlers.RemoveAt(index);
           if (handlers.Count == 0) _customHandlers.TryRemove(eventName, out _);
