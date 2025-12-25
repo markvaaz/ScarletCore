@@ -60,7 +60,7 @@ internal sealed class CommandInfo {
 /// Supports N parameters with optional and required parameters using default values.
 /// </summary>
 public static class CommandService {
-  private static readonly Dictionary<string, Dictionary<string, CommandInfo>> _groups = new(StringComparer.OrdinalIgnoreCase);
+  private static readonly Dictionary<string, Dictionary<string, List<CommandInfo>>> _groups = new(StringComparer.OrdinalIgnoreCase);
   private static readonly Dictionary<string, Assembly> _groupToAssembly = new(StringComparer.OrdinalIgnoreCase);
   private static bool _initialized = false;
 
@@ -98,7 +98,7 @@ public static class CommandService {
 
       // Register main group name
       if (!_groups.ContainsKey(groupName)) {
-        _groups[groupName] = new Dictionary<string, CommandInfo>(StringComparer.OrdinalIgnoreCase);
+        _groups[groupName] = new Dictionary<string, List<CommandInfo>>(StringComparer.OrdinalIgnoreCase);
         _groupToAssembly[groupName] = assembly;
       }
 
@@ -128,12 +128,20 @@ public static class CommandService {
         };
 
         var cmdName = cmdAttr.Name.ToLower();
-        _groups[groupName][cmdName] = cmdInfo;
+        if (!_groups[groupName].TryGetValue(cmdName, out var list)) {
+          list = new List<CommandInfo>();
+          _groups[groupName][cmdName] = list;
+        }
+        list.Add(cmdInfo);
 
         // Register command aliases
         foreach (var alias in cmdAttr.Aliases) {
           var aliasLower = alias.ToLower();
-          _groups[groupName][aliasLower] = cmdInfo;
+          if (!_groups[groupName].TryGetValue(aliasLower, out var aliasList)) {
+            aliasList = new List<CommandInfo>();
+            _groups[groupName][aliasLower] = aliasList;
+          }
+          aliasList.Add(cmdInfo);
         }
       }
     }
@@ -164,7 +172,8 @@ public static class CommandService {
     var commandsToRemove = new List<(string group, string command)>();
     foreach (var groupKvp in _groups) {
       foreach (var cmdKvp in groupKvp.Value) {
-        if (cmdKvp.Value.Assembly == assembly) {
+        // cmdKvp.Value is List<CommandInfo>
+        if (cmdKvp.Value.Any(ci => ci.Assembly == assembly)) {
           commandsToRemove.Add((groupKvp.Key, cmdKvp.Key));
         }
       }
@@ -172,7 +181,10 @@ public static class CommandService {
 
     foreach (var (group, command) in commandsToRemove) {
       if (_groups.TryGetValue(group, out var cmds)) {
-        cmds.Remove(command);
+        if (cmds.TryGetValue(command, out var list)) {
+          list.RemoveAll(ci => ci.Assembly == assembly);
+          if (list.Count == 0) cmds.Remove(command);
+        }
       }
     }
 
@@ -268,15 +280,13 @@ public static class CommandService {
 
       if (!_groups.TryGetValue(group, out var cmds)) return;
       if (string.IsNullOrEmpty(command)) {
-        // no command provided, just notify
+        // no command provided, just notify — let other handlers process
         Log.Info($"Command group '{group}' invoked without subcommand.");
-        messageEntity.Destroy(true);
         return;
       }
 
-      if (!cmds.TryGetValue(command, out var cmdInfo)) {
+      if (!cmds.TryGetValue(command, out var cmdInfos)) {
         Log.Info($"Unknown command '{command}' in group '{group}'");
-        messageEntity.Destroy(true);
         return;
       }
 
@@ -291,28 +301,25 @@ public static class CommandService {
 
       var ctx = new CommandContext(messageEntity, player, withoutDot, args);
 
-      // Check admin permissions
-      var requiresAdmin = cmdInfo.GroupAdminOnly || cmdInfo.Attribute.AdminOnly;
-      if (requiresAdmin && (player == null || !player.IsAdmin)) {
-        ctx.ReplyError("This command requires administrator privileges.");
-        messageEntity.Destroy(true);
+      // Select best overload among cmdInfos
+      if (!SelectBestCommand(cmdInfos, ctx, args, out var selected, out var invokeArgs, out var selectError)) {
+        if (!string.IsNullOrEmpty(selectError)) ctx.ReplyError(selectError);
+        // Provide usages for ambiguity or parse errors
+        var usages = string.Join(" | ", cmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
+        if (!string.IsNullOrEmpty(usages)) ctx.ReplyInfo($"Available usages: {usages}");        // Do not destroy message here so other command frameworks can handle it
         return;
       }
 
-      // Prepare invocation arguments with support for optional parameters
-      if (!TryPrepareInvokeArgs(cmdInfo.Method, ctx, args, out var invokeArgs, out var errorMsg)) {
-        if (!string.IsNullOrEmpty(errorMsg)) {
-          ctx.ReplyError(errorMsg);
-          if (!string.IsNullOrEmpty(cmdInfo.Attribute.Usage)) {
-            ctx.ReplyInfo($"Usage: {cmdInfo.Attribute.Usage}");
-          }
-        }
-        messageEntity.Destroy(true);
+      // Check admin permissions for the selected overload
+      var requiresAdmin = selected.GroupAdminOnly || selected.Attribute.AdminOnly;
+      if (requiresAdmin && (player == null || !player.IsAdmin)) {
+        ctx.ReplyError("This command requires administrator privileges.");
+        // Do not destroy; allow other frameworks to handle the message
         return;
       }
 
       try {
-        cmdInfo.Method.Invoke(null, invokeArgs);
+        selected.Method.Invoke(null, invokeArgs);
       } catch (Exception invokeEx) {
         Log.Error($"Error invoking command {group} {command}: {invokeEx}");
         ctx.ReplyError("An error occurred while executing the command.");
@@ -501,5 +508,110 @@ public static class CommandService {
     } catch {
       return false;
     }
+  }
+
+  // Evaluate a candidate CommandInfo against provided args. Returns true if candidate is compatible.
+  // Also produces a score used to choose the best overload (higher is better).
+  private static bool EvaluateCandidate(CommandInfo cmdInfo, CommandContext ctx, string[] args, out object[] invokeArgs, out int score, out string errorMsg) {
+    errorMsg = null;
+    score = 0;
+    var method = cmdInfo.Method;
+    var parameters = method.GetParameters();
+    invokeArgs = new object[parameters.Length];
+
+    int contextParamCount = 0;
+    if (parameters.Length > 0 && parameters[0].ParameterType == typeof(CommandContext)) {
+      invokeArgs[0] = ctx;
+      contextParamCount = 1;
+    }
+
+    for (int i = contextParamCount; i < parameters.Length; i++) {
+      var param = parameters[i];
+      var argIndex = i - contextParamCount;
+      var hasValue = argIndex < args.Length;
+      var providedValue = hasValue ? args[argIndex] : null;
+      bool isOptional = param.HasDefaultValue;
+
+      if (!hasValue) {
+        if (!isOptional) {
+          errorMsg = $"Missing required parameter: {param.Name} ({param.ParameterType.Name})";
+          return false;
+        }
+        invokeArgs[i] = param.DefaultValue;
+        score += 1; // small score for using default
+        continue;
+      }
+
+      // PlayerData special handling
+      if (param.ParameterType == typeof(PlayerData)) {
+        if (!PlayerService.TryGetByName(providedValue, out var playerData)) {
+          errorMsg = $"Player not found: {providedValue}";
+          return false;
+        }
+        invokeArgs[i] = playerData;
+        score += 5; // strong match for non-string player
+        continue;
+      }
+
+      // Try parse other types
+      if (!TryParseParameter(param.ParameterType, providedValue, out var parsed)) {
+        errorMsg = $"Invalid value for parameter '{param.Name}'. Expected {param.ParameterType.Name}.";
+        return false;
+      }
+
+      invokeArgs[i] = parsed;
+
+      // Scoring: prefer non-string typed parameters
+      if (param.ParameterType == typeof(string)) {
+        // string is lowest priority
+        score += 1;
+      } else {
+        score += 3;
+      }
+    }
+
+    return true;
+  }
+
+  // Selects the best command overload from a list based on argument compatibility and scoring.
+  private static bool SelectBestCommand(List<CommandInfo> candidates, CommandContext ctx, string[] args, out CommandInfo selected, out object[] invokeArgs, out string errorMsg) {
+    selected = null;
+    invokeArgs = null;
+    errorMsg = null;
+
+    var viable = new List<(CommandInfo info, object[] invokeArgs, int score, string error)>();
+
+    foreach (var ci in candidates) {
+      if (!EvaluateCandidate(ci, ctx, args, out var invArgs, out var score, out var err)) {
+        // keep parse error for reporting if none match
+        viable.Add((ci, null, -1, err));
+        continue;
+      }
+      viable.Add((ci, invArgs, score, null));
+    }
+
+    // Filter only successful matches
+    var matches = viable.Where(v => v.score >= 0).ToList();
+    if (matches.Count == 0) {
+      // prefer first error message that is not null
+      var firstErr = viable.Select(v => v.error).FirstOrDefault(e => !string.IsNullOrEmpty(e));
+      errorMsg = firstErr ?? "No suitable overload found for command.";
+      return false;
+    }
+
+    // Choose highest score
+    var bestScore = matches.Max(m => m.score);
+    var bestMatches = matches.Where(m => m.score == bestScore).ToList();
+
+    if (bestMatches.Count > 1) {
+      // Ambiguous
+      errorMsg = "Ambiguous command overload; multiple matches found.";
+      return false;
+    }
+
+    var best = bestMatches[0];
+    selected = best.info;
+    invokeArgs = best.invokeArgs;
+    return true;
   }
 }
