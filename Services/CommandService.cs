@@ -392,7 +392,7 @@ public static class CommandService {
 
         if (!SelectBestCommand(standaloneCmdInfos, ctx, standaloneArgs, out var selected, out var invokeArgs, out var selectError)) {
           if (!string.IsNullOrEmpty(selectError)) ctx.ReplyError(selectError);
-          var usages = string.Join(" | ", standaloneCmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
+          var usages = string.Join("\n", standaloneCmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
           if (!string.IsNullOrEmpty(usages)) {
             var tmpl = LocalizationService.Get(player, "cmd_available_usages");
             ctx.ReplyInfo(ApplyTemplate(tmpl, ("usages", $"~{usages}~")));
@@ -438,7 +438,7 @@ public static class CommandService {
 
       if (!SelectBestCommand(cmdInfos, groupCtx, groupArgs, out var selectedCmd, out var groupInvokeArgs, out var groupSelectError)) {
         if (!string.IsNullOrEmpty(groupSelectError)) groupCtx.ReplyError(groupSelectError);
-        var usages = string.Join(" | ", cmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
+        var usages = string.Join("\n", cmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
         if (!string.IsNullOrEmpty(usages)) {
           var tmpl = LocalizationService.Get(player, "cmd_available_usages");
           groupCtx.ReplyInfo(ApplyTemplate(tmpl, ("usages", $"~{usages}~")));
@@ -733,24 +733,24 @@ public static class CommandService {
     });
 
     LocalizationService.NewKey("cmd_available_usages", new Dictionary<string, string> {
-      { "english", "Available usages: {usages}" },
-      { "portuguese", "Formas de uso disponíveis: {usages}" },
-      { "french", "Utilisations disponibles : {usages}" },
-      { "german", "Verfügbare Aufrufe: {usages}" },
-      { "hungarian", "Elérhető használatok: {usages}" },
-      { "italian", "Utilizzi disponibili: {usages}" },
-      { "japanese", "利用可能な使い方: {usages}" },
-      { "korean", "사용 가능한 명령 형식: {usages}" },
-      { "latam", "Usos disponibles: {usages}" },
-      { "polish", "Dostępne użycia: {usages}" },
-      { "russian", "Доступные варианты использования: {usages}" },
-      { "spanish", "Usos disponibles: {usages}" },
-      { "chinese_simplified", "可用用法：{usages}" },
-      { "chinese_traditional", "可用用法：{usages}" },
+      { "english", "Available usages:\n{usages}" },
+      { "portuguese", "Formas de uso disponíveis:\n{usages}" },
+      { "french", "Utilisations disponibles :\n{usages}" },
+      { "german", "Verfügbare Aufrufe:\n{usages}" },
+      { "hungarian", "Elérhető használatok:\n{usages}" },
+      { "italian", "Utilizzi disponibili:\n{usages}" },
+      { "japanese", "利用可能な使い方:\n{usages}" },
+      { "korean", "사용 가능한 명령 형식:\n{usages}" },
+      { "latam", "Usos disponibles:\n{usages}" },
+      { "polish", "Dostępne użycia:\n{usages}" },
+      { "russian", "Доступные варианты использования:\n{usages}" },
+      { "spanish", "Usos disponibles:\n{usages}" },
+      { "chinese_simplified", "可用用法：\n{usages}" },
+      { "chinese_traditional", "可用用法：\n{usages}" },
       { "thai", "รูปแบบที่ใช้ได้: {usages}" },
-      { "turkish", "Kullanılabilir kullanımlar: {usages}" },
-      { "ukrainian", "Доступні варіанти використання: {usages}" },
-      { "vietnamese", "Cách sử dụng có sẵn: {usages}" }
+      { "turkish", "Kullanılabilir kullanımlar:\n{usages}" },
+      { "ukrainian", "Доступні варіанти використання:\n{usages}" },
+      { "vietnamese", "Cách sử dụng có sẵn:\n{usages}" }
     });
 
     LocalizationService.NewKey("cmd_ambiguous_overload", new Dictionary<string, string> {
