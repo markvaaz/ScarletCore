@@ -15,18 +15,11 @@ namespace ScarletCore.Services;
 /// <summary>
 /// Context passed to command handlers.
 /// </summary>
-public sealed class CommandContext {
-  public Entity MessageEntity { get; }
-  public PlayerData Sender { get; }
-  public string Raw { get; }
-  public string[] Args { get; }
-
-  public CommandContext(Entity messageEntity, PlayerData sender, string raw, string[] args) {
-    MessageEntity = messageEntity;
-    Sender = sender;
-    Raw = raw;
-    Args = args;
-  }
+public sealed class CommandContext(Entity messageEntity, PlayerData sender, string raw, string[] args) {
+  public Entity MessageEntity { get; } = messageEntity;
+  public PlayerData Sender { get; } = sender;
+  public string Raw { get; } = raw;
+  public string[] Args { get; } = args;
 
   public void Reply(string message) {
     if (Sender != null) MessageService.SendRaw(Sender, message.Format());
@@ -43,6 +36,17 @@ public sealed class CommandContext {
   public void ReplyInfo(string message) {
     if (Sender != null) MessageService.SendRaw(Sender, message.FormatInfo());
   }
+
+  public void ReplySuccess(string message) {
+    if (Sender != null) MessageService.SendRaw(Sender, message.FormatSuccess());
+  }
+
+  public void ReplyLocalized(string key) {
+    if (Sender != null) {
+      var localized = LocalizationService.Get(Sender, key);
+      MessageService.SendRaw(Sender, localized.Format());
+    }
+  }
 }
 
 /// <summary>
@@ -53,14 +57,17 @@ internal sealed class CommandInfo {
   public SCommandAttribute Attribute { get; set; }
   public bool GroupAdminOnly { get; set; }
   public Assembly Assembly { get; set; }
+  public string GroupName { get; set; } // null if no group
 }
 
 /// <summary>
 /// Responsible for scanning command classes, detecting `.group` messages and invoking handlers.
 /// Supports N parameters with optional and required parameters using default values.
+/// Now supports commands without groups - can be invoked directly as `.command`
 /// </summary>
 public static class CommandService {
   private static readonly Dictionary<string, Dictionary<string, List<CommandInfo>>> _groups = new(StringComparer.OrdinalIgnoreCase);
+  private static readonly Dictionary<string, List<CommandInfo>> _noGroupCommands = new(StringComparer.OrdinalIgnoreCase);
   private static readonly Dictionary<string, Assembly> _groupToAssembly = new(StringComparer.OrdinalIgnoreCase);
   private static bool _initialized = false;
 
@@ -74,7 +81,7 @@ public static class CommandService {
     });
 
     _initialized = true;
-    Log.Info($"CommandService initialized with {_groups.Count} groups");
+    Log.Info($"CommandService initialized with {_groups.Count} groups and {_noGroupCommands.Count} standalone commands");
   }
 
   /// <summary>
@@ -91,57 +98,96 @@ public static class CommandService {
   public static void RegisterAssembly(Assembly assembly) {
     foreach (var type in assembly.GetTypes()) {
       var grpAttr = type.GetCustomAttribute<SCommandGroupAttribute>();
-      if (grpAttr == null) continue;
 
-      var groupName = grpAttr.Group.ToLower();
-      var groupAdminOnly = grpAttr.AdminOnly;
+      if (grpAttr != null) {
+        // Has group attribute - register as grouped commands
+        var groupName = grpAttr.Group.ToLower();
+        var groupAdminOnly = grpAttr.AdminOnly;
 
-      // Register main group name
-      if (!_groups.ContainsKey(groupName)) {
-        _groups[groupName] = new Dictionary<string, List<CommandInfo>>(StringComparer.OrdinalIgnoreCase);
-        _groupToAssembly[groupName] = assembly;
-      }
-
-      // Register group aliases
-      foreach (var alias in grpAttr.Aliases) {
-        var aliasLower = alias.ToLower();
-        if (!_groups.ContainsKey(aliasLower)) {
-          _groups[aliasLower] = _groups[groupName];
-          _groupToAssembly[aliasLower] = assembly;
-        }
-      }
-
-      foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)) {
-        var cmdAttr = method.GetCustomAttribute<SCommandAttribute>();
-        if (cmdAttr == null) continue;
-
-        // Generate usage if empty
-        if (string.IsNullOrEmpty(cmdAttr.Usage)) {
-          cmdAttr.Usage = GenerateUsage(groupName, cmdAttr.Name, method);
+        // Register main group name
+        if (!_groups.ContainsKey(groupName)) {
+          _groups[groupName] = new Dictionary<string, List<CommandInfo>>(StringComparer.OrdinalIgnoreCase);
+          _groupToAssembly[groupName] = assembly;
         }
 
-        var cmdInfo = new CommandInfo {
-          Method = method,
-          Attribute = cmdAttr,
-          GroupAdminOnly = groupAdminOnly,
-          Assembly = assembly
-        };
-
-        var cmdName = cmdAttr.Name.ToLower();
-        if (!_groups[groupName].TryGetValue(cmdName, out var list)) {
-          list = new List<CommandInfo>();
-          _groups[groupName][cmdName] = list;
-        }
-        list.Add(cmdInfo);
-
-        // Register command aliases
-        foreach (var alias in cmdAttr.Aliases) {
+        // Register group aliases
+        foreach (var alias in grpAttr.Aliases) {
           var aliasLower = alias.ToLower();
-          if (!_groups[groupName].TryGetValue(aliasLower, out var aliasList)) {
-            aliasList = new List<CommandInfo>();
-            _groups[groupName][aliasLower] = aliasList;
+          if (!_groups.ContainsKey(aliasLower)) {
+            _groups[aliasLower] = _groups[groupName];
+            _groupToAssembly[aliasLower] = assembly;
           }
-          aliasList.Add(cmdInfo);
+        }
+
+        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)) {
+          var cmdAttr = method.GetCustomAttribute<SCommandAttribute>();
+          if (cmdAttr == null) continue;
+
+          // Generate usage if empty
+          if (string.IsNullOrEmpty(cmdAttr.Usage)) {
+            cmdAttr.Usage = GenerateUsage(groupName, cmdAttr.Name, method);
+          }
+
+          var cmdInfo = new CommandInfo {
+            Method = method,
+            Attribute = cmdAttr,
+            GroupAdminOnly = groupAdminOnly,
+            Assembly = assembly,
+            GroupName = groupName
+          };
+
+          var cmdName = cmdAttr.Name.ToLower();
+          if (!_groups[groupName].TryGetValue(cmdName, out var list)) {
+            list = [];
+            _groups[groupName][cmdName] = list;
+          }
+          list.Add(cmdInfo);
+
+          // Register command aliases
+          foreach (var alias in cmdAttr.Aliases) {
+            var aliasLower = alias.ToLower();
+            if (!_groups[groupName].TryGetValue(aliasLower, out var aliasList)) {
+              aliasList = [];
+              _groups[groupName][aliasLower] = aliasList;
+            }
+            aliasList.Add(cmdInfo);
+          }
+        }
+      } else {
+        // No group attribute - register as standalone commands
+        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)) {
+          var cmdAttr = method.GetCustomAttribute<SCommandAttribute>();
+          if (cmdAttr == null) continue;
+
+          // Generate usage if empty (no group prefix)
+          if (string.IsNullOrEmpty(cmdAttr.Usage)) {
+            cmdAttr.Usage = GenerateUsage(null, cmdAttr.Name, method);
+          }
+
+          var cmdInfo = new CommandInfo {
+            Method = method,
+            Attribute = cmdAttr,
+            GroupAdminOnly = false,
+            Assembly = assembly,
+            GroupName = null
+          };
+
+          var cmdName = cmdAttr.Name.ToLower();
+          if (!_noGroupCommands.TryGetValue(cmdName, out var list)) {
+            list = [];
+            _noGroupCommands[cmdName] = list;
+          }
+          list.Add(cmdInfo);
+
+          // Register command aliases
+          foreach (var alias in cmdAttr.Aliases) {
+            var aliasLower = alias.ToLower();
+            if (!_noGroupCommands.TryGetValue(aliasLower, out var aliasList)) {
+              aliasList = [];
+              _noGroupCommands[aliasLower] = aliasList;
+            }
+            aliasList.Add(cmdInfo);
+          }
         }
       }
     }
@@ -172,7 +218,6 @@ public static class CommandService {
     var commandsToRemove = new List<(string group, string command)>();
     foreach (var groupKvp in _groups) {
       foreach (var cmdKvp in groupKvp.Value) {
-        // cmdKvp.Value is List<CommandInfo>
         if (cmdKvp.Value.Any(ci => ci.Assembly == assembly)) {
           commandsToRemove.Add((groupKvp.Key, cmdKvp.Key));
         }
@@ -188,12 +233,27 @@ public static class CommandService {
       }
     }
 
+    // Remove standalone commands from this assembly
+    var standaloneToRemove = new List<string>();
+    foreach (var cmdKvp in _noGroupCommands) {
+      if (cmdKvp.Value.Any(ci => ci.Assembly == assembly)) {
+        standaloneToRemove.Add(cmdKvp.Key);
+      }
+    }
+
+    foreach (var cmdName in standaloneToRemove) {
+      if (_noGroupCommands.TryGetValue(cmdName, out var list)) {
+        list.RemoveAll(ci => ci.Assembly == assembly);
+        if (list.Count == 0) _noGroupCommands.Remove(cmdName);
+      }
+    }
+
     Log.Info($"Unregistered commands from assembly: {assembly.GetName().Name} ({groupsToRemove.Count} groups removed)");
   }
 
   private static string GenerateUsage(string group, string command, MethodInfo method) {
     var parameters = method.GetParameters();
-    var usage = $".{group} {command}";
+    var usage = group != null ? $".{group} {command}" : $".{command}";
 
     foreach (var param in parameters) {
       // Skip CommandContext parameter
@@ -240,7 +300,7 @@ public static class CommandService {
 
     if (sb.Length > 0) parts.Add(sb.ToString());
 
-    return parts.ToArray();
+    return [.. parts];
   }
 
   private static string GetFriendlyTypeName(Type type) {
@@ -268,27 +328,11 @@ public static class CommandService {
       if (!text.StartsWith('.')) return; // not a command
 
       // remove leading dot and split (preserve quoted segments)
-      var withoutDot = text.Substring(1).Trim();
+      var withoutDot = text[1..].Trim();
       var parts = SplitArgumentsPreservingQuotes(withoutDot);
       if (parts == null || parts.Length == 0) return;
 
-      var group = parts[0].ToLower();
-
-      // Example usage: .sc help 1 -> group=sc, command=help, args=[1]
-      var command = parts.Length > 1 ? parts[1].ToLower() : string.Empty;
-      var args = parts.Length > 2 ? parts.Skip(2).ToArray() : Array.Empty<string>();
-
-      if (!_groups.TryGetValue(group, out var cmds)) return;
-      if (string.IsNullOrEmpty(command)) {
-        // no command provided, just notify — let other handlers process
-        Log.Info($"Command group '{group}' invoked without subcommand.");
-        return;
-      }
-
-      if (!cmds.TryGetValue(command, out var cmdInfos)) {
-        Log.Info($"Unknown command '{command}' in group '{group}'");
-        return;
-      }
+      var firstPart = parts[0].ToLower();
 
       // resolve sender (best-effort)
       PlayerData player = null;
@@ -299,103 +343,78 @@ public static class CommandService {
         } catch { }
       }
 
-      var ctx = new CommandContext(messageEntity, player, withoutDot, args);
+      // Try as standalone command first (no group)
+      if (_noGroupCommands.TryGetValue(firstPart, out var standaloneCmdInfos)) {
+        var args = parts.Length > 1 ? [.. parts.Skip(1)] : Array.Empty<string>();
+        var ctx = new CommandContext(messageEntity, player, withoutDot, args);
 
-      // Select best overload among cmdInfos
-      if (!SelectBestCommand(cmdInfos, ctx, args, out var selected, out var invokeArgs, out var selectError)) {
-        if (!string.IsNullOrEmpty(selectError)) ctx.ReplyError(selectError);
-        // Provide usages for ambiguity or parse errors (highlight usages)
-        var usages = string.Join(" | ", cmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
-        if (!string.IsNullOrEmpty(usages)) ctx.ReplyInfo($"Available usages: ~{usages}~");
-        // Do not destroy message here so other command frameworks can handle it
+        if (!SelectBestCommand(standaloneCmdInfos, ctx, args, out var selected, out var invokeArgs, out var selectError)) {
+          if (!string.IsNullOrEmpty(selectError)) ctx.ReplyError(selectError);
+          var usages = string.Join(" | ", standaloneCmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
+          if (!string.IsNullOrEmpty(usages)) ctx.ReplyInfo($"Available usages: ~{usages}~");
+          return;
+        }
+
+        var requiresAdmin = selected.GroupAdminOnly || selected.Attribute.AdminOnly;
+        if (requiresAdmin && (player == null || !player.IsAdmin)) {
+          ctx.ReplyError("~This command requires administrator privileges.~");
+          return;
+        }
+
+        try {
+          selected.Method.Invoke(null, invokeArgs);
+        } catch (Exception invokeEx) {
+          Log.Error($"Error invoking standalone command {firstPart}: {invokeEx}");
+          ctx.ReplyError("~An error occurred while executing the command.~");
+        }
+
+        messageEntity.Destroy(true);
         return;
       }
 
-      // Check admin permissions for the selected overload
-      var requiresAdmin = selected.GroupAdminOnly || selected.Attribute.AdminOnly;
-      if (requiresAdmin && (player == null || !player.IsAdmin)) {
-        ctx.ReplyError("~This command requires administrator privileges.~");
-        // Do not destroy; allow other frameworks to handle the message
+      // Try as grouped command (.group command args)
+      var group = firstPart;
+      var command = parts.Length > 1 ? parts[1].ToLower() : string.Empty;
+      var groupArgs = parts.Length > 2 ? [.. parts.Skip(2)] : Array.Empty<string>();
+
+      if (!_groups.TryGetValue(group, out var cmds)) return;
+
+      if (string.IsNullOrEmpty(command)) {
+        Log.Info($"Command group '{group}' invoked without subcommand.");
+        return;
+      }
+
+      if (!cmds.TryGetValue(command, out var cmdInfos)) {
+        Log.Info($"Unknown command '{command}' in group '{group}'");
+        return;
+      }
+
+      var groupCtx = new CommandContext(messageEntity, player, withoutDot, groupArgs);
+
+      if (!SelectBestCommand(cmdInfos, groupCtx, groupArgs, out var selectedCmd, out var groupInvokeArgs, out var groupSelectError)) {
+        if (!string.IsNullOrEmpty(groupSelectError)) groupCtx.ReplyError(groupSelectError);
+        var usages = string.Join(" | ", cmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
+        if (!string.IsNullOrEmpty(usages)) groupCtx.ReplyInfo($"Available usages: ~{usages}~");
+        return;
+      }
+
+      var groupRequiresAdmin = selectedCmd.GroupAdminOnly || selectedCmd.Attribute.AdminOnly;
+      if (groupRequiresAdmin && (player == null || !player.IsAdmin)) {
+        groupCtx.ReplyError("~This command requires administrator privileges.~");
         return;
       }
 
       try {
-        selected.Method.Invoke(null, invokeArgs);
+        selectedCmd.Method.Invoke(null, groupInvokeArgs);
       } catch (Exception invokeEx) {
         Log.Error($"Error invoking command {group} {command}: {invokeEx}");
-        ctx.ReplyError("~An error occurred while executing the command.~");
+        groupCtx.ReplyError("~An error occurred while executing the command.~");
       }
 
-      // hide command message from further processing
       messageEntity.Destroy(true);
     } catch (Exception ex) {
       Log.Error($"CommandService.HandleChat failed: {ex}");
     }
-  }
-
-  private static bool TryPrepareInvokeArgs(MethodInfo method, CommandContext ctx, string[] args, out object[] invokeArgs, out string errorMsg) {
-    errorMsg = null;
-    var parameters = method.GetParameters();
-    invokeArgs = new object[parameters.Length];
-
-    // Track if first parameter is CommandContext
-    int contextParamCount = 0;
-    if (parameters.Length > 0 && parameters[0].ParameterType == typeof(CommandContext)) {
-      invokeArgs[0] = ctx;
-      contextParamCount = 1;
-    }
-
-    // Map remaining parameters to args
-    for (int i = contextParamCount; i < parameters.Length; i++) {
-      var param = parameters[i];
-      var argIndex = i - contextParamCount;
-      var hasValue = argIndex < args.Length;
-      var providedValue = hasValue ? args[argIndex] : null;
-
-      // Check if parameter is optional
-      bool isOptional = param.HasDefaultValue;
-
-      // If parameter is required and no value provided, error
-      if (!isOptional && !hasValue) {
-        errorMsg = $"Missing required parameter: **{param.Name}** (~{GetFriendlyTypeName(param.ParameterType)}~)";
-        return false;
-      }
-
-      // Special-case PlayerData: resolve player by name via PlayerService
-      if (param.ParameterType == typeof(PlayerData)) {
-        if (!hasValue) {
-          if (!isOptional) {
-            errorMsg = $"Missing required parameter: **{param.Name}** (~{GetFriendlyTypeName(param.ParameterType)}~)";
-            return false;
-          }
-          invokeArgs[i] = param.DefaultValue;
-          continue;
-        }
-
-        if (!PlayerService.TryGetByName(providedValue, out var playerData)) {
-          errorMsg = $"Player not found: ~{providedValue}~";
-          return false;
-        }
-
-        invokeArgs[i] = playerData;
-        continue;
-      }
-
-      // Try to parse the value for other parameter types
-      if (!TryParseParameter(param.ParameterType, providedValue, out var parsedValue)) {
-        if (!isOptional) {
-          errorMsg = $"Invalid value for parameter '**{param.Name}**'. Expected ~{GetFriendlyTypeName(param.ParameterType)}~.";
-          return false;
-        }
-        // Use default value for optional parameter
-        invokeArgs[i] = param.DefaultValue;
-        continue;
-      }
-
-      invokeArgs[i] = parsedValue;
-    }
-
-    return true;
   }
 
   private static bool TryParseParameter(Type paramType, string value, out object result) {
