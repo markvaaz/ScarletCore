@@ -325,26 +325,9 @@ public static class MessageService {
   }
 
   /// <summary>
-  /// Sends a progress bar message
-  /// </summary>
-  public static void SendProgressBar(User user, string label, int current, int max, int barLength = 20) {
-    var progressMessage = label.AsProgressBar(current, max, barLength);
-    var messageBytes = new FixedString512Bytes(progressMessage.Format());
-    ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
-  }
-
-  /// <summary>
-  /// Sends a progress bar message to a player
-  /// </summary>
-  public static void SendProgressBar(PlayerData player, string label, int current, int max, int barLength = 20) {
-    var user = player.UserEntity.Read<User>();
-    SendProgressBar(user, label, current, max, barLength);
-  }
-
-  /// <summary>
   /// Sends a colored message to players within a certain range of a position
   /// </summary>
-  public static void SendToPlayersInRadiusColored(Unity.Mathematics.float3 position, float radius, string message, string color) {
+  public static void SendToPlayersInRadiusColored(float3 position, float radius, string message, string color) {
     var playersInRange = PlayerService.GetAllConnected()
       .Where(p => MathUtility.IsInRange(p.CharacterEntity, position, radius));
 
@@ -381,65 +364,6 @@ public static class MessageService {
   /// </summary>
   public static void SendConditional(PlayerData player, string trueMessage, string falseMessage, System.Func<bool> condition) {
     Send(player, condition() ? trueMessage : falseMessage);
-  }  /// <summary>
-     /// Creates a boxed message with borders
-     /// </summary>
-  public static void SendBoxed(User user, string title, string content, string color = null) {
-    color ??= RichTextFormatter.White;
-
-    var boxedTitle = title.AsBoxedTitle().WithColor(color);
-    var titleLines = boxedTitle.Split('\n');
-
-    foreach (var line in titleLines) {
-      var messageBytes = new FixedString512Bytes(line.Format());
-      ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
-    }
-
-    var boxedContent = content.AsBoxedContent(title).WithColor(color);
-    var contentLines = boxedContent.Split('\n');
-
-    foreach (var line in contentLines) {
-      var messageBytes = new FixedString512Bytes(line.Format());
-      ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
-    }
-  }
-
-  /// <summary>
-  /// Creates a boxed message with borders for a player
-  /// </summary>
-  public static void SendBoxed(PlayerData player, string title, string content, string color = null) {
-    var user = player.UserEntity.Read<User>();
-    SendBoxed(user, title, content, color);
-  }
-
-  /// <summary>
-  /// Sends a separator line
-  /// </summary>
-  public static void SendSeparator(User user, char character = '-', int length = 40, string color = null) {
-    color ??= RichTextFormatter.Gray;
-    var separatorMessage = character.AsSeparator(length);
-    if (color != RichTextFormatter.Gray) {
-      separatorMessage = new string(character, length).WithColor(color);
-    }
-    var messageBytes = new FixedString512Bytes(separatorMessage.Format());
-    ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
-  }
-
-  /// <summary>
-  /// Sends a separator line to a player
-  /// </summary>
-  public static void SendSeparator(PlayerData player, char character = '-', int length = 40, string color = null) {
-    var user = player.UserEntity.Read<User>();
-    SendSeparator(user, character, length, color);
-  }
-
-  /// <summary>
-  /// Sends a countdown message to all players
-  /// </summary>
-  public static void SendCountdown(int seconds, string action) {
-    var countdownMessage = action.AsCountdown(seconds);
-    var messageBytes = new FixedString512Bytes(countdownMessage.Format());
-    ServerChatUtils.SendSystemMessageToAllClients(GameSystems.EntityManager, ref messageBytes);
   }
 
   #endregion
