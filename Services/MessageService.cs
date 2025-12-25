@@ -335,6 +335,26 @@ public static class MessageService {
   }
 
   /// <summary>
+  /// Sends a localized message to a player using player's preferred language (key.Localize(player)).
+  /// </summary>
+  public static void SendLocalized(PlayerData player, string localizationKey) {
+    var text = localizationKey.Localize(player);
+    Send(player, text);
+  }
+
+  /// <summary>
+  /// Sends a localized message individually to all players using each player's preferred language.
+  /// </summary>
+  public static void SendAllLocalized(string localizationKey) {
+    foreach (var player in PlayerService.AllPlayers) {
+      try {
+        var text = localizationKey.Localize(player);
+        Send(player, text);
+      } catch { }
+    }
+  }
+
+  /// <summary>
   /// Sends a message only if the condition is met
   /// </summary>
   public static void SendConditional(User user, string message, System.Func<bool> condition) {
