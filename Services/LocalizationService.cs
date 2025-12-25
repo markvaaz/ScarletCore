@@ -266,6 +266,37 @@ public static class LocalizationService {
   }
 
   /// <summary>
+  /// Loads multiple custom keys from a dictionary organized by language.
+  /// Expected format:
+  /// {
+  ///   "portuguese": { "help message": "mensagem de ajuda" },
+  ///   "english": { "help message": "help message" }
+  /// }
+  /// The outer key is the language code and the value is a map of (key -> translated text).
+  /// </summary>
+  public static void LoadCustomKeys(IDictionary<string, IDictionary<string, string>> languageMap) {
+    if (languageMap == null || languageMap.Count == 0) return;
+
+    foreach (var langEntry in languageMap) {
+      if (string.IsNullOrWhiteSpace(langEntry.Key) || langEntry.Value == null) continue;
+
+      var lang = langEntry.Key.ToLower().Trim();
+
+      foreach (var kv in langEntry.Value) {
+        if (kv.Key == null || kv.Value == null) continue;
+
+        var normalizedKey = kv.Key.Trim();
+        if (string.IsNullOrEmpty(normalizedKey)) continue;
+
+        var map = _customKeys.GetOrAdd(normalizedKey, _ => new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        map[lang] = kv.Value;
+      }
+    }
+
+    Log.Info($"Loaded custom localization keys: {_customKeys.Count}");
+  }
+
+  /// <summary>
   /// Get a localized string for a player from a custom key. Falls back to server language, then first available language.
   /// Returns the key string if not found.
   /// </summary>
