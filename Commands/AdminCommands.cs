@@ -5,14 +5,8 @@ namespace ScarletCore.Commands;
 
 [SCommandGroup("scarletcore", aliases: ["sc"], adminOnly: true)]
 internal static class AdminCommands {
-  [SCommand("setlanguage", Description = "Set localization language", Usage = ".sc setlanguage <language>")]
+  [SCommand("setlanguage", description: "Set localization language")]
   public static void SetLanguage(CommandContext ctx, string language = "") {
-    if (string.IsNullOrWhiteSpace(language)) {
-      ctx.ReplyError("Usage: .sc setlanguage <language>");
-      ctx.ReplyInfo($"Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}");
-      return;
-    }
-
     var newLanguage = language.ToLower().Trim();
     if (!LocalizationService.IsLanguageAvailable(newLanguage)) {
       ctx.ReplyError($"Language not supported: {newLanguage}");
