@@ -1,7 +1,5 @@
-using ScarletCore.Data;
 using ScarletCore.Services;
 using ScarletCore.Utils;
-using Unity.Mathematics;
 
 namespace ScarletCore.Commands;
 
