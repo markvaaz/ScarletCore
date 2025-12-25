@@ -177,15 +177,15 @@ public static class ActionScheduler {
   /// <summary>
   /// Removes all scheduled actions associated with a specific assembly.
   /// </summary>
-  /// <param name="assembly">Assembly whose actions should be removed</param>
+  /// <param name="asm">Assembly whose actions should be removed</param>
   public static void UnregisterAssembly(Assembly assembly) {
-    if (assembly == null) return;
+    var asm = assembly ?? Assembly.GetExecutingAssembly();
     lock (_scheduledActions) {
       // Collect actions to remove
       var toRemove = new List<ScheduledAction>();
       foreach (var action in _scheduledActions) {
         var method = action.Action?.Method ?? action.ActionWithCancel?.Method;
-        if (method != null && method.DeclaringType != null && method.DeclaringType.Assembly == assembly) {
+        if (method != null && method.DeclaringType != null && method.DeclaringType.Assembly == asm) {
           toRemove.Add(action);
         }
       }
