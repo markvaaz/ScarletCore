@@ -17,7 +17,7 @@ public static class RichTextFormatter {
   /// <summary>Green color hex code</summary>
   public static readonly string Green = "#00ff00";
   /// <summary>Blue color hex code</summary>
-  public static readonly string Blue = "#0000ff";
+  public static readonly string Blue = "#4c7cff";
   /// <summary>Yellow color hex code</summary>
   public static readonly string Yellow = "#ffff00";
   /// <summary>Orange color hex code</summary>
@@ -267,92 +267,6 @@ public static class RichTextFormatter {
     return string.IsNullOrEmpty(killerName)
       ? $"{victimName} has died".WithColor(Red)
       : $"{victimName} was killed by {killerName}".WithColor(Red);
-  }
-
-  #endregion
-
-  #region Progress and UI Formatters
-
-  /// <summary>
-  /// Creates a visual progress bar for console output.
-  /// </summary>
-  /// <param name="label">Label for the progress bar</param>
-  /// <param name="current">Current progress value</param>
-  /// <param name="max">Maximum progress value</param>
-  /// <param name="barLength">Length of the progress bar in characters</param>
-  /// <returns>Formatted progress bar with percentage</returns>
-  public static string AsProgressBar(this string label, int current, int max, int barLength = 20) {
-    var percentage = (float)current / max;
-    var filledLength = (int)(percentage * barLength);
-    var emptyLength = barLength - filledLength;
-
-    // Use filled and empty block characters for visual progress
-    var bar = new string('█', filledLength) + new string('░', emptyLength);
-    return $"{label}: [{bar}] {current}/{max} ({percentage:P0})".WithColor(Cyan);
-  }
-
-  /// <summary>
-  /// Creates a boxed title with decorative borders.
-  /// </summary>
-  /// <param name="title">Title text to box</param>
-  /// <returns>Title surrounded by box drawing characters</returns>
-  public static string AsBoxedTitle(this string title) {
-    var border = new string('═', title.Length + 4);
-    return $"╔{border}╗\n║  {title}  ║\n╚{border}╝";
-  }
-
-  /// <summary>
-  /// Creates boxed content with proper padding and borders.
-  /// </summary>
-  /// <param name="content">Content to box</param>
-  /// <param name="title">Title for calculating box width</param>
-  /// <returns>Content lines formatted within box borders</returns>
-  public static string AsBoxedContent(this string content, string title) {
-    var titleLength = title.Length + 4;
-    var lines = content.Split('\n');
-    var result = "";
-
-    // Process each line and add proper padding
-    foreach (var line in lines) {
-      var padding = Math.Max(0, titleLength - line.Length - 2);
-      result += $"║ {line}{new string(' ', padding)} ║\n";
-    }
-
-    return result.TrimEnd('\n');
-  }
-
-  /// <summary>
-  /// Creates a separator line using repeated characters.
-  /// </summary>
-  /// <param name="character">Character to repeat</param>
-  /// <param name="length">Length of the separator</param>
-  /// <returns>Formatted separator line in gray</returns>
-  public static string AsSeparator(this char character, int length = 40) {
-    return new string(character, length).WithColor(Gray);
-  }
-
-  #endregion
-
-  #region Countdown Formatters
-
-  /// <summary>
-  /// Formats countdown messages with appropriate urgency colors.
-  /// Changes color based on time remaining (minutes=warning, seconds=warning, under 10=error).
-  /// </summary>
-  /// <param name="action">Action that will occur</param>
-  /// <param name="seconds">Seconds remaining</param>
-  /// <returns>Formatted countdown message with appropriate color</returns>
-  public static string AsCountdown(this string action, int seconds) {
-    if (seconds > 60) {
-      var minutes = seconds / 60;
-      return $"{action} in {minutes} minute{(minutes != 1 ? "s" : "")}!".AsWarning();
-    } else if (seconds > 10) {
-      return $"{action} in {seconds} seconds!".AsWarning();
-    } else if (seconds > 0) {
-      return $"{action} in {seconds}!".AsError();
-    } else {
-      return $"{action} NOW!".AsError();
-    }
   }
 
   #endregion
