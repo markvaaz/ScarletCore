@@ -340,6 +340,14 @@ public class PlayerData() {
     MessageService.Send(this, message);
   }
 
+  public void SendLocalizedMessage(string key, params object[] args) {
+    var localized = LocalizationService.Get(this, key);
+    if (args != null && args.Length > 0) {
+      localized = string.Format(localized, args);
+    }
+    SendMessage(localized);
+  }
+
   /// <summary>
   /// Dictionary to store custom data from different mods.
   /// Uses the calling assembly name as the key to prevent conflicts between mods.
