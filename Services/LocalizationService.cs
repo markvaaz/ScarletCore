@@ -5,12 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
-using ProjectM.Network;
-using ScarletCore.Data;
-using ScarletCore.Events;
 using ScarletCore.Utils;
+using ScarletCore.Data;
 using Stunlock.Core;
-using Unity.Entities;
+using ScarletCore.Events;
 
 namespace ScarletCore.Services;
 
@@ -23,12 +21,17 @@ public static class LocalizationService {
   /// <summary>
   /// Dictionary mapping localization GUIDs to translated text strings
   /// </summary>
-  private static readonly ConcurrentDictionary<string, string> _translations = [];
+  private static readonly ConcurrentDictionary<string, string> _translations = new();
 
   /// <summary>
   /// Dictionary mapping PrefabGUID hash values to localization GUIDs
   /// </summary>
-  private static readonly ConcurrentDictionary<int, string> _prefabToGuid = [];
+  private static readonly ConcurrentDictionary<int, string> _prefabToGuid = new();
+
+  /// <summary>
+  /// Custom localization keys created at runtime. Key -> (language -> text)
+  /// </summary>
+  private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _customKeys = new(StringComparer.OrdinalIgnoreCase);
 
   /// <summary>
   /// Read-only view of translations for safe external access
@@ -91,14 +94,10 @@ public static class LocalizationService {
   public static void Initialize() {
     var language = Plugin.Settings.Get<string>("PrefabLocalizationLanguage") ?? "english";
 
-    if (_initialized) {
-      LoadLanguage(language);
-      return;
-    }
-
     try {
       LoadPrefabMapping();
       LoadLanguage(language);
+      EventManager.On(PlayerEvents.PlayerJoined, CheckLanguageOnJoin);
       _initialized = true;
       Log.Info($"LocalizationService initialized with {_translations.Count} translations and {PrefabMappings.Count} prefab mappings");
     } catch (Exception ex) {
@@ -106,6 +105,20 @@ public static class LocalizationService {
     }
   }
 
+  private static void CheckLanguageOnJoin(PlayerData player) {
+    try {
+      if (player == null) return;
+
+      var lang = GetPlayerLanguage(player);
+      if (!string.IsNullOrWhiteSpace(lang)) return; // already set
+
+      // Prompt the player to choose a language
+      var available = string.Join(", ", AvailableServerLanguages);
+      player.SendMessage($"Welcome! Please set your language using ~.setlang <language>~.\nAvailable: {available}");
+    } catch (Exception ex) {
+      Log.Error($"CheckLanguageOnJoin failed: {ex}");
+    }
+  }
 
   /// <summary>
   /// Load a language file from embedded resources.
@@ -233,6 +246,90 @@ public static class LocalizationService {
   }
 
   /// <summary>
+  /// Register a new custom localization key with translations for multiple languages.
+  /// Language codes should match the server/player language keys (e.g. "english", "portuguese").
+  /// </summary>
+  public static void NewKey(string key, IDictionary<string, string> translations) {
+    if (string.IsNullOrWhiteSpace(key) || translations == null || translations.Count == 0) return;
+
+    var normalizedKey = key.Trim();
+    var map = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var kv in translations) {
+      if (string.IsNullOrWhiteSpace(kv.Key) || kv.Value == null) continue;
+      map[kv.Key.ToLower().Trim()] = kv.Value;
+    }
+
+    if (map.IsEmpty) return;
+
+    _customKeys[normalizedKey] = map;
+  }
+
+  /// <summary>
+  /// Get a localized string for a player from a custom key. Falls back to server language, then first available language.
+  /// Returns the key string if not found.
+  /// </summary>
+  public static string Get(PlayerData player, string key) {
+    if (string.IsNullOrWhiteSpace(key)) return string.Empty;
+    if (!_initialized) Initialize();
+
+    var normalizedKey = key.Trim();
+
+    if (!_customKeys.TryGetValue(normalizedKey, out var translations) || translations == null || translations.IsEmpty) {
+      return key;
+    }
+
+    // Determine player language: try per-player, then DefaultPlayerLanguage setting, then server language
+    var playerLang = GetPlayerLanguage(player) ?? Plugin.Settings.Get<string>("DefaultPlayerLanguage") ?? _currentServerLanguage;
+    playerLang = playerLang.ToLower().Trim();
+
+    if (translations.TryGetValue(playerLang, out var text) && !string.IsNullOrEmpty(text)) return text;
+
+    if (!string.Equals(playerLang, _currentServerLanguage, StringComparison.OrdinalIgnoreCase) && translations.TryGetValue(_currentServerLanguage, out var serverText) && !string.IsNullOrEmpty(serverText)) return serverText;
+
+    // Last resort: return first available translation
+    var first = translations.Values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
+    return first ?? key;
+  }
+
+  /// <summary>
+  /// Set a player's preferred language. Stored using PlayerData.SetData for this assembly.
+  /// </summary>
+  public static void SetPlayerLanguage(PlayerData player, string language) {
+    if (player == null) return;
+    if (string.IsNullOrWhiteSpace(language)) return;
+
+    try {
+      var lang = language.ToLower().Trim();
+
+      // Load or create the player languages map from the database
+      var map = Plugin.Database.GetOrCreate("player_languages", () => new Dictionary<string, string>());
+      var key = player.PlatformId.ToString();
+      map[key] = lang;
+      Plugin.Database.Save("player_languages", map);
+    } catch (Exception ex) {
+      Log.Error($"Failed to set player language: {ex}");
+    }
+  }
+
+  /// <summary>
+  /// Get a player's preferred language if set, otherwise null.
+  /// </summary>
+  public static string GetPlayerLanguage(PlayerData player) {
+    if (player == null) return null;
+    try {
+      var map = Plugin.Database.Get<Dictionary<string, string>>("player_languages");
+      if (map == null) return null;
+      var key = player.PlatformId.ToString();
+      if (map.TryGetValue(key, out var lang) && !string.IsNullOrWhiteSpace(lang)) return lang.ToLower().Trim();
+      return null;
+    } catch (Exception ex) {
+      Log.Error($"Failed to get player language: {ex}");
+      return null;
+    }
+  }
+
+  /// <summary>
   /// Check if a translation exists for the given GUID.
   /// Useful for validating whether a localization key is present.
   /// </summary>
@@ -273,7 +370,7 @@ public static class LocalizationService {
   /// <returns>Collection of matching GUID-text pairs</returns>
   public static IEnumerable<KeyValuePair<string, string>> SearchTranslations(string searchText) {
     if (!_initialized) Initialize();
-    if (string.IsNullOrEmpty(searchText)) return Enumerable.Empty<KeyValuePair<string, string>>();
+    if (string.IsNullOrEmpty(searchText)) return [];
 
     return Translations.Where(kvp => kvp.Value.Contains(searchText, StringComparison.OrdinalIgnoreCase));
   }
