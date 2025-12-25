@@ -461,7 +461,7 @@ public class Database {
           }
         }
 
-        Log.Info($"Database backup created successfully for '{_databaseName}': {fullBackupPath}");
+        Log.Info($"Database backup created successfully for '{_databaseName}'");
         return fullBackupPath;
       } catch (Exception ex) {
         Log.Error($"Failed to create database backup: {ex.Message}");
