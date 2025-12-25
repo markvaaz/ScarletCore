@@ -304,16 +304,17 @@ public static class CommandService {
       // Select best overload among cmdInfos
       if (!SelectBestCommand(cmdInfos, ctx, args, out var selected, out var invokeArgs, out var selectError)) {
         if (!string.IsNullOrEmpty(selectError)) ctx.ReplyError(selectError);
-        // Provide usages for ambiguity or parse errors
+        // Provide usages for ambiguity or parse errors (highlight usages)
         var usages = string.Join(" | ", cmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
-        if (!string.IsNullOrEmpty(usages)) ctx.ReplyInfo($"Available usages: {usages}");        // Do not destroy message here so other command frameworks can handle it
+        if (!string.IsNullOrEmpty(usages)) ctx.ReplyInfo($"Available usages: ~{usages}~");
+        // Do not destroy message here so other command frameworks can handle it
         return;
       }
 
       // Check admin permissions for the selected overload
       var requiresAdmin = selected.GroupAdminOnly || selected.Attribute.AdminOnly;
       if (requiresAdmin && (player == null || !player.IsAdmin)) {
-        ctx.ReplyError("This command requires administrator privileges.");
+        ctx.ReplyError("~This command requires administrator privileges.~");
         // Do not destroy; allow other frameworks to handle the message
         return;
       }
@@ -322,7 +323,7 @@ public static class CommandService {
         selected.Method.Invoke(null, invokeArgs);
       } catch (Exception invokeEx) {
         Log.Error($"Error invoking command {group} {command}: {invokeEx}");
-        ctx.ReplyError("An error occurred while executing the command.");
+        ctx.ReplyError("~An error occurred while executing the command.~");
       }
 
       // hide command message from further processing
@@ -356,7 +357,7 @@ public static class CommandService {
 
       // If parameter is required and no value provided, error
       if (!isOptional && !hasValue) {
-        errorMsg = $"Missing required parameter: {param.Name} ({param.ParameterType.Name})";
+        errorMsg = $"Missing required parameter: **{param.Name}** (~{GetFriendlyTypeName(param.ParameterType)}~)";
         return false;
       }
 
@@ -364,7 +365,7 @@ public static class CommandService {
       if (param.ParameterType == typeof(PlayerData)) {
         if (!hasValue) {
           if (!isOptional) {
-            errorMsg = $"Missing required parameter: {param.Name} ({param.ParameterType.Name})";
+            errorMsg = $"Missing required parameter: **{param.Name}** (~{GetFriendlyTypeName(param.ParameterType)}~)";
             return false;
           }
           invokeArgs[i] = param.DefaultValue;
@@ -372,7 +373,7 @@ public static class CommandService {
         }
 
         if (!PlayerService.TryGetByName(providedValue, out var playerData)) {
-          errorMsg = $"Player not found: {providedValue}";
+          errorMsg = $"Player not found: ~{providedValue}~";
           return false;
         }
 
@@ -383,7 +384,7 @@ public static class CommandService {
       // Try to parse the value for other parameter types
       if (!TryParseParameter(param.ParameterType, providedValue, out var parsedValue)) {
         if (!isOptional) {
-          errorMsg = $"Invalid value for parameter '{param.Name}'. Expected {param.ParameterType.Name}.";
+          errorMsg = $"Invalid value for parameter '**{param.Name}**'. Expected ~{GetFriendlyTypeName(param.ParameterType)}~.";
           return false;
         }
         // Use default value for optional parameter
@@ -534,7 +535,7 @@ public static class CommandService {
 
       if (!hasValue) {
         if (!isOptional) {
-          errorMsg = $"Missing required parameter: {param.Name} ({param.ParameterType.Name})";
+          errorMsg = $"Missing required parameter: **{param.Name}** (~{GetFriendlyTypeName(param.ParameterType)}~)";
           return false;
         }
         invokeArgs[i] = param.DefaultValue;
@@ -545,7 +546,7 @@ public static class CommandService {
       // PlayerData special handling
       if (param.ParameterType == typeof(PlayerData)) {
         if (!PlayerService.TryGetByName(providedValue, out var playerData)) {
-          errorMsg = $"Player not found: {providedValue}";
+          errorMsg = $"Player not found: ~{providedValue}~";
           return false;
         }
         invokeArgs[i] = playerData;
@@ -555,7 +556,7 @@ public static class CommandService {
 
       // Try parse other types
       if (!TryParseParameter(param.ParameterType, providedValue, out var parsed)) {
-        errorMsg = $"Invalid value for parameter '{param.Name}'. Expected {param.ParameterType.Name}.";
+        errorMsg = $"Invalid value for parameter '**{param.Name}**'. Expected ~{GetFriendlyTypeName(param.ParameterType)}~.";
         return false;
       }
 
@@ -605,7 +606,7 @@ public static class CommandService {
 
     if (bestMatches.Count > 1) {
       // Ambiguous
-      errorMsg = "Ambiguous command overload; multiple matches found.";
+      errorMsg = "~Ambiguous command overload; multiple matches found.~";
       return false;
     }
 
