@@ -409,6 +409,31 @@ public static class LocalizationService {
   }
 
   /// <summary>
+  /// Unregister all custom localization keys for the given assembly (or calling assembly if null).
+  /// Removes entries from the custom key map and returns the number of keys removed.
+  /// </summary>
+  /// <param name="assembly">The assembly whose keys should be removed (null for calling assembly)</param>
+  /// <returns>The number of custom keys removed for the assembly</returns>
+  public static int Dispose(Assembly assembly = null) {
+    if (!_initialized) Initialize();
+
+    assembly ??= Assembly.GetCallingAssembly();
+    var assemblyName = assembly.GetName().Name;
+    var prefix = $"{assemblyName}:";
+
+    var keys = _customKeys.Keys
+      .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+      .ToList();
+
+    var removed = 0;
+    foreach (var k in keys) {
+      if (_customKeys.TryRemove(k, out _)) removed++;
+    }
+
+    return removed;
+  }
+
+  /// <summary>
   /// Set a player's preferred language. Stored using PlayerData.SetData for this assembly.
   /// </summary>
   public static void SetPlayerLanguage(PlayerData player, string language) {
