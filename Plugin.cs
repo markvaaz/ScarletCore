@@ -16,6 +16,7 @@ public class Plugin : BasePlugin {
   public static Plugin Instance { get; private set; }
   public static ManualLogSource LogInstance { get; private set; }
   public static Settings Settings { get; private set; }
+  public static Database Database { get; private set; }
 
   public override void Load() {
     Instance = this;
@@ -26,11 +27,19 @@ public class Plugin : BasePlugin {
     _harmony.PatchAll(System.Reflection.Assembly.GetExecutingAssembly());
 
     Settings = new Settings(MyPluginInfo.PLUGIN_GUID, Instance);
+    Database = new Database(MyPluginInfo.PLUGIN_GUID);
 
     Settings.Section("Language")
-      .Add("language", "english", $"Language code for localization. Available languages: {string.Join(", ", LocalizationService.AvailableLanguages)}");
+      .Add("PrefabLocalizationLanguage", "english", $"Language code for localization. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}")
+      .Add("DefaultPlayerLanguage", "english", $"Default language code for new players. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}");
 
-    GameSystems.OnInitialize(LocalizationService.Initialize);
+    GameSystems.OnInitialize(OnInitialize);
+  }
+
+  private void OnInitialize() {
+    LocalizationService.Initialize();
+    CommandService.Initialize();
+    Log.LogInfo("ScarletCore Services initialized.");
   }
 
   public override bool Unload() {
