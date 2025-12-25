@@ -492,15 +492,15 @@ public static class EventManager {
     return stats;
   }
 
-  public static int UnregisterAssembly(Assembly assembly) {
-    if (assembly == null) return 0;
+  public static int UnregisterAssembly(Assembly assembly = null) {
+    var asm = assembly ?? Assembly.GetExecutingAssembly();
     int removed = 0;
 
     lock (_customLock) {
       foreach (var kv in _customHandlers) {
         var handlers = kv.Value;
         for (int i = handlers.Count - 1; i >= 0; i--) {
-          if (handlers[i].Original.Method?.DeclaringType?.Assembly == assembly) {
+          if (handlers[i].Original.Method?.DeclaringType?.Assembly == asm) {
             handlers.RemoveAt(i);
             removed++;
           }
@@ -512,7 +512,7 @@ public static class EventManager {
     foreach (var kv in _prefixHandlers) {
       var handlers = kv.Value;
       for (int i = handlers.Count - 1; i >= 0; i--) {
-        if (handlers[i].Handler.Method?.DeclaringType?.Assembly == assembly) {
+        if (handlers[i].Handler.Method?.DeclaringType?.Assembly == asm) {
           handlers.RemoveAt(i);
           removed++;
         }
@@ -523,7 +523,7 @@ public static class EventManager {
     foreach (var kv in _postfixHandlers) {
       var handlers = kv.Value;
       for (int i = handlers.Count - 1; i >= 0; i--) {
-        if (handlers[i].Handler.Method?.DeclaringType?.Assembly == assembly) {
+        if (handlers[i].Handler.Method?.DeclaringType?.Assembly == asm) {
           handlers.RemoveAt(i);
           removed++;
         }
@@ -534,7 +534,7 @@ public static class EventManager {
     foreach (var kv in _playerHandlers) {
       var handlers = kv.Value;
       for (int i = handlers.Count - 1; i >= 0; i--) {
-        if (handlers[i].Handler.Method?.DeclaringType?.Assembly == assembly) {
+        if (handlers[i].Handler.Method?.DeclaringType?.Assembly == asm) {
           handlers.RemoveAt(i);
           removed++;
         }
@@ -545,7 +545,7 @@ public static class EventManager {
     foreach (var kv in _serverHandlers) {
       var handlers = kv.Value;
       for (int i = handlers.Count - 1; i >= 0; i--) {
-        if (handlers[i].Handler is Delegate d && d.Method?.DeclaringType?.Assembly == assembly) {
+        if (handlers[i].Handler is Delegate d && d.Method?.DeclaringType?.Assembly == asm) {
           handlers.RemoveAt(i);
           removed++;
         }
