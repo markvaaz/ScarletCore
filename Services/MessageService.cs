@@ -23,6 +23,12 @@ public static class MessageService {
     ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
   }
 
+  public static void SendRaw(PlayerData player, string message) {
+    var user = player.UserEntity.Read<User>();
+    var messageBytes = new FixedString512Bytes(message);
+    ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
+  }
+
   public static void SendAll(string message) {
     var messageBytes = new FixedString512Bytes(message.Format());
     ServerChatUtils.SendSystemMessageToAllClients(GameSystems.EntityManager, ref messageBytes);

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -22,12 +23,22 @@ public static class LocalizationService {
   /// <summary>
   /// Dictionary mapping localization GUIDs to translated text strings
   /// </summary>
-  private static readonly Dictionary<string, string> _translations = new();
+  private static readonly ConcurrentDictionary<string, string> _translations = [];
 
   /// <summary>
   /// Dictionary mapping PrefabGUID hash values to localization GUIDs
   /// </summary>
-  private static readonly Dictionary<int, string> _prefabToGuid = new();
+  private static readonly ConcurrentDictionary<int, string> _prefabToGuid = [];
+
+  /// <summary>
+  /// Read-only view of translations for safe external access
+  /// </summary>
+  public static IReadOnlyDictionary<string, string> Translations => _translations;
+
+  /// <summary>
+  /// Read-only view of prefab mappings for safe external access
+  /// </summary>
+  public static IReadOnlyDictionary<int, string> PrefabMappings => _prefabToGuid;
 
   /// <summary>
   /// Flag indicating whether the service has been initialized
@@ -37,7 +48,7 @@ public static class LocalizationService {
   /// <summary>
   /// The currently loaded language code
   /// </summary>
-  private static string _currentLanguage = "english";
+  private static string _currentServerLanguage = "english";
 
   /// <summary>
   /// Mapping of language codes to their corresponding embedded resource file names
@@ -66,19 +77,19 @@ public static class LocalizationService {
   /// <summary>
   /// Get all available language codes
   /// </summary>
-  public static string[] AvailableLanguages => _languageFileMapping.Keys.ToArray();
+  public static string[] AvailableServerLanguages => [.. _languageFileMapping.Keys];
 
   /// <summary>
   /// Get the current loaded language
   /// </summary>
-  public static string CurrentLanguage => _currentLanguage;
+  public static string CurrentServerLanguage => _currentServerLanguage;
 
   /// <summary>
   /// Initialize the localization service. Loads English by default.
   /// Call this during game initialization to load embedded localization resources.
   /// </summary>
   public static void Initialize() {
-    var language = Plugin.Settings.Get<string>("language") ?? "english";
+    var language = Plugin.Settings.Get<string>("PrefabLocalizationLanguage") ?? "english";
 
     if (_initialized) {
       LoadLanguage(language);
@@ -89,69 +100,12 @@ public static class LocalizationService {
       LoadPrefabMapping();
       LoadLanguage(language);
       _initialized = true;
-      EventManager.On(PrefixEvents.OnChatMessage, (entities) => {
-        foreach (var entity in entities) {
-          HandleLanguageCommand(entity);
-        }
-      });
-      Log.Info($"LocalizationService initialized with {_translations.Count} translations and {_prefabToGuid.Count} prefab mappings");
+      Log.Info($"LocalizationService initialized with {_translations.Count} translations and {PrefabMappings.Count} prefab mappings");
     } catch (Exception ex) {
       Log.Error($"Failed to initialize LocalizationService: {ex}");
     }
   }
 
-  /// <summary>
-  /// Handles the .setlanguage chat command for changing the localization language.
-  /// Only admins can execute this command. Changes the language globally for all translations.
-  /// </summary>
-  /// <param name="messageEntity">The chat message entity containing the command</param>
-  public static void HandleLanguageCommand(Entity messageEntity) {
-    if (!messageEntity.Exists() || !messageEntity.Has<ChatMessageEvent>()) return;
-    var chatMessageEvent = messageEntity.Read<ChatMessageEvent>();
-
-    if (chatMessageEvent.MessageType != ChatMessageType.Local) return;
-
-    var messageText = chatMessageEvent.MessageText.Value;
-
-    if (!messageText.StartsWith(".setlanguage")) return;
-
-    var character = messageEntity.Read<FromCharacter>().Character;
-    var player = character.GetPlayerData();
-
-    if (player == null || !player.IsAdmin) return;
-
-    var parts = messageText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-    if (parts.Length < 2) {
-      LanguageNotFound(player);
-      messageEntity.Destroy(true);
-      return;
-    }
-
-    var newLanguage = parts[1].ToLower();
-
-    if (!LocalizationService.IsLanguageAvailable(newLanguage)) {
-      LanguageNotFound(player);
-      messageEntity.Destroy(true);
-      return;
-    }
-
-    if (LocalizationService.ChangeLanguage(newLanguage)) {
-      Plugin.Settings.Set("language", newLanguage);
-      player.SendMessage($"~ScarletCore~ localization language changed to: {newLanguage}".FormatSuccess());
-      Utils.Log.Info($"ScarletCore localization language changed to: {newLanguage} by admin {player.Name}");
-    } else {
-      player.SendMessage($"Failed to change language to: ~{newLanguage}~".FormatError());
-    }
-
-    messageEntity.Destroy(true);
-  }
-
-  public static void LanguageNotFound(PlayerData player) {
-    var availableLanguages = string.Join(", ", LocalizationService.AvailableLanguages);
-    player.SendMessage($"~**Usage:** '.setlanguage <language_code>'~".FormatError());
-    player.SendMessage($"~Available languages:~ {availableLanguages}".FormatError());
-  }
 
   /// <summary>
   /// Load a language file from embedded resources.
@@ -163,7 +117,7 @@ public static class LocalizationService {
       var normalizedLanguage = language.ToLower().Trim();
 
       if (!_languageFileMapping.TryGetValue(normalizedLanguage, out var fileName)) {
-        Log.Warning($"Language not supported: {language}. Available languages: {string.Join(", ", AvailableLanguages)}");
+        Log.Warning($"Language not supported: {language}. Available languages: {string.Join(", ", AvailableServerLanguages)}");
         return;
       }
 
@@ -198,8 +152,8 @@ public static class LocalizationService {
         }
       }
 
-      _currentLanguage = normalizedLanguage;
-      Log.Info($"Loaded {_translations.Count} translations for language: {normalizedLanguage}");
+      _currentServerLanguage = normalizedLanguage;
+      Log.Info($"Loaded {Translations.Count} translations for language: {normalizedLanguage}");
     } catch (Exception ex) {
       Log.Error($"Error loading language {language}: {ex}");
     }
@@ -233,7 +187,7 @@ public static class LocalizationService {
         }
       }
 
-      Log.Info($"Loaded {_prefabToGuid.Count} prefab mappings");
+      Log.Info($"Loaded {PrefabMappings.Count} prefab mappings");
     } catch (Exception ex) {
       Log.Error($"Error loading prefab mapping: {ex}");
     }
@@ -249,7 +203,7 @@ public static class LocalizationService {
     if (!_initialized) Initialize();
     if (string.IsNullOrEmpty(guid)) return string.Empty;
 
-    return _translations.TryGetValue(guid, out var text) ? text : guid;
+    return Translations.TryGetValue(guid, out var text) ? text : guid;
   }
 
   /// <summary>
@@ -261,7 +215,7 @@ public static class LocalizationService {
   public static string GetText(PrefabGUID prefabGuid) {
     if (!_initialized) Initialize();
 
-    if (_prefabToGuid.TryGetValue(prefabGuid.GuidHash, out var guid)) {
+    if (PrefabMappings.TryGetValue(prefabGuid.GuidHash, out var guid)) {
       return GetText(guid);
     }
 
@@ -286,7 +240,7 @@ public static class LocalizationService {
   /// <returns>True if a translation exists, false otherwise</returns>
   public static bool HasTranslation(string guid) {
     if (!_initialized) Initialize();
-    return !string.IsNullOrEmpty(guid) && _translations.ContainsKey(guid);
+    return !string.IsNullOrEmpty(guid) && Translations.ContainsKey(guid);
   }
 
   /// <summary>
@@ -297,7 +251,7 @@ public static class LocalizationService {
   /// <returns>True if a translation exists, false otherwise</returns>
   public static bool HasTranslation(PrefabGUID prefabGuid) {
     if (!_initialized) Initialize();
-    return _prefabToGuid.ContainsKey(prefabGuid.GuidHash);
+    return PrefabMappings.ContainsKey(prefabGuid.GuidHash);
   }
 
   /// <summary>
@@ -308,7 +262,7 @@ public static class LocalizationService {
   /// <returns>The localization GUID string, or null if not found</returns>
   public static string GetGuidForPrefab(PrefabGUID prefabGuid) {
     if (!_initialized) Initialize();
-    return _prefabToGuid.TryGetValue(prefabGuid.GuidHash, out var guid) ? guid : null;
+    return PrefabMappings.TryGetValue(prefabGuid.GuidHash, out var guid) ? guid : null;
   }
 
   /// <summary>
@@ -321,18 +275,18 @@ public static class LocalizationService {
     if (!_initialized) Initialize();
     if (string.IsNullOrEmpty(searchText)) return Enumerable.Empty<KeyValuePair<string, string>>();
 
-    return _translations.Where(kvp => kvp.Value.Contains(searchText, StringComparison.OrdinalIgnoreCase));
+    return Translations.Where(kvp => kvp.Value.Contains(searchText, StringComparison.OrdinalIgnoreCase));
   }
 
   /// <summary>
   /// Get total count of loaded translations
   /// </summary>
-  public static int TranslationCount => _translations.Count;
+  public static int TranslationCount => Translations.Count;
 
   /// <summary>
   /// Get total count of prefab mappings
   /// </summary>
-  public static int PrefabMappingCount => _prefabToGuid.Count;
+  public static int PrefabMappingCount => PrefabMappings.Count;
 
   /// <summary>
   /// Change the current language at runtime.
