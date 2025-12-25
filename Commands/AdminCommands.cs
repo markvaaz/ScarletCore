@@ -5,7 +5,7 @@ namespace ScarletCore.Commands;
 
 [SCommandGroup("scarletcore", aliases: ["sc"], adminOnly: true)]
 internal static class AdminCommands {
-  [SCommand("setlanguage", description: "Set localization language")]
+  [SCommand("setlanguage", aliases: ["setlang"], description: "Set localization language")]
   public static void SetLanguage(CommandContext ctx, string language = "") {
     var newLanguage = language.ToLower().Trim();
     if (!LocalizationService.IsLanguageAvailable(newLanguage)) {
@@ -17,9 +17,15 @@ internal static class AdminCommands {
     if (LocalizationService.ChangeLanguage(newLanguage)) {
       Plugin.Settings.Set("PrefabLocalizationLanguage", newLanguage);
       ctx.Reply($"~ScarletCore~ localization language changed to: {newLanguage}".FormatSuccess());
-      Utils.Log.Info($"ScarletCore localization language changed to: {newLanguage} by admin {ctx.Sender?.Name}");
+      Log.Info($"ScarletCore localization language changed to: {newLanguage} by admin {ctx.Sender?.Name}");
     } else {
       ctx.ReplyError($"Failed to change language to: {newLanguage}");
     }
+  }
+
+  [SCommand("getlanguage", aliases: ["getlang"], description: "Get current localization language")]
+  public static void GetLanguage(CommandContext ctx) {
+    var current = LocalizationService.CurrentServerLanguage;
+    ctx.ReplyInfo($"~ScarletCore~ current localization language: {current}");
   }
 }
