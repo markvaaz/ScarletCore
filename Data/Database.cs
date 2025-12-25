@@ -87,6 +87,10 @@ public class Database {
     _autoBackupEnabled = false;
   }
 
+  public void UnregisterAssembly() {
+    DisableAutoBackup();
+  }
+
   // Instance handler used for auto-backups. Using `async void` because the
   // event system expects an `Action<string>` and this is fire-and-forget.
   [EventPriority(-999)]
