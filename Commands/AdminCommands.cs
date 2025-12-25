@@ -5,7 +5,7 @@ using Unity.Mathematics;
 
 namespace ScarletCore.Commands;
 
-[SCommandGroup("scarletcore", Aliases = ["sc"], AdminOnly = true)]
+[SCommandGroup("scarletcore", aliases: ["sc"], adminOnly: true)]
 internal static class AdminCommands {
   [SCommand("setlanguage", Description = "Set localization language", Usage = ".sc setlanguage <language>")]
   public static void SetLanguage(CommandContext ctx, string language = "") {
