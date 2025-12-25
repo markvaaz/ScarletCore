@@ -7,14 +7,10 @@ namespace ScarletCore.Services;
 /// Example: [SCommandGroup("sc", Aliases = new[] { "scarlet", "s" }, AdminOnly = true)]
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
-public sealed class SCommandGroupAttribute : Attribute {
-  public string Group { get; }
-  public string[] Aliases { get; set; } = Array.Empty<string>();
-  public bool AdminOnly { get; set; } = false;
-
-  public SCommandGroupAttribute(string group) {
-    Group = group;
-  }
+public sealed class SCommandGroupAttribute(string group, string[] aliases = null, bool adminOnly = false) : Attribute {
+  public string Group { get; } = group;
+  public string[] Aliases { get; set; } = aliases ?? [];
+  public bool AdminOnly { get; set; } = adminOnly;
 }
 
 /// <summary>
@@ -22,14 +18,10 @@ public sealed class SCommandGroupAttribute : Attribute {
 /// Example: [SCommand("help", Aliases = new[] { "h", "?" }, Description = "Shows help")]
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
-public sealed class SCommandAttribute : Attribute {
-  public string Name { get; }
-  public string[] Aliases { get; set; } = Array.Empty<string>();
-  public bool AdminOnly { get; set; } = false;
-  public string Description { get; set; } = string.Empty;
-  public string Usage { get; set; } = string.Empty;
-
-  public SCommandAttribute(string name) {
-    Name = name;
-  }
+public sealed class SCommandAttribute(string name, string[] aliases = null, bool adminOnly = false, string description = "", string usage = "") : Attribute {
+  public string Name { get; } = name;
+  public string[] Aliases { get; set; } = aliases ?? [];
+  public bool AdminOnly { get; set; } = adminOnly;
+  public string Description { get; set; } = description;
+  public string Usage { get; set; } = usage;
 }
