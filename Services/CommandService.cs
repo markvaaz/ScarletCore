@@ -64,6 +64,7 @@ internal sealed class CommandInfo {
 /// Responsible for scanning command classes, detecting `.group` messages and invoking handlers.
 /// Supports N parameters with optional and required parameters using default values.
 /// Now supports commands without groups - can be invoked directly as `.command`
+/// Also supports multi-word commands like `.quest create npc`
 /// </summary>
 public static class CommandService {
   private static readonly Dictionary<string, Dictionary<string, List<CommandInfo>>> _groups = new(StringComparer.OrdinalIgnoreCase);
@@ -74,6 +75,7 @@ public static class CommandService {
   public static void Initialize() {
     if (_initialized) return;
 
+    RegisterLocalizationKeys();
     RegisterCommands();
 
     EventManager.On(PrefixEvents.OnChatMessage, (entities) => {
@@ -93,10 +95,12 @@ public static class CommandService {
   }
 
   /// <summary>
-  /// Registers all commands from a specific assembly.
+  /// Registers all commands from a specific assembly. If `assembly` is null,
+  /// the currently executing assembly will be used.
   /// </summary>
-  public static void RegisterAssembly(Assembly assembly) {
-    foreach (var type in assembly.GetTypes()) {
+  public static void RegisterAssembly(Assembly assembly = null) {
+    var asm = assembly ?? Assembly.GetExecutingAssembly();
+    foreach (var type in asm.GetTypes()) {
       var grpAttr = type.GetCustomAttribute<SCommandGroupAttribute>();
 
       if (grpAttr != null) {
@@ -132,7 +136,7 @@ public static class CommandService {
             Method = method,
             Attribute = cmdAttr,
             GroupAdminOnly = groupAdminOnly,
-            Assembly = assembly,
+            Assembly = asm,
             GroupName = groupName
           };
 
@@ -168,7 +172,7 @@ public static class CommandService {
             Method = method,
             Attribute = cmdAttr,
             GroupAdminOnly = false,
-            Assembly = assembly,
+            Assembly = asm,
             GroupName = null
           };
 
@@ -192,18 +196,20 @@ public static class CommandService {
       }
     }
 
-    Log.Info($"Registered commands from assembly: {assembly.GetName().Name}");
+    Log.Info($"Registered commands from assembly: {asm.GetName().Name}");
   }
 
   /// <summary>
-  /// Unregisters all commands from a specific assembly.
+  /// Unregisters all commands from a specific assembly. If `assembly` is null,
+  /// the currently executing assembly will be used.
   /// </summary>
-  public static void UnregisterAssembly(Assembly assembly) {
+  public static void UnregisterAssembly(Assembly assembly = null) {
+    var asm = assembly ?? Assembly.GetExecutingAssembly();
     var groupsToRemove = new List<string>();
 
     // Find all groups from this assembly
     foreach (var kvp in _groupToAssembly) {
-      if (kvp.Value == assembly) {
+      if (kvp.Value == asm) {
         groupsToRemove.Add(kvp.Key);
       }
     }
@@ -236,19 +242,19 @@ public static class CommandService {
     // Remove standalone commands from this assembly
     var standaloneToRemove = new List<string>();
     foreach (var cmdKvp in _noGroupCommands) {
-      if (cmdKvp.Value.Any(ci => ci.Assembly == assembly)) {
+      if (cmdKvp.Value.Any(ci => ci.Assembly == asm)) {
         standaloneToRemove.Add(cmdKvp.Key);
       }
     }
 
     foreach (var cmdName in standaloneToRemove) {
       if (_noGroupCommands.TryGetValue(cmdName, out var list)) {
-        list.RemoveAll(ci => ci.Assembly == assembly);
+        list.RemoveAll(ci => ci.Assembly == asm);
         if (list.Count == 0) _noGroupCommands.Remove(cmdName);
       }
     }
 
-    Log.Info($"Unregistered commands from assembly: {assembly.GetName().Name} ({groupsToRemove.Count} groups removed)");
+    Log.Info($"Unregistered commands from assembly: {asm.GetName().Name} ({groupsToRemove.Count} groups removed)");
   }
 
   private static string GenerateUsage(string group, string command, MethodInfo method) {
@@ -270,6 +276,16 @@ public static class CommandService {
     }
 
     return usage;
+  }
+
+
+  // Simple template replacement for named placeholders like {paramName}
+  private static string ApplyTemplate(string template, params (string key, string value)[] pairs) {
+    if (string.IsNullOrEmpty(template)) return template;
+    foreach (var (key, value) in pairs) {
+      template = template.Replace("{" + key + "}", value ?? string.Empty);
+    }
+    return template;
   }
 
   // Splits a command line into tokens preserving quoted segments (double quotes).
@@ -316,6 +332,31 @@ public static class CommandService {
     return type.Name.ToLower();
   }
 
+  /// <summary>
+  /// Tries to find a multi-word command match in a dictionary.
+  /// Searches from longest possible match down to single word.
+  /// Returns the matched command key and remaining args.
+  /// </summary>
+  private static bool TryFindMultiWordCommand(Dictionary<string, List<CommandInfo>> commands, string[] parts, int startIndex, out string matchedCommand, out string[] remainingArgs) {
+    matchedCommand = null;
+    remainingArgs = null;
+
+    // Try matching from longest to shortest
+    // e.g., if parts = ["create", "npc", "here", "arg1"]
+    // Try: "create npc here", then "create npc", then "create"
+    for (int wordCount = parts.Length - startIndex; wordCount >= 1; wordCount--) {
+      var candidateCommand = string.Join(" ", parts.Skip(startIndex).Take(wordCount)).ToLower();
+
+      if (commands.ContainsKey(candidateCommand)) {
+        matchedCommand = candidateCommand;
+        remainingArgs = [.. parts.Skip(startIndex + wordCount)];
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   private static void HandleChat(Entity messageEntity) {
     try {
       if (!messageEntity.Exists() || !messageEntity.Has<ChatMessageEvent>()) return;
@@ -344,28 +385,32 @@ public static class CommandService {
       }
 
       // Try as standalone command first (no group)
-      if (_noGroupCommands.TryGetValue(firstPart, out var standaloneCmdInfos)) {
-        var args = parts.Length > 1 ? [.. parts.Skip(1)] : Array.Empty<string>();
-        var ctx = new CommandContext(messageEntity, player, withoutDot, args);
+      // Try multi-word matching for standalone commands
+      if (TryFindMultiWordCommand(_noGroupCommands, parts, 0, out var standaloneCommand, out var standaloneArgs)) {
+        var standaloneCmdInfos = _noGroupCommands[standaloneCommand];
+        var ctx = new CommandContext(messageEntity, player, withoutDot, standaloneArgs);
 
-        if (!SelectBestCommand(standaloneCmdInfos, ctx, args, out var selected, out var invokeArgs, out var selectError)) {
+        if (!SelectBestCommand(standaloneCmdInfos, ctx, standaloneArgs, out var selected, out var invokeArgs, out var selectError)) {
           if (!string.IsNullOrEmpty(selectError)) ctx.ReplyError(selectError);
           var usages = string.Join(" | ", standaloneCmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
-          if (!string.IsNullOrEmpty(usages)) ctx.ReplyInfo($"Available usages: ~{usages}~");
+          if (!string.IsNullOrEmpty(usages)) {
+            var tmpl = LocalizationService.Get(player, "cmd_available_usages");
+            ctx.ReplyInfo(ApplyTemplate(tmpl, ("usages", $"~{usages}~")));
+          }
           return;
         }
 
         var requiresAdmin = selected.GroupAdminOnly || selected.Attribute.AdminOnly;
         if (requiresAdmin && (player == null || !player.IsAdmin)) {
-          ctx.ReplyError("~This command requires administrator privileges.~");
+          ctx.ReplyError(LocalizationService.Get(player, "cmd_requires_admin"));
           return;
         }
 
         try {
           selected.Method.Invoke(null, invokeArgs);
         } catch (Exception invokeEx) {
-          Log.Error($"Error invoking standalone command {firstPart}: {invokeEx}");
-          ctx.ReplyError("~An error occurred while executing the command.~");
+          Log.Error($"Error invoking standalone command {standaloneCommand}: {invokeEx}");
+          ctx.ReplyError(LocalizationService.Get(player, "cmd_execution_error"));
         }
 
         messageEntity.Destroy(true);
@@ -374,41 +419,44 @@ public static class CommandService {
 
       // Try as grouped command (.group command args)
       var group = firstPart;
-      var command = parts.Length > 1 ? parts[1].ToLower() : string.Empty;
-      var groupArgs = parts.Length > 2 ? [.. parts.Skip(2)] : Array.Empty<string>();
 
       if (!_groups.TryGetValue(group, out var cmds)) return;
 
-      if (string.IsNullOrEmpty(command)) {
+      // Try to find multi-word command match starting after the group name
+      if (parts.Length < 2) {
         Log.Info($"Command group '{group}' invoked without subcommand.");
         return;
       }
 
-      if (!cmds.TryGetValue(command, out var cmdInfos)) {
-        Log.Info($"Unknown command '{command}' in group '{group}'");
+      if (!TryFindMultiWordCommand(cmds, parts, 1, out var matchedCommand, out var groupArgs)) {
+        Log.Info($"Unknown command in group '{group}': {string.Join(" ", parts.Skip(1))}");
         return;
       }
 
+      var cmdInfos = cmds[matchedCommand];
       var groupCtx = new CommandContext(messageEntity, player, withoutDot, groupArgs);
 
       if (!SelectBestCommand(cmdInfos, groupCtx, groupArgs, out var selectedCmd, out var groupInvokeArgs, out var groupSelectError)) {
         if (!string.IsNullOrEmpty(groupSelectError)) groupCtx.ReplyError(groupSelectError);
         var usages = string.Join(" | ", cmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
-        if (!string.IsNullOrEmpty(usages)) groupCtx.ReplyInfo($"Available usages: ~{usages}~");
+        if (!string.IsNullOrEmpty(usages)) {
+          var tmpl = LocalizationService.Get(player, "cmd_available_usages");
+          groupCtx.ReplyInfo(ApplyTemplate(tmpl, ("usages", $"~{usages}~")));
+        }
         return;
       }
 
       var groupRequiresAdmin = selectedCmd.GroupAdminOnly || selectedCmd.Attribute.AdminOnly;
       if (groupRequiresAdmin && (player == null || !player.IsAdmin)) {
-        groupCtx.ReplyError("~This command requires administrator privileges.~");
+        groupCtx.ReplyError(LocalizationService.Get(player, "cmd_requires_admin"));
         return;
       }
 
       try {
         selectedCmd.Method.Invoke(null, groupInvokeArgs);
       } catch (Exception invokeEx) {
-        Log.Error($"Error invoking command {group} {command}: {invokeEx}");
-        groupCtx.ReplyError("~An error occurred while executing the command.~");
+        Log.Error($"Error invoking command {group} {matchedCommand}: {invokeEx}");
+        groupCtx.ReplyError(LocalizationService.Get(player, "cmd_execution_error"));
       }
 
       messageEntity.Destroy(true);
@@ -554,7 +602,8 @@ public static class CommandService {
 
       if (!hasValue) {
         if (!isOptional) {
-          errorMsg = $"Missing required parameter: **{param.Name}** (~{GetFriendlyTypeName(param.ParameterType)}~)";
+          var tmpl = LocalizationService.Get(ctx?.Sender, "cmd_missing_required_param");
+          errorMsg = ApplyTemplate(tmpl, ("paramName", param.Name), ("paramType", GetFriendlyTypeName(param.ParameterType)));
           return false;
         }
         invokeArgs[i] = param.DefaultValue;
@@ -565,7 +614,8 @@ public static class CommandService {
       // PlayerData special handling
       if (param.ParameterType == typeof(PlayerData)) {
         if (!PlayerService.TryGetByName(providedValue, out var playerData)) {
-          errorMsg = $"Player not found: ~{providedValue}~";
+          var tmpl = LocalizationService.Get(ctx?.Sender, "cmd_player_not_found");
+          errorMsg = ApplyTemplate(tmpl, ("playerName", providedValue));
           return false;
         }
         invokeArgs[i] = playerData;
@@ -575,7 +625,8 @@ public static class CommandService {
 
       // Try parse other types
       if (!TryParseParameter(param.ParameterType, providedValue, out var parsed)) {
-        errorMsg = $"Invalid value for parameter '**{param.Name}**'. Expected ~{GetFriendlyTypeName(param.ParameterType)}~.";
+        var tmpl = LocalizationService.Get(ctx?.Sender, "cmd_invalid_param");
+        errorMsg = ApplyTemplate(tmpl, ("paramName", param.Name), ("paramType", GetFriendlyTypeName(param.ParameterType)));
         return false;
       }
 
@@ -615,7 +666,7 @@ public static class CommandService {
     if (matches.Count == 0) {
       // prefer first error message that is not null
       var firstErr = viable.Select(v => v.error).FirstOrDefault(e => !string.IsNullOrEmpty(e));
-      errorMsg = firstErr ?? "No suitable overload found for command.";
+      errorMsg = firstErr ?? LocalizationService.Get(ctx?.Sender, "cmd_no_suitable_overload");
       return false;
     }
 
@@ -625,7 +676,7 @@ public static class CommandService {
 
     if (bestMatches.Count > 1) {
       // Ambiguous
-      errorMsg = "~Ambiguous command overload; multiple matches found.~";
+      errorMsg = LocalizationService.Get(ctx?.Sender, "cmd_ambiguous_overload");
       return false;
     }
 
@@ -633,5 +684,178 @@ public static class CommandService {
     selected = best.info;
     invokeArgs = best.invokeArgs;
     return true;
+  }
+
+  // Register localization keys used by CommandService
+  private static void RegisterLocalizationKeys() {
+    // Use simple english and portuguese translations. Calling assembly is used by LocalizationService.
+
+    LocalizationService.NewKey("cmd_requires_admin", new Dictionary<string, string> {
+      { "english", "This command requires administrator privileges." },
+      { "portuguese", "Este comando requer privilégios de administrador." },
+      { "french", "Cette commande nécessite des privilèges d'administrateur." },
+      { "german", "Dieser Befehl erfordert Administratorrechte." },
+      { "hungarian", "Ehhez a parancshoz rendszergazdai jogosultság szükséges." },
+      { "italian", "Questo comando richiede privilegi di amministratore." },
+      { "japanese", "このコマンドは管理者権限が必要です。" },
+      { "korean", "이 명령은 관리자 권한이 필요합니다." },
+      { "latam", "Este comando requiere privilegios de administrador." },
+      { "polish", "Ta komenda wymaga uprawnień administratora." },
+      { "russian", "Для этой команды требуются права администратора." },
+      { "spanish", "Este comando requiere privilegios de administrador." },
+      { "chinese_simplified", "此命令需要管理员权限。" },
+      { "chinese_traditional", "此指令需要管理員權限。" },
+      { "thai", "คำสั่งนี้ต้องการสิทธิ์ผู้ดูแลระบบ" },
+      { "turkish", "Bu komut için yönetici ayrıcalıkları gerekir." },
+      { "ukrainian", "Ця команда вимагає прав адміністратора." },
+      { "vietnamese", "Lệnh này yêu cầu quyền quản trị viên." }
+    });
+
+    LocalizationService.NewKey("cmd_execution_error", new Dictionary<string, string> {
+      { "english", "An error occurred while executing the command." },
+      { "portuguese", "Ocorreu um erro ao executar o comando." },
+      { "french", "Une erreur est survenue lors de l'exécution de la commande." },
+      { "german", "Beim Ausführen des Befehls ist ein Fehler aufgetreten." },
+      { "hungarian", "Hiba történt a parancs végrehajtása közben." },
+      { "italian", "Si è verificato un errore durante l'esecuzione del comando." },
+      { "japanese", "コマンドの実行中にエラーが発生しました。" },
+      { "korean", "명령을 실행하는 중에 오류가 발생했습니다." },
+      { "latam", "Ocurrió un error al ejecutar el comando." },
+      { "polish", "Wystąpił błąd podczas wykonywania polecenia." },
+      { "russian", "Произошла ошибка при выполнении команды." },
+      { "spanish", "Ocurrió un error al ejecutar el comando." },
+      { "chinese_simplified", "执行命令时发生错误。" },
+      { "chinese_traditional", "執行指令時發生錯誤。" },
+      { "thai", "เกิดข้อผิดพลาดขณะเรียกใช้คำสั่ง" },
+      { "turkish", "Komut yürütülürken bir hata oluştu." },
+      { "ukrainian", "Під час виконання команди сталася помилка." },
+      { "vietnamese", "Đã xảy ra lỗi khi thực hiện lệnh." }
+    });
+
+    LocalizationService.NewKey("cmd_available_usages", new Dictionary<string, string> {
+      { "english", "Available usages: {usages}" },
+      { "portuguese", "Formas de uso disponíveis: {usages}" },
+      { "french", "Utilisations disponibles : {usages}" },
+      { "german", "Verfügbare Aufrufe: {usages}" },
+      { "hungarian", "Elérhető használatok: {usages}" },
+      { "italian", "Utilizzi disponibili: {usages}" },
+      { "japanese", "利用可能な使い方: {usages}" },
+      { "korean", "사용 가능한 명령 형식: {usages}" },
+      { "latam", "Usos disponibles: {usages}" },
+      { "polish", "Dostępne użycia: {usages}" },
+      { "russian", "Доступные варианты использования: {usages}" },
+      { "spanish", "Usos disponibles: {usages}" },
+      { "chinese_simplified", "可用用法：{usages}" },
+      { "chinese_traditional", "可用用法：{usages}" },
+      { "thai", "รูปแบบที่ใช้ได้: {usages}" },
+      { "turkish", "Kullanılabilir kullanımlar: {usages}" },
+      { "ukrainian", "Доступні варіанти використання: {usages}" },
+      { "vietnamese", "Cách sử dụng có sẵn: {usages}" }
+    });
+
+    LocalizationService.NewKey("cmd_ambiguous_overload", new Dictionary<string, string> {
+      { "english", "Ambiguous command overload; multiple matches found." },
+      { "portuguese", "Sobrecarga ambígua do comando; múltiplas correspondências encontradas." },
+      { "french", "Surcharge de commande ambiguë ; plusieurs correspondances trouvées." },
+      { "german", "Mehrdeutige Befehlsüberladung; mehrere Treffer gefunden." },
+      { "hungarian", "Többértelmű parancs overload; több egyezés található." },
+      { "italian", "Sovraccarico di comando ambiguo; trovate più corrispondenze." },
+      { "japanese", "あいまいなコマンドのオーバーロードです。複数の一致が見つかりました。" },
+      { "korean", "모호한 명령 오버로드; 여러 일치 항목이 발견되었습니다." },
+      { "latam", "Sobrecarga de comando ambigua; se encontraron múltiples coincidencias." },
+      { "polish", "Niejednoznaczne przeciążenie polecenia; znaleziono wiele dopasowań." },
+      { "russian", "Неоднозначная перегрузка команды; найдено несколько совпадений." },
+      { "spanish", "Sobrecarga de comando ambigua; se encontraron múltiples coincidencias." },
+      { "chinese_simplified", "命令重载不明确；找到多个匹配项。" },
+      { "chinese_traditional", "指令重載不明確；找到多個匹配項。" },
+      { "thai", "การโอเวอร์โหลดคำสั่งไม่ชัดเจน; พบการจับคู่หลายรายการ" },
+      { "turkish", "Belirsiz komut aşırı yüklemesi; birden çok eşleşme bulundu." },
+      { "ukrainian", "Двоозначне перевантаження команди; знайдено кілька збігів." },
+      { "vietnamese", "Overload lệnh không rõ ràng; tìm thấy nhiều kết quả khớp." }
+    });
+
+    LocalizationService.NewKey("cmd_no_suitable_overload", new Dictionary<string, string> {
+      { "english", "No suitable overload found for command." },
+      { "portuguese", "Nenhuma sobrecarga adequada encontrada para o comando." },
+      { "french", "Aucune surcharge adaptée trouvée pour la commande." },
+      { "german", "Keine geeignete Überladung für den Befehl gefunden." },
+      { "hungarian", "Nem található megfelelő overload a parancshoz." },
+      { "italian", "Nessuna overload adatta trovata per il comando." },
+      { "japanese", "コマンドに適したオーバーロードが見つかりませんでした。" },
+      { "korean", "명령에 적합한 오버로드를 찾을 수 없습니다." },
+      { "latam", "No se encontró una sobrecarga adecuada para el comando." },
+      { "polish", "Nie znaleziono odpowiedniego przeciążenia dla polecenia." },
+      { "russian", "Для команды не найдено подходящей перегрузки." },
+      { "spanish", "No se encontró una sobrecarga adecuada para el comando." },
+      { "chinese_simplified", "未找到适合该命令的重载。" },
+      { "chinese_traditional", "未找到適合該指令的重載。" },
+      { "thai", "ไม่พบการโอเวอร์โหลดที่เหมาะสมสำหรับคำสั่ง" },
+      { "turkish", "Komut için uygun bir overload bulunamadı." },
+      { "ukrainian", "Не знайдено відповідного перевантаження для команди." },
+      { "vietnamese", "Không tìm thấy overload phù hợp cho lệnh." }
+    });
+
+    LocalizationService.NewKey("cmd_player_not_found", new Dictionary<string, string> {
+      { "english", "Player not found: {playerName}" },
+      { "portuguese", "Jogador não encontrado: {playerName}" },
+      { "french", "Joueur introuvable : {playerName}" },
+      { "german", "Spieler nicht gefunden: {playerName}" },
+      { "hungarian", "A játékos nem található: {playerName}" },
+      { "italian", "Giocatore non trovato: {playerName}" },
+      { "japanese", "プレイヤーが見つかりません: {playerName}" },
+      { "korean", "플레이어를 찾을 수 없음: {playerName}" },
+      { "latam", "Jugador no encontrado: {playerName}" },
+      { "polish", "Nie znaleziono gracza: {playerName}" },
+      { "russian", "Игрок не найден: {playerName}" },
+      { "spanish", "Jugador no encontrado: {playerName}" },
+      { "chinese_simplified", "未找到玩家：{playerName}" },
+      { "chinese_traditional", "未找到玩家：{playerName}" },
+      { "thai", "ไม่พบผู้เล่น: {playerName}" },
+      { "turkish", "Oyuncu bulunamadı: {playerName}" },
+      { "ukrainian", "Гравця не знайдено: {playerName}" },
+      { "vietnamese", "Không tìm thấy người chơi: {playerName}" }
+    });
+
+    LocalizationService.NewKey("cmd_missing_required_param", new Dictionary<string, string> {
+      { "english", "Missing required parameter: **{paramName}** (~{paramType}~)" },
+      { "portuguese", "Falta parâmetro obrigatório: **{paramName}** (~{paramType}~)" },
+      { "french", "Paramètre requis manquant : **{paramName}** (~{paramType}~)" },
+      { "german", "Fehlender erforderlicher Parameter: **{paramName}** (~{paramType}~)" },
+      { "hungarian", "Hiányzó kötelező paraméter: **{paramName}** (~{paramType}~)" },
+      { "italian", "Manca il parametro richiesto: **{paramName}** (~{paramType}~)" },
+      { "japanese", "必須パラメーターがありません: **{paramName}** (~{paramType}~)" },
+      { "korean", "필수 매개변수가 누락되었습니다: **{paramName}** (~{paramType}~)" },
+      { "latam", "Falta un parámetro requerido: **{paramName}** (~{paramType}~)" },
+      { "polish", "Brak wymaganego parametru: **{paramName}** (~{paramType}~)" },
+      { "russian", "Отсутствует обязательный параметр: **{paramName}** (~{paramType}~)" },
+      { "spanish", "Falta un parámetro requerido: **{paramName}** (~{paramType}~)" },
+      { "chinese_simplified", "缺少必需的参数：**{paramName}** (~{paramType}~)" },
+      { "chinese_traditional", "缺少必要的參數：**{paramName}** (~{paramType}~)" },
+      { "thai", "ขาดพารามิเตอร์ที่จำเป็น: **{paramName}** (~{paramType}~)" },
+      { "turkish", "Gerekli parametre eksik: **{paramName}** (~{paramType}~)" },
+      { "ukrainian", "Відсутній обов'язковий параметр: **{paramName}** (~{paramType}~)" },
+      { "vietnamese", "Thiếu tham số bắt buộc: **{paramName}** (~{paramType}~)" }
+    });
+
+    LocalizationService.NewKey("cmd_invalid_param", new Dictionary<string, string> {
+      { "english", "Invalid value for parameter '**{paramName}**'. Expected ~{paramType}~." },
+      { "portuguese", "Valor inválido para o parâmetro '**{paramName}**'. Esperado ~{paramType}~." },
+      { "french", "Valeur invalide pour le paramètre '**{paramName}**'. Attendu ~{paramType}~." },
+      { "german", "Ungültiger Wert für den Parameter '**{paramName}**'. Erwartet ~{paramType}~." },
+      { "hungarian", "Érvénytelen érték a '**{paramName}**' paraméterhez. Várt ~{paramType}~." },
+      { "italian", "Valore non valido per il parametro '**{paramName}**'. Previsto ~{paramType}~." },
+      { "japanese", "パラメーター '**{paramName}**' の値が無効です。期待される型: ~{paramType}~。" },
+      { "korean", "매개변수 '**{paramName}**'에 대한 잘못된 값입니다. 예상 ~{paramType}~." },
+      { "latam", "Valor inválido para el parámetro '**{paramName}**'. Se esperaba ~{paramType}~." },
+      { "polish", "Nieprawidłowa wartość parametru '**{paramName}**'. Oczekiwano ~{paramType}~." },
+      { "russian", "Неверное значение для параметра '**{paramName}**'. Ожидалось ~{paramType}~." },
+      { "spanish", "Valor inválido para el parámetro '**{paramName}**'. Se esperaba ~{paramType}~." },
+      { "chinese_simplified", "参数 '**{paramName}**' 的值无效。预期 ~{paramType}~。" },
+      { "chinese_traditional", "參數 '**{paramName}**' 的值無效。預期 ~{paramType}~。" },
+      { "thai", "ค่าที่ไม่ถูกต้องสำหรับพารามิเตอร์ '**{paramName}**' คาดหวัง ~{paramType}~" },
+      { "turkish", "'**{paramName}**' parametresi için geçersiz değer. Beklenen ~{paramType}~." },
+      { "ukrainian", "Недійсне значення для параметра '**{paramName}**'. Очікувано ~{paramType}~." },
+      { "vietnamese", "Giá trị không hợp lệ cho tham số '**{paramName}**'. Mong đợi ~{paramType}~." }
+    });
   }
 }
