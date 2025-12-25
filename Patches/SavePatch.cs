@@ -1,9 +1,8 @@
 using HarmonyLib;
 using ProjectM;
 using ScarletCore.Events;
-using UnityEngine;
 
-namespace ScarletCorePatches;
+namespace ScarletCore.Patches;
 
 [HarmonyPatch]
 public static class SavePatch {
