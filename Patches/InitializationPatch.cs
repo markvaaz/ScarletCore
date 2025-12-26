@@ -1,5 +1,6 @@
 using HarmonyLib;
 using ProjectM;
+using ScarletCore.Events;
 using ScarletCore.Systems;
 
 namespace ScarletCore.Patches;
@@ -10,6 +11,7 @@ internal static class InitializationPatch {
   public static void Postfix() {
     if (GameSystems.Initialized) return;
     GameSystems.Initialize();
+    EventManager.Emit(ServerEvents.OnInitialize);
     Plugin.Harmony.Unpatch(typeof(SpawnTeamSystem_OnPersistenceLoad).GetMethod("OnUpdate"), typeof(InitializationPatch).GetMethod("Postfix"));
   }
 }
