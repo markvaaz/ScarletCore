@@ -6,7 +6,7 @@ using System;
 using ScarletCore.Events;
 using ScarletCore.Utils;
 using ScarletCore.Systems;
-using ScarletCore.Services;
+using ScarletCore.Commanding;
 
 namespace ScarletCore.Patches;
 
@@ -23,7 +23,7 @@ public static class ChatMessageSystemPatch {
 
     try {
       if (entities.Length == 0) return;
-      CommandService.HandleMessageEvents(entities);
+      CommandHandler.HandleMessageEvents(entities);
       EventManager.Emit(PrefixEvents.OnChatMessage, entities);
     } catch (Exception e) {
       // Log any exceptions that occur during chat message processing
