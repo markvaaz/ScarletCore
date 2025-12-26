@@ -341,10 +341,7 @@ public class PlayerData() {
   }
 
   public void SendLocalizedMessage(string key, params object[] args) {
-    var localized = LocalizationService.Get(this, key);
-    if (args != null && args.Length > 0) {
-      localized = string.Format(localized, args);
-    }
+    var localized = LocalizationService.Get(this, key, args);
     SendMessage(localized);
   }
 
