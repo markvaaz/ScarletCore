@@ -9,8 +9,9 @@ using ScarletCore.Data;
 using ScarletCore.Utils;
 using Unity.Entities;
 using Unity.Collections;
+using ScarletCore.Services;
 
-namespace ScarletCore.Services;
+namespace ScarletCore.Commanding;
 
 /// <summary>
 /// Context passed to command handlers.
@@ -96,7 +97,7 @@ public sealed class CommandContext(Entity messageEntity, PlayerData sender, stri
 /// </summary>
 internal sealed class CommandInfo {
   public MethodInfo Method { get; set; }
-  public SCommandAttribute Attribute { get; set; }
+  public CommandAttribute Attribute { get; set; }
   public bool GroupAdminOnly { get; set; }
   public Assembly Assembly { get; set; }
   public string GroupName { get; set; } // null if no group
@@ -108,7 +109,7 @@ internal sealed class CommandInfo {
 /// Now supports commands without groups - can be invoked directly as `.command`
 /// Also supports multi-word commands like `.quest create npc`
 /// </summary>
-public static class CommandService {
+public static class CommandHandler {
   private static readonly Dictionary<string, Dictionary<string, List<CommandInfo>>> _groups = new(StringComparer.OrdinalIgnoreCase);
   private static readonly Dictionary<string, List<CommandInfo>> _noGroupCommands = new(StringComparer.OrdinalIgnoreCase);
   private static readonly Dictionary<string, Assembly> _groupToAssembly = new(StringComparer.OrdinalIgnoreCase);
@@ -145,7 +146,7 @@ public static class CommandService {
     if (assembly == null) return;
 
     foreach (var type in assembly.GetTypes()) {
-      var grpAttr = type.GetCustomAttribute<SCommandGroupAttribute>();
+      var grpAttr = type.GetCustomAttribute<CommandGroupAttribute>();
 
       if (grpAttr != null) {
         // Has group attribute - register as grouped commands
@@ -168,7 +169,7 @@ public static class CommandService {
         }
 
         foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)) {
-          var cmdAttr = method.GetCustomAttribute<SCommandAttribute>();
+          var cmdAttr = method.GetCustomAttribute<CommandAttribute>();
           if (cmdAttr == null) continue;
 
           // Generate usage if empty
@@ -205,7 +206,7 @@ public static class CommandService {
           }
 
           // Register any multilingual aliases defined on the method
-          var multiAliases = method.GetCustomAttributes<SCommandAliasAttribute>();
+          var multiAliases = method.GetCustomAttributes<CommandAliasAttribute>();
           foreach (var ma in multiAliases) {
             if (string.IsNullOrWhiteSpace(ma.Name)) continue;
             var multiName = ma.Name.ToLower();
@@ -230,7 +231,7 @@ public static class CommandService {
       } else {
         // No group attribute - register as standalone commands
         foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)) {
-          var cmdAttr = method.GetCustomAttribute<SCommandAttribute>();
+          var cmdAttr = method.GetCustomAttribute<CommandAttribute>();
           if (cmdAttr == null) continue;
 
           // Generate usage if empty (no group prefix)
@@ -266,7 +267,7 @@ public static class CommandService {
           }
 
           // Register multilingual aliases on the method
-          var multiAliases = method.GetCustomAttributes<SCommandAliasAttribute>();
+          var multiAliases = method.GetCustomAttributes<CommandAliasAttribute>();
           foreach (var ma in multiAliases) {
             if (string.IsNullOrWhiteSpace(ma.Name)) continue;
             var multiName = ma.Name.ToLower();
