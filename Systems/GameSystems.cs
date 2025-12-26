@@ -169,8 +169,6 @@ public static class GameSystems {
     Initialized = true;
 
     PlayerService.Initialize();
-
-    EventManager.Emit(ServerEvents.OnInitialize);
   }
 
   public static void OnInitialize(Action action) {
