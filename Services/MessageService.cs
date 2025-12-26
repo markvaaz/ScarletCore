@@ -337,18 +337,18 @@ public static class MessageService {
   /// <summary>
   /// Sends a localized message to a player using player's preferred language (key.Localize(player)).
   /// </summary>
-  public static void SendLocalized(PlayerData player, string localizationKey) {
-    var text = localizationKey.Localize(player);
+  public static void SendLocalized(PlayerData player, string localizationKey, params object[] parameters) {
+    var text = localizationKey.Localize(player, parameters);
     Send(player, text);
   }
 
   /// <summary>
   /// Sends a localized message individually to all players using each player's preferred language.
   /// </summary>
-  public static void SendAllLocalized(string localizationKey) {
+  public static void SendAllLocalized(string localizationKey, params object[] parameters) {
     foreach (var player in PlayerService.AllPlayers) {
       try {
-        var text = localizationKey.Localize(player);
+        var text = localizationKey.Localize(player, parameters);
         Send(player, text);
       } catch { }
     }

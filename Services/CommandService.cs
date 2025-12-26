@@ -41,9 +41,9 @@ public sealed class CommandContext(Entity messageEntity, PlayerData sender, stri
     if (Sender != null) MessageService.SendRaw(Sender, message.FormatSuccess());
   }
 
-  public void ReplyLocalized(string key) {
+  public void ReplyLocalized(string key, params string[] parameters) {
     if (Sender != null) {
-      var localized = LocalizationService.Get(Sender, key);
+      var localized = LocalizationService.Get(Sender, key, parameters);
       MessageService.SendRaw(Sender, localized.Format());
     }
   }

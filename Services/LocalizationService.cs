@@ -207,16 +207,36 @@ public static class LocalizationService {
   }
 
   /// <summary>
+  /// Formats a localized string with the provided parameters.
+  /// Replaces {0}, {1}, {2}, etc. with the corresponding parameter values.
+  /// </summary>
+  /// <param name="text">The text template with placeholders</param>
+  /// <param name="parameters">The values to insert into the placeholders</param>
+  /// <returns>The formatted string</returns>
+  private static string FormatString(string text, params object[] parameters) {
+    if (parameters == null || parameters.Length == 0) return text;
+
+    try {
+      return string.Format(text, parameters);
+    } catch (FormatException ex) {
+      Log.Warning($"Failed to format localized string: {ex.Message}");
+      return text;
+    }
+  }
+
+  /// <summary>
   /// Get localized text by GUID string.
   /// Returns the GUID itself if no translation is found.
   /// </summary>
   /// <param name="guid">The localization GUID to look up</param>
+  /// <param name="parameters">Optional parameters to format the localized string (e.g., {0}, {1})</param>
   /// <returns>The localized text, or the GUID if not found</returns>
-  public static string GetText(string guid) {
+  public static string GetText(string guid, params object[] parameters) {
     if (!_initialized) Initialize();
     if (string.IsNullOrEmpty(guid)) return string.Empty;
 
-    return Translations.TryGetValue(guid, out var text) ? text : guid;
+    var text = Translations.TryGetValue(guid, out var translation) ? translation : guid;
+    return FormatString(text, parameters);
   }
 
   /// <summary>
@@ -224,12 +244,13 @@ public static class LocalizationService {
   /// Returns the PrefabGUID string representation if no translation is found.
   /// </summary>
   /// <param name="prefabGuid">The PrefabGUID to get the localized name for</param>
+  /// <param name="parameters">Optional parameters to format the localized string (e.g., {0}, {1})</param>
   /// <returns>The localized name, or the PrefabGUID string if not found</returns>
-  public static string GetText(PrefabGUID prefabGuid) {
+  public static string GetText(PrefabGUID prefabGuid, params object[] parameters) {
     if (!_initialized) Initialize();
 
     if (PrefabMappings.TryGetValue(prefabGuid.GuidHash, out var guid)) {
-      return GetText(guid);
+      return GetText(guid, parameters);
     }
 
     return prefabGuid.ToString();
@@ -240,9 +261,10 @@ public static class LocalizationService {
   /// Convenience method for getting localized item, buff, or entity names.
   /// </summary>
   /// <param name="prefabGuid">The PrefabGUID to get the name for</param>
+  /// <param name="parameters">Optional parameters to format the localized string (e.g., {0}, {1})</param>
   /// <returns>The localized name of the prefab</returns>
-  public static string GetPrefabName(PrefabGUID prefabGuid) {
-    return GetText(prefabGuid);
+  public static string GetPrefabName(PrefabGUID prefabGuid, params object[] parameters) {
+    return GetText(prefabGuid, parameters);
   }
 
   /// <summary>
@@ -321,8 +343,9 @@ public static class LocalizationService {
   /// </summary>
   /// <param name="player">The player to get the localized text for</param>
   /// <param name="key">The localization key (will be prefixed with assembly name)</param>
+  /// <param name="parameters">Optional parameters to format the localized string (e.g., {0}, {1})</param>
   /// <returns>The localized text, or the key if not found</returns>
-  public static string Get(PlayerData player, string key) {
+  public static string Get(PlayerData player, string key, params object[] parameters) {
     if (string.IsNullOrWhiteSpace(key)) return string.Empty;
     if (!_initialized) Initialize();
 
@@ -337,13 +360,19 @@ public static class LocalizationService {
     var playerLang = GetPlayerLanguage(player) ?? Plugin.Settings.Get<string>("DefaultPlayerLanguage") ?? _currentServerLanguage;
     playerLang = playerLang.ToLower().Trim();
 
-    if (translations.TryGetValue(playerLang, out var text) && !string.IsNullOrEmpty(text)) return text;
 
-    if (!string.Equals(playerLang, _currentServerLanguage, StringComparison.OrdinalIgnoreCase) && translations.TryGetValue(_currentServerLanguage, out var serverText) && !string.IsNullOrEmpty(serverText)) return serverText;
+    if (translations.TryGetValue(playerLang, out string text) && !string.IsNullOrEmpty(text)) {
+      return FormatString(text, parameters);
+    }
+
+    if (!string.Equals(playerLang, _currentServerLanguage, StringComparison.OrdinalIgnoreCase) &&
+        translations.TryGetValue(_currentServerLanguage, out var serverText) && !string.IsNullOrEmpty(serverText)) {
+      return FormatString(serverText, parameters);
+    }
 
     // Last resort: return first available translation
     var first = translations.Values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
-    return first ?? key;
+    return first != null ? FormatString(first, parameters) : key;
   }
 
   /// <summary>
@@ -353,8 +382,9 @@ public static class LocalizationService {
   /// </summary>
   /// <param name="player">The player to get the localized text for</param>
   /// <param name="compositeKey">The full composite key in format "AssemblyName:key"</param>
+  /// <param name="parameters">Optional parameters to format the localized string (e.g., {0}, {1})</param>
   /// <returns>The localized text, or the key portion if not found</returns>
-  public static string GetByCompositeKey(PlayerData player, string compositeKey) {
+  public static string GetByCompositeKey(PlayerData player, string compositeKey, params object[] parameters) {
     if (string.IsNullOrWhiteSpace(compositeKey)) return string.Empty;
     if (!_initialized) Initialize();
 
@@ -367,13 +397,19 @@ public static class LocalizationService {
     var playerLang = GetPlayerLanguage(player) ?? Plugin.Settings.Get<string>("DefaultPlayerLanguage") ?? _currentServerLanguage;
     playerLang = playerLang.ToLower().Trim();
 
-    if (translations.TryGetValue(playerLang, out var text) && !string.IsNullOrEmpty(text)) return text;
+    if (translations.TryGetValue(playerLang, out string text) && !string.IsNullOrEmpty(text)) {
+      return FormatString(text, parameters);
+    }
 
-    if (!string.Equals(playerLang, _currentServerLanguage, StringComparison.OrdinalIgnoreCase) && translations.TryGetValue(_currentServerLanguage, out var serverText) && !string.IsNullOrEmpty(serverText)) return serverText;
+    if (!string.Equals(playerLang, _currentServerLanguage, StringComparison.OrdinalIgnoreCase) &&
+        translations.TryGetValue(_currentServerLanguage, out var serverText) && !string.IsNullOrEmpty(serverText)) {
+      return FormatString(serverText, parameters);
+    }
 
     var first = translations.Values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
     var parts2 = compositeKey.Split(':', 2);
-    return first ?? (parts2.Length > 1 ? parts2[1] : compositeKey);
+    var fallback = parts2.Length > 1 ? parts2[1] : compositeKey;
+    return first != null ? FormatString(first, parameters) : fallback;
   }
 
   /// <summary>
