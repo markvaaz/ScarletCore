@@ -6,7 +6,6 @@ using System.Text;
 using ProjectM.Network;
 using Unity.Mathematics;
 using ScarletCore.Data;
-using ScarletCore.Events;
 using ScarletCore.Utils;
 using Unity.Entities;
 using Unity.Collections;
@@ -113,6 +112,9 @@ public static class CommandService {
   private static readonly Dictionary<string, Dictionary<string, List<CommandInfo>>> _groups = new(StringComparer.OrdinalIgnoreCase);
   private static readonly Dictionary<string, List<CommandInfo>> _noGroupCommands = new(StringComparer.OrdinalIgnoreCase);
   private static readonly Dictionary<string, Assembly> _groupToAssembly = new(StringComparer.OrdinalIgnoreCase);
+  // Mapping from command key (the string used to lookup in dictionaries) to language code.
+  // null or empty = default/main language for the command (no language-specific alias)
+  private static readonly Dictionary<string, string> _commandKeyLanguage = new(StringComparer.OrdinalIgnoreCase);
   private static bool _initialized = false;
 
   public static void Initialize() {
@@ -188,6 +190,8 @@ public static class CommandService {
             _groups[groupName][cmdName] = list;
           }
           list.Add(cmdInfo);
+          // mark this command key as default (no language)
+          if (!_commandKeyLanguage.ContainsKey(cmdName)) _commandKeyLanguage[cmdName] = null;
 
           // Register command aliases
           foreach (var alias in cmdAttr.Aliases) {
@@ -197,6 +201,30 @@ public static class CommandService {
               _groups[groupName][aliasLower] = aliasList;
             }
             aliasList.Add(cmdInfo);
+            if (!_commandKeyLanguage.ContainsKey(aliasLower)) _commandKeyLanguage[aliasLower] = null;
+          }
+
+          // Register any multilingual aliases defined on the method
+          var multiAliases = method.GetCustomAttributes<SCommandAliasAttribute>();
+          foreach (var ma in multiAliases) {
+            if (string.IsNullOrWhiteSpace(ma.Name)) continue;
+            var multiName = ma.Name.ToLower();
+            if (!_groups[groupName].TryGetValue(multiName, out var multiList)) {
+              multiList = [];
+              _groups[groupName][multiName] = multiList;
+            }
+            multiList.Add(cmdInfo);
+            _commandKeyLanguage[multiName] = ma.Language?.ToLower();
+
+            foreach (var a in ma.Aliases) {
+              var aLower = a.ToLower();
+              if (!_groups[groupName].TryGetValue(aLower, out var aList)) {
+                aList = [];
+                _groups[groupName][aLower] = aList;
+              }
+              aList.Add(cmdInfo);
+              _commandKeyLanguage[aLower] = ma.Language?.ToLower();
+            }
           }
         }
       } else {
@@ -224,6 +252,7 @@ public static class CommandService {
             _noGroupCommands[cmdName] = list;
           }
           list.Add(cmdInfo);
+          if (!_commandKeyLanguage.ContainsKey(cmdName)) _commandKeyLanguage[cmdName] = null;
 
           // Register command aliases
           foreach (var alias in cmdAttr.Aliases) {
@@ -233,6 +262,30 @@ public static class CommandService {
               _noGroupCommands[aliasLower] = aliasList;
             }
             aliasList.Add(cmdInfo);
+            if (!_commandKeyLanguage.ContainsKey(aliasLower)) _commandKeyLanguage[aliasLower] = null;
+          }
+
+          // Register multilingual aliases on the method
+          var multiAliases = method.GetCustomAttributes<SCommandAliasAttribute>();
+          foreach (var ma in multiAliases) {
+            if (string.IsNullOrWhiteSpace(ma.Name)) continue;
+            var multiName = ma.Name.ToLower();
+            if (!_noGroupCommands.TryGetValue(multiName, out var multiList)) {
+              multiList = [];
+              _noGroupCommands[multiName] = multiList;
+            }
+            multiList.Add(cmdInfo);
+            _commandKeyLanguage[multiName] = ma.Language?.ToLower();
+
+            foreach (var a in ma.Aliases) {
+              var aLower = a.ToLower();
+              if (!_noGroupCommands.TryGetValue(aLower, out var aList)) {
+                aList = [];
+                _noGroupCommands[aLower] = aList;
+              }
+              aList.Add(cmdInfo);
+              _commandKeyLanguage[aLower] = ma.Language?.ToLower();
+            }
           }
         }
       }
@@ -277,6 +330,8 @@ public static class CommandService {
         if (cmds.TryGetValue(command, out var list)) {
           list.RemoveAll(ci => ci.Assembly == asm);
           if (list.Count == 0) cmds.Remove(command);
+          // remove language mapping for this command key
+          _commandKeyLanguage.Remove(command);
         }
       }
     }
@@ -293,6 +348,8 @@ public static class CommandService {
       if (_noGroupCommands.TryGetValue(cmdName, out var list)) {
         list.RemoveAll(ci => ci.Assembly == asm);
         if (list.Count == 0) _noGroupCommands.Remove(cmdName);
+        // remove language mapping for this standalone key
+        _commandKeyLanguage.Remove(cmdName);
       }
     }
 
@@ -379,21 +436,54 @@ public static class CommandService {
   /// Searches from longest possible match down to single word.
   /// Returns the matched command key and remaining args.
   /// </summary>
-  private static bool TryFindMultiWordCommand(Dictionary<string, List<CommandInfo>> commands, string[] parts, int startIndex, out string matchedCommand, out string[] remainingArgs) {
+  private static bool TryFindMultiWordCommand(Dictionary<string, List<CommandInfo>> commands, string[] parts, int startIndex, string playerLanguage, out string matchedCommand, out string[] remainingArgs) {
     matchedCommand = null;
     remainingArgs = null;
 
     // Try matching from longest to shortest
     // e.g., if parts = ["create", "npc", "here", "arg1"]
     // Try: "create npc here", then "create npc", then "create"
+    string defaultCandidate = null;
+    string anyCandidate = null;
+
     for (int wordCount = parts.Length - startIndex; wordCount >= 1; wordCount--) {
       var candidateCommand = string.Join(" ", parts.Skip(startIndex).Take(wordCount)).ToLower();
 
-      if (commands.ContainsKey(candidateCommand)) {
+      if (!commands.ContainsKey(candidateCommand)) continue;
+
+      // Determine language mapping for this candidate key
+      _commandKeyLanguage.TryGetValue(candidateCommand, out var keyLang);
+
+      // Normalize
+      if (string.IsNullOrWhiteSpace(keyLang)) keyLang = null;
+      if (string.IsNullOrWhiteSpace(playerLanguage)) playerLanguage = null;
+
+      // Prefer exact language match (including both null)
+      if (string.Equals(keyLang, playerLanguage, StringComparison.OrdinalIgnoreCase)) {
         matchedCommand = candidateCommand;
         remainingArgs = [.. parts.Skip(startIndex + wordCount)];
         return true;
       }
+
+      // remember a default (null) candidate if present
+      if (keyLang == null && defaultCandidate == null) {
+        defaultCandidate = candidateCommand;
+      }
+
+      // remember any candidate as last resort
+      anyCandidate ??= candidateCommand;
+    }
+
+    if (defaultCandidate != null) {
+      matchedCommand = defaultCandidate;
+      remainingArgs = [.. parts.Skip(startIndex + defaultCandidate.Split(' ').Length)];
+      return true;
+    }
+
+    if (anyCandidate != null) {
+      matchedCommand = anyCandidate;
+      remainingArgs = [.. parts.Skip(startIndex + anyCandidate.Split(' ').Length)];
+      return true;
     }
 
     return false;
@@ -432,9 +522,13 @@ public static class CommandService {
         } catch { }
       }
 
+      // determine player's language (null if not set)
+      var playerLanguage = (player != null) ? LocalizationService.GetPlayerLanguage(player) : null;
+      if (!string.IsNullOrWhiteSpace(playerLanguage)) playerLanguage = playerLanguage.ToLower().Trim();
+
       // Try as standalone command first (no group)
       // Try multi-word matching for standalone commands
-      if (TryFindMultiWordCommand(_noGroupCommands, parts, 0, out var standaloneCommand, out var standaloneArgs)) {
+      if (TryFindMultiWordCommand(_noGroupCommands, parts, 0, playerLanguage, out var standaloneCommand, out var standaloneArgs)) {
         var standaloneCmdInfos = _noGroupCommands[standaloneCommand];
         var ctx = new CommandContext(messageEntity, player, withoutDot, standaloneArgs);
 
@@ -478,7 +572,7 @@ public static class CommandService {
         return;
       }
 
-      if (!TryFindMultiWordCommand(cmds, parts, 1, out var matchedCommand, out var groupArgs)) {
+      if (!TryFindMultiWordCommand(cmds, parts, 1, playerLanguage, out var matchedCommand, out var groupArgs)) {
         Log.Info($"Unknown command in group '{group}': {string.Join(" ", parts.Skip(1))}");
         return;
       }
@@ -741,173 +835,201 @@ public static class CommandService {
   // Register localization keys used by CommandService
   private static void RegisterLocalizationKeys() {
     // Use simple english and portuguese translations. Calling assembly is used by LocalizationService.
-
     LocalizationService.NewKey("cmd_requires_admin", new Dictionary<string, string> {
-      { "english", "This command requires administrator privileges." },
-      { "portuguese", "Este comando requer privilégios de administrador." },
-      { "french", "Cette commande nécessite des privilèges d'administrateur." },
-      { "german", "Dieser Befehl erfordert Administratorrechte." },
-      { "hungarian", "Ehhez a parancshoz rendszergazdai jogosultság szükséges." },
-      { "italian", "Questo comando richiede privilegi di amministratore." },
-      { "japanese", "このコマンドは管理者権限が必要です。" },
-      { "korean", "이 명령은 관리자 권한이 필요합니다." },
-      { "latam", "Este comando requiere privilegios de administrador." },
-      { "polish", "Ta komenda wymaga uprawnień administratora." },
-      { "russian", "Для этой команды требуются права администратора." },
-      { "spanish", "Este comando requiere privilegios de administrador." },
-      { "chinese_simplified", "此命令需要管理员权限。" },
-      { "chinese_traditional", "此指令需要管理員權限。" },
-      { "thai", "คำสั่งนี้ต้องการสิทธิ์ผู้ดูแลระบบ" },
-      { "turkish", "Bu komut için yönetici ayrıcalıkları gerekir." },
-      { "ukrainian", "Ця команда вимагає прав адміністратора." },
-      { "vietnamese", "Lệnh này yêu cầu quyền quản trị viên." }
+      { Language.English, "This command requires administrator privileges." },
+      { Language.Portuguese, "Este comando requer privilégios de administrador." },
+      { Language.French, "Cette commande nécessite des privilèges d'administrateur." },
+      { Language.German, "Dieser Befehl erfordert Administratorrechte." },
+      { Language.Hungarian, "Ehhez a parancshoz rendszergazdai jogosultság szükséges." },
+      { Language.Italian, "Questo comando richiede privilegi di amministratore." },
+      { Language.Japanese, "このコマンドは管理者権限が必要です。" },
+      { Language.Korean, "이 명령은 관리자 권한이 필요합니다." },
+      { Language.Latam, "Este comando requiere privilegios de administrador." },
+      { Language.Polish, "Ta komenda wymaga uprawnień administratora." },
+      { Language.Russian, "Для этой команды требуются права администратора." },
+      { Language.Spanish, "Este comando requiere privilegios de administrador." },
+      { Language.ChineseSimplified, "此命令需要管理员权限。" },
+      { Language.ChineseTraditional, "此指令需要管理員權限。" },
+      { Language.Thai, "คำสั่งนี้ต้องการสิทธิ์ผู้ดูแลระบบ" },
+      { Language.Turkish, "Bu komut için yönetici ayrıcalıkları gerekir." },
+      { Language.Ukrainian, "Ця команда вимагає прав адміністратора." },
+      { Language.Vietnamese, "Lệnh này yêu cầu quyền quản trị viên." }
     });
 
     LocalizationService.NewKey("cmd_execution_error", new Dictionary<string, string> {
-      { "english", "An error occurred while executing the command." },
-      { "portuguese", "Ocorreu um erro ao executar o comando." },
-      { "french", "Une erreur est survenue lors de l'exécution de la commande." },
-      { "german", "Beim Ausführen des Befehls ist ein Fehler aufgetreten." },
-      { "hungarian", "Hiba történt a parancs végrehajtása közben." },
-      { "italian", "Si è verificato un errore durante l'esecuzione del comando." },
-      { "japanese", "コマンドの実行中にエラーが発生しました。" },
-      { "korean", "명령을 실행하는 중에 오류가 발생했습니다." },
-      { "latam", "Ocurrió un error al ejecutar el comando." },
-      { "polish", "Wystąpił błąd podczas wykonywania polecenia." },
-      { "russian", "Произошла ошибка при выполнении команды." },
-      { "spanish", "Ocurrió un error al ejecutar el comando." },
-      { "chinese_simplified", "执行命令时发生错误。" },
-      { "chinese_traditional", "執行指令時發生錯誤。" },
-      { "thai", "เกิดข้อผิดพลาดขณะเรียกใช้คำสั่ง" },
-      { "turkish", "Komut yürütülürken bir hata oluştu." },
-      { "ukrainian", "Під час виконання команди сталася помилка." },
-      { "vietnamese", "Đã xảy ra lỗi khi thực hiện lệnh." }
+      { Language.English, "An error occurred while executing the command." },
+      { Language.Portuguese, "Ocorreu um erro ao executar o comando." },
+      { Language.French, "Une erreur est survenue lors de l'exécution de la commande." },
+      { Language.German, "Beim Ausführen des Befehls ist ein Fehler aufgetreten." },
+      { Language.Hungarian, "Hiba történt a parancs végrehajtása közben." },
+      { Language.Italian, "Si è verificato un errore durante l'esecuzione del comando." },
+      { Language.Japanese, "コマンドの実行中にエラーが発生しました。" },
+      { Language.Korean, "명령을 실행하는 중에 오류가 발생했습니다." },
+      { Language.Latam, "Ocurrió un error al ejecutar el comando." },
+      { Language.Polish, "Wystąpił błąd podczas wykonywania polecenia." },
+      { Language.Russian, "Произошла ошибка при выполнении команды." },
+      { Language.Spanish, "Ocurrió un error al ejecutar el comando." },
+      { Language.ChineseSimplified, "执行命令时发生错误。" },
+      { Language.ChineseTraditional, "執行指令時發生錯誤。" },
+      { Language.Thai, "เกิดข้อผิดพลาดขณะเรียกใช้คำสั่ง" },
+      { Language.Turkish, "Komut yürütülürken bir hata oluştu." },
+      { Language.Ukrainian, "Під час виконання команди сталася помилка." },
+      { Language.Vietnamese, "Đã xảy ra lỗi khi thực hiện lệnh." }
     });
 
     LocalizationService.NewKey("cmd_available_usages", new Dictionary<string, string> {
-      { "english", "Available usages:\n{usages}" },
-      { "portuguese", "Formas de uso disponíveis:\n{usages}" },
-      { "french", "Utilisations disponibles :\n{usages}" },
-      { "german", "Verfügbare Aufrufe:\n{usages}" },
-      { "hungarian", "Elérhető használatok:\n{usages}" },
-      { "italian", "Utilizzi disponibili:\n{usages}" },
-      { "japanese", "利用可能な使い方:\n{usages}" },
-      { "korean", "사용 가능한 명령 형식:\n{usages}" },
-      { "latam", "Usos disponibles:\n{usages}" },
-      { "polish", "Dostępne użycia:\n{usages}" },
-      { "russian", "Доступные варианты использования:\n{usages}" },
-      { "spanish", "Usos disponibles:\n{usages}" },
-      { "chinese_simplified", "可用用法：\n{usages}" },
-      { "chinese_traditional", "可用用法：\n{usages}" },
-      { "thai", "รูปแบบที่ใช้ได้: {usages}" },
-      { "turkish", "Kullanılabilir kullanımlar:\n{usages}" },
-      { "ukrainian", "Доступні варіанти використання:\n{usages}" },
-      { "vietnamese", "Cách sử dụng có sẵn:\n{usages}" }
+      { Language.English, "Available usages:\n{usages}" },
+      { Language.Portuguese, "Formas de uso disponíveis:\n{usages}" },
+      { Language.French, "Utilisations disponibles :\n{usages}" },
+      { Language.German, "Verfügbare Aufrufe:\n{usages}" },
+      { Language.Hungarian, "Elérhető használatok:\n{usages}" },
+      { Language.Italian, "Utilizzi disponibili:\n{usages}" },
+      { Language.Japanese, "利用可能な使い方:\n{usages}" },
+      { Language.Korean, "사용 가능한 명령 형식:\n{usages}" },
+      { Language.Latam, "Usos disponibles:\n{usages}" },
+      { Language.Polish, "Dostępne użycia:\n{usages}" },
+      { Language.Russian, "Доступные варианты использования:\n{usages}" },
+      { Language.Spanish, "Usos disponibles:\n{usages}" },
+      { Language.ChineseSimplified, "可用用法：\n{usages}" },
+      { Language.ChineseTraditional, "可用用法：\n{usages}" },
+      { Language.Thai, "รูปแบบที่ใช้ได้: {usages}" },
+      { Language.Turkish, "Kullanılabilir kullanımlar:\n{usages}" },
+      { Language.Ukrainian, "Доступні варіанти використання:\n{usages}" },
+      { Language.Vietnamese, "Cách sử dụng có sẵn:\n{usages}" }
     });
 
     LocalizationService.NewKey("cmd_ambiguous_overload", new Dictionary<string, string> {
-      { "english", "Ambiguous command overload; multiple matches found." },
-      { "portuguese", "Sobrecarga ambígua do comando; múltiplas correspondências encontradas." },
-      { "french", "Surcharge de commande ambiguë ; plusieurs correspondances trouvées." },
-      { "german", "Mehrdeutige Befehlsüberladung; mehrere Treffer gefunden." },
-      { "hungarian", "Többértelmű parancs overload; több egyezés található." },
-      { "italian", "Sovraccarico di comando ambiguo; trovate più corrispondenze." },
-      { "japanese", "あいまいなコマンドのオーバーロードです。複数の一致が見つかりました。" },
-      { "korean", "모호한 명령 오버로드; 여러 일치 항목이 발견되었습니다." },
-      { "latam", "Sobrecarga de comando ambigua; se encontraron múltiples coincidencias." },
-      { "polish", "Niejednoznaczne przeciążenie polecenia; znaleziono wiele dopasowań." },
-      { "russian", "Неоднозначная перегрузка команды; найдено несколько совпадений." },
-      { "spanish", "Sobrecarga de comando ambigua; se encontraron múltiples coincidencias." },
-      { "chinese_simplified", "命令重载不明确；找到多个匹配项。" },
-      { "chinese_traditional", "指令重載不明確；找到多個匹配項。" },
-      { "thai", "การโอเวอร์โหลดคำสั่งไม่ชัดเจน; พบการจับคู่หลายรายการ" },
-      { "turkish", "Belirsiz komut aşırı yüklemesi; birden çok eşleşme bulundu." },
-      { "ukrainian", "Двоозначне перевантаження команди; знайдено кілька збігів." },
-      { "vietnamese", "Overload lệnh không rõ ràng; tìm thấy nhiều kết quả khớp." }
+      { Language.English, "Ambiguous command overload; multiple matches found." },
+      { Language.Portuguese, "Sobrecarga ambígua do comando; múltiplas correspondências encontradas." },
+      { Language.French, "Surcharge de commande ambiguë ; plusieurs correspondances trouvées." },
+      { Language.German, "Mehrdeutige Befehlsüberladung; mehrere Treffer gefunden." },
+      { Language.Hungarian, "Többértelmű parancs overload; több egyezés található." },
+      { Language.Italian, "Sovraccarico di comando ambiguo; trovate più corrispondenze." },
+      { Language.Japanese, "あいまいなコマンドのオーバーロードです。複数の一致が見つかりました。" },
+      { Language.Korean, "모호한 명령 오버로드; 여러 일치 항목이 발견되었습니다." },
+      { Language.Latam, "Sobrecarga de comando ambigua; se encontraron múltiples coincidencias." },
+      { Language.Polish, "Niejednoznaczne przeciążenie polecenia; znaleziono wiele dopasowań." },
+      { Language.Russian, "Неоднозначная перегрузка команды; найдено несколько совпадений." },
+      { Language.Spanish, "Sobrecarga de comando ambigua; se encontraron múltiples coincidencias." },
+      { Language.ChineseSimplified, "命令重载不明确；找到多个匹配项。" },
+      { Language.ChineseTraditional, "指令重載不明確；找到多個匹配項。" },
+      { Language.Thai, "การโอเวอร์โหลดคำสั่งไม่ชัดเจน; พบการจับคู่หลายรายการ" },
+      { Language.Turkish, "Belirsiz komut aşırı yüklemesi; birden çok eşleşme bulundu." },
+      { Language.Ukrainian, "Двоозначне перевантаження команди; знайдено кілька збігів." },
+      { Language.Vietnamese, "Overload lệnh không rõ ràng; tìm thấy nhiều kết quả khớp." }
     });
 
-    LocalizationService.NewKey("cmd_no_suitable_overload", new Dictionary<string, string> {
-      { "english", "No suitable overload found for command." },
-      { "portuguese", "Nenhuma sobrecarga adequada encontrada para o comando." },
-      { "french", "Aucune surcharge adaptée trouvée pour la commande." },
-      { "german", "Keine geeignete Überladung für den Befehl gefunden." },
-      { "hungarian", "Nem található megfelelő overload a parancshoz." },
-      { "italian", "Nessuna overload adatta trovata per il comando." },
-      { "japanese", "コマンドに適したオーバーロードが見つかりませんでした。" },
-      { "korean", "명령에 적합한 오버로드를 찾을 수 없습니다." },
-      { "latam", "No se encontró una sobrecarga adecuada para el comando." },
-      { "polish", "Nie znaleziono odpowiedniego przeciążenia dla polecenia." },
-      { "russian", "Для команды не найдено подходящей перегрузки." },
-      { "spanish", "No se encontró una sobrecarga adecuada para el comando." },
-      { "chinese_simplified", "未找到适合该命令的重载。" },
-      { "chinese_traditional", "未找到適合該指令的重載。" },
-      { "thai", "ไม่พบการโอเวอร์โหลดที่เหมาะสมสำหรับคำสั่ง" },
-      { "turkish", "Komut için uygun bir overload bulunamadı." },
-      { "ukrainian", "Не знайдено відповідного перевантаження для команди." },
-      { "vietnamese", "Không tìm thấy overload phù hợp cho lệnh." }
-    });
 
-    LocalizationService.NewKey("cmd_player_not_found", new Dictionary<string, string> {
-      { "english", "Player not found: {playerName}" },
-      { "portuguese", "Jogador não encontrado: {playerName}" },
-      { "french", "Joueur introuvable : {playerName}" },
-      { "german", "Spieler nicht gefunden: {playerName}" },
-      { "hungarian", "A játékos nem található: {playerName}" },
-      { "italian", "Giocatore non trovato: {playerName}" },
-      { "japanese", "プレイヤーが見つかりません: {playerName}" },
-      { "korean", "플레이어를 찾을 수 없음: {playerName}" },
-      { "latam", "Jugador no encontrado: {playerName}" },
-      { "polish", "Nie znaleziono gracza: {playerName}" },
-      { "russian", "Игрок не найден: {playerName}" },
-      { "spanish", "Jugador no encontrado: {playerName}" },
-      { "chinese_simplified", "未找到玩家：{playerName}" },
-      { "chinese_traditional", "未找到玩家：{playerName}" },
-      { "thai", "ไม่พบผู้เล่น: {playerName}" },
-      { "turkish", "Oyuncu bulunamadı: {playerName}" },
-      { "ukrainian", "Гравця не знайдено: {playerName}" },
-      { "vietnamese", "Không tìm thấy người chơi: {playerName}" }
-    });
+  }
 
-    LocalizationService.NewKey("cmd_missing_required_param", new Dictionary<string, string> {
-      { "english", "Missing required parameter: **{paramName}** (~{paramType}~)" },
-      { "portuguese", "Falta parâmetro obrigatório: **{paramName}** (~{paramType}~)" },
-      { "french", "Paramètre requis manquant : **{paramName}** (~{paramType}~)" },
-      { "german", "Fehlender erforderlicher Parameter: **{paramName}** (~{paramType}~)" },
-      { "hungarian", "Hiányzó kötelező paraméter: **{paramName}** (~{paramType}~)" },
-      { "italian", "Manca il parametro richiesto: **{paramName}** (~{paramType}~)" },
-      { "japanese", "必須パラメーターがありません: **{paramName}** (~{paramType}~)" },
-      { "korean", "필수 매개변수가 누락되었습니다: **{paramName}** (~{paramType}~)" },
-      { "latam", "Falta un parámetro requerido: **{paramName}** (~{paramType}~)" },
-      { "polish", "Brak wymaganego parametru: **{paramName}** (~{paramType}~)" },
-      { "russian", "Отсутствует обязательный параметр: **{paramName}** (~{paramType}~)" },
-      { "spanish", "Falta un parámetro requerido: **{paramName}** (~{paramType}~)" },
-      { "chinese_simplified", "缺少必需的参数：**{paramName}** (~{paramType}~)" },
-      { "chinese_traditional", "缺少必要的參數：**{paramName}** (~{paramType}~)" },
-      { "thai", "ขาดพารามิเตอร์ที่จำเป็น: **{paramName}** (~{paramType}~)" },
-      { "turkish", "Gerekli parametre eksik: **{paramName}** (~{paramType}~)" },
-      { "ukrainian", "Відсутній обов'язковий параметр: **{paramName}** (~{paramType}~)" },
-      { "vietnamese", "Thiếu tham số bắt buộc: **{paramName}** (~{paramType}~)" }
-    });
+  /// <summary>
+  /// Returns all commands grouped by assembly name. The optional playerLanguage
+  /// will be used to prefer language-specific aliases when available.
+  /// </summary>
+  public static Dictionary<string, string[]> GetAllCommands(string playerLanguage = null) {
+    var result = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
-    LocalizationService.NewKey("cmd_invalid_param", new Dictionary<string, string> {
-      { "english", "Invalid value for parameter '**{paramName}**'. Expected ~{paramType}~." },
-      { "portuguese", "Valor inválido para o parâmetro '**{paramName}**'. Esperado ~{paramType}~." },
-      { "french", "Valeur invalide pour le paramètre '**{paramName}**'. Attendu ~{paramType}~." },
-      { "german", "Ungültiger Wert für den Parameter '**{paramName}**'. Erwartet ~{paramType}~." },
-      { "hungarian", "Érvénytelen érték a '**{paramName}**' paraméterhez. Várt ~{paramType}~." },
-      { "italian", "Valore non valido per il parametro '**{paramName}**'. Previsto ~{paramType}~." },
-      { "japanese", "パラメーター '**{paramName}**' の値が無効です。期待される型: ~{paramType}~。" },
-      { "korean", "매개변수 '**{paramName}**'에 대한 잘못된 값입니다. 예상 ~{paramType}~." },
-      { "latam", "Valor inválido para el parámetro '**{paramName}**'. Se esperaba ~{paramType}~." },
-      { "polish", "Nieprawidłowa wartość parametru '**{paramName}**'. Oczekiwano ~{paramType}~." },
-      { "russian", "Неверное значение для параметра '**{paramName}**'. Ожидалось ~{paramType}~." },
-      { "spanish", "Valor inválido para el parámetro '**{paramName}**'. Se esperaba ~{paramType}~." },
-      { "chinese_simplified", "参数 '**{paramName}**' 的值无效。预期 ~{paramType}~。" },
-      { "chinese_traditional", "參數 '**{paramName}**' 的值無效。預期 ~{paramType}~。" },
-      { "thai", "ค่าที่ไม่ถูกต้องสำหรับพารามิเตอร์ '**{paramName}**' คาดหวัง ~{paramType}~" },
-      { "turkish", "'**{paramName}**' parametresi için geçersiz değer. Beklenen ~{paramType}~." },
-      { "ukrainian", "Недійсне значення для параметра '**{paramName}**'. Очікувано ~{paramType}~." },
-      { "vietnamese", "Giá trị không hợp lệ cho tham số '**{paramName}**'. Mong đợi ~{paramType}~." }
-    });
+    // Map each CommandInfo to its list of candidate representations
+    var ciCandidates = new Dictionary<CommandInfo, List<(string rep, string keyLang)>>();
+
+    // Helper to add candidate
+    void AddCandidate(CommandInfo ci, string rep, string keyLang) {
+      if (!ciCandidates.TryGetValue(ci, out var list)) {
+        list = [];
+        ciCandidates[ci] = list;
+      }
+      list.Add((rep, string.IsNullOrWhiteSpace(keyLang) ? null : keyLang.ToLower().Trim()));
+    }
+
+    // Collect from standalone commands
+    foreach (var kvp in _noGroupCommands) {
+      var key = kvp.Key.ToLower();
+      foreach (var ci in kvp.Value) {
+        var usage = ci.Attribute?.Usage;
+        string rep;
+        if (!string.IsNullOrWhiteSpace(usage) && ci.Attribute != null) {
+          // replace the original command name in the usage with the key (alias)
+          var orig = ci.Attribute.Name ?? string.Empty;
+          var idx = usage.IndexOf(orig, StringComparison.OrdinalIgnoreCase);
+          if (idx >= 0) {
+            rep = string.Concat(usage.AsSpan(0, idx), key, usage.AsSpan(idx + orig.Length));
+            // ensure leading dot if missing
+            if (!rep.StartsWith('.')) rep = "." + rep;
+          } else {
+            rep = $".{key}" + (usage.StartsWith('.') ? usage[usage.IndexOf(' ')..] : "");
+          }
+        } else {
+          rep = $".{key}";
+        }
+        _commandKeyLanguage.TryGetValue(key, out var keyLang);
+        AddCandidate(ci, rep, keyLang);
+      }
+    }
+
+    // Collect from grouped commands
+    foreach (var groupKvp in _groups) {
+      var group = groupKvp.Key.ToLower();
+      foreach (var cmdKvp in groupKvp.Value) {
+        var cmdKey = cmdKvp.Key.ToLower();
+        foreach (var ci in cmdKvp.Value) {
+          var usage = ci.Attribute?.Usage;
+          string rep;
+          if (!string.IsNullOrWhiteSpace(usage) && ci.Attribute != null) {
+            var orig = ci.Attribute.Name ?? string.Empty;
+            var idx = usage.IndexOf(orig, StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0) {
+              rep = string.Concat(usage.AsSpan(0, idx), cmdKey, usage.AsSpan(idx + orig.Length));
+              if (!rep.StartsWith('.')) rep = "." + rep;
+            } else {
+              rep = $".{group} {cmdKey}";
+            }
+          } else {
+            rep = $".{group} {cmdKey}";
+          }
+          _commandKeyLanguage.TryGetValue(cmdKey, out var keyLang);
+          AddCandidate(ci, rep, keyLang);
+        }
+      }
+    }
+
+    // Choose best representation per CommandInfo and add to assembly buckets
+    foreach (var kv in ciCandidates) {
+      var ci = kv.Key;
+      var candidates = kv.Value;
+      string chosen = null;
+
+      if (!string.IsNullOrWhiteSpace(playerLanguage)) {
+        var pl = playerLanguage.ToLower().Trim();
+        var match = candidates.FirstOrDefault(c => string.Equals(c.keyLang, pl, StringComparison.OrdinalIgnoreCase));
+        if (match != default) chosen = match.rep;
+      }
+
+      if (chosen == null) {
+        var def = candidates.FirstOrDefault(c => c.keyLang == null);
+        if (def != default) chosen = def.rep;
+      }
+
+      chosen ??= candidates[0].rep;
+
+      var asmName = ci.Assembly?.GetName()?.Name ?? "(unknown)";
+      if (!result.TryGetValue(asmName, out var set)) {
+        set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        result[asmName] = set;
+      }
+      set.Add(chosen);
+    }
+
+    // Convert HashSets to arrays
+    return result.ToDictionary(k => k.Key, v => v.Value.OrderBy(x => x).ToArray(), StringComparer.OrdinalIgnoreCase);
+  }
+
+  /// <summary>
+  /// Returns commands for a specific assembly name (by assembly.GetName().Name).
+  /// </summary>
+  public static string[] GetAssemblyCommands(string assemblyName, string playerLanguage = null) {
+    if (string.IsNullOrWhiteSpace(assemblyName)) return [];
+    var all = GetAllCommands(playerLanguage);
+    if (all.TryGetValue(assemblyName, out var arr)) return arr;
+    return [];
   }
 }

@@ -12,6 +12,27 @@ using ScarletCore.Events;
 
 namespace ScarletCore.Services;
 
+public static class Language {
+  public const string Portuguese = "portuguese";
+  public const string English = "english";
+  public const string French = "french";
+  public const string German = "german";
+  public const string Hungarian = "hungarian";
+  public const string Italian = "italian";
+  public const string Japanese = "japanese";
+  public const string Korean = "korean";
+  public const string Latam = "latam";
+  public const string Polish = "polish";
+  public const string Russian = "russian";
+  public const string Spanish = "spanish";
+  public const string ChineseSimplified = "chinese_simplified";
+  public const string ChineseTraditional = "chinese_traditional";
+  public const string Thai = "thai";
+  public const string Turkish = "turkish";
+  public const string Ukrainian = "ukrainian";
+  public const string Vietnamese = "vietnamese";
+}
+
 /// <summary>
 /// Service for managing game localization and translations.
 /// Provides access to localized text for items, buffs, and other game elements by PrefabGUID.
@@ -51,31 +72,32 @@ public static class LocalizationService {
   /// <summary>
   /// The currently loaded language code
   /// </summary>
-  private static string _currentServerLanguage = "english";
+  private static string _currentServerLanguage = Language.English;
 
   /// <summary>
   /// Mapping of language codes to their corresponding embedded resource file names
   /// </summary>
   private static readonly Dictionary<string, string> _languageFileMapping = new() {
-    { "portuguese", "Brazilian" },
-    { "english", "English" },
-    { "french", "French" },
-    { "german", "German" },
-    { "hungarian", "Hungarian" },
-    { "italian", "Italian" },
-    { "japanese", "Japanese" },
-    { "korean", "Korean" },
-    { "latam", "Latam" },
-    { "polish", "Polish" },
-    { "russian", "Russian" },
-    { "spanish", "Spanish" },
-    { "chinese_simplified", "ChineseSimplified" },
-    { "chinese_traditional", "ChineseTraditional" },
-    { "thai", "Thai" },
-    { "turkish", "Turkish" },
-    { "ukrainian", "Ukrainian" },
-    { "vietnamese", "Vietnamese" }
+    { Language.Portuguese, "Brazilian" },
+    { Language.English, "English" },
+    { Language.French, "French" },
+    { Language.German, "German" },
+    { Language.Hungarian, "Hungarian" },
+    { Language.Italian, "Italian" },
+    { Language.Japanese, "Japanese" },
+    { Language.Korean, "Korean" },
+    { Language.Latam, "Latam" },
+    { Language.Polish, "Polish" },
+    { Language.Russian, "Russian" },
+    { Language.Spanish, "Spanish" },
+    { Language.ChineseSimplified, "ChineseSimplified" },
+    { Language.ChineseTraditional, "ChineseTraditional" },
+    { Language.Thai, "Thai" },
+    { Language.Turkish, "Turkish" },
+    { Language.Ukrainian, "Ukrainian" },
+    { Language.Vietnamese, "Vietnamese" }
   };
+
 
   /// <summary>
   /// Get all available language codes
@@ -92,7 +114,7 @@ public static class LocalizationService {
   /// Call this during game initialization to load embedded localization resources.
   /// </summary>
   public static void Initialize() {
-    var language = Plugin.Settings.Get<string>("PrefabLocalizationLanguage") ?? "english";
+    var language = Plugin.Settings.Get<string>("PrefabLocalizationLanguage") ?? Language.English;
 
     try {
       LoadPrefabMapping();
