@@ -178,7 +178,7 @@ public static class ActionScheduler {
   /// Removes all scheduled actions associated with a specific assembly.
   /// </summary>
   /// <param name="asm">Assembly whose actions should be removed</param>
-  public static void UnregisterAssembly(Assembly assembly) {
+  public static void UnregisterAssembly(Assembly assembly = null) {
     var asm = assembly ?? Assembly.GetExecutingAssembly();
     lock (_scheduledActions) {
       // Collect actions to remove
