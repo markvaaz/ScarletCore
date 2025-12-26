@@ -4,8 +4,8 @@ using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
 using ScarletCore.Data;
+using ScarletCore.Events;
 using ScarletCore.Services;
-using ScarletCore.Systems;
 
 namespace ScarletCore;
 
@@ -32,14 +32,14 @@ public class Plugin : BasePlugin {
     Settings.Section("Language")
       .Add("PrefabLocalizationLanguage", "english", $"Language code for localization. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}")
       .Add("DefaultPlayerLanguage", "english", $"Default language code for new players. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}");
-
-    GameSystems.OnInitialize(OnInitialize);
+    EventManager.On(ServerEvents.OnInitialize, OnInitialize);
   }
 
+  [EventPriority(999)]
   private void OnInitialize() {
     LocalizationService.Initialize();
     CommandService.Initialize();
-    Log.LogInfo("ScarletCore Services initialized.");
+    Utils.Log.Message("ScarletCore Services initialized.");
   }
 
   public override bool Unload() {
