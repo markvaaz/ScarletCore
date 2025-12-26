@@ -179,7 +179,14 @@ public static class ActionScheduler {
   /// </summary>
   /// <param name="asm">Assembly whose actions should be removed</param>
   public static void UnregisterAssembly(Assembly assembly = null) {
-    var asm = assembly ?? Assembly.GetExecutingAssembly();
+    Assembly asm;
+    if (assembly == null) {
+      var stackTrace = new System.Diagnostics.StackTrace();
+      var callingMethod = stackTrace.GetFrame(1)?.GetMethod();
+      asm = callingMethod?.DeclaringType?.Assembly ?? Assembly.GetExecutingAssembly();
+    } else {
+      asm = assembly;
+    }
     lock (_scheduledActions) {
       // Collect actions to remove
       var toRemove = new List<ScheduledAction>();
