@@ -134,7 +134,8 @@ public static class LocalizationService {
         return;
       }
 
-      var assembly = Assembly.GetExecutingAssembly();
+      // Use ScarletCore assembly for loading game localization files
+      var assembly = typeof(LocalizationService).Assembly;
       var resourceName = $"ScarletCore.Localization.{fileName}.json";
 
       using var stream = assembly.GetManifestResourceStream(resourceName);
@@ -177,7 +178,8 @@ public static class LocalizationService {
   /// </summary>
   private static void LoadPrefabMapping() {
     try {
-      var assembly = Assembly.GetExecutingAssembly();
+      // Use ScarletCore assembly for loading game prefab mapping
+      var assembly = typeof(LocalizationService).Assembly;
       var resourceName = "ScarletCore.Localization.PrefabToGuidMap.json";
 
       using var stream = assembly.GetManifestResourceStream(resourceName);
@@ -268,6 +270,34 @@ public static class LocalizationService {
   }
 
   /// <summary>
+  /// Gets the calling assembly from the stack trace, skipping LocalizationService methods.
+  /// This ensures we get the actual calling assembly, not LocalizationService itself.
+  /// </summary>
+  private static Assembly GetCallingAssemblyFromStack() {
+    var stackTrace = new System.Diagnostics.StackTrace();
+    var frames = stackTrace.GetFrames();
+
+    if (frames == null) return Assembly.GetCallingAssembly();
+
+    // Skip frames until we're out of LocalizationService
+    foreach (var frame in frames) {
+      var method = frame.GetMethod();
+      if (method == null) continue;
+
+      var declaringType = method.DeclaringType;
+      if (declaringType == null) continue;
+
+      // Skip if it's LocalizationService itself
+      if (declaringType == typeof(LocalizationService)) continue;
+
+      // Return the first assembly we find that's not LocalizationService
+      return declaringType.Assembly;
+    }
+
+    return Assembly.GetCallingAssembly();
+  }
+
+  /// <summary>
   /// Builds a composite key from assembly name and key string.
   /// Format: "AssemblyName:key"
   /// </summary>
@@ -286,7 +316,7 @@ public static class LocalizationService {
   public static void NewKey(string key, IDictionary<string, string> translations) {
     if (string.IsNullOrWhiteSpace(key) || translations == null || translations.Count == 0) return;
 
-    var callingAssembly = Assembly.GetCallingAssembly();
+    var callingAssembly = GetCallingAssemblyFromStack();
     var compositeKey = BuildCompositeKey(callingAssembly, key.Trim());
 
     var map = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -314,7 +344,7 @@ public static class LocalizationService {
   public static void LoadCustomKeys(IDictionary<string, IDictionary<string, string>> languageMap) {
     if (languageMap == null || languageMap.Count == 0) return;
 
-    var callingAssembly = Assembly.GetCallingAssembly();
+    var callingAssembly = GetCallingAssemblyFromStack();
 
     foreach (var langEntry in languageMap) {
       if (string.IsNullOrWhiteSpace(langEntry.Key) || langEntry.Value == null) continue;
@@ -349,7 +379,7 @@ public static class LocalizationService {
     if (string.IsNullOrWhiteSpace(key)) return string.Empty;
     if (!_initialized) Initialize();
 
-    var callingAssembly = Assembly.GetCallingAssembly();
+    var callingAssembly = GetCallingAssemblyFromStack();
     var compositeKey = BuildCompositeKey(callingAssembly, key.Trim());
 
     if (!_customKeys.TryGetValue(compositeKey, out var translations) || translations == null || translations.IsEmpty) {
@@ -360,6 +390,40 @@ public static class LocalizationService {
     var playerLang = GetPlayerLanguage(player) ?? Plugin.Settings.Get<string>("DefaultPlayerLanguage") ?? _currentServerLanguage;
     playerLang = playerLang.ToLower().Trim();
 
+
+    if (translations.TryGetValue(playerLang, out string text) && !string.IsNullOrEmpty(text)) {
+      return FormatString(text, parameters);
+    }
+
+    if (!string.Equals(playerLang, _currentServerLanguage, StringComparison.OrdinalIgnoreCase) &&
+        translations.TryGetValue(_currentServerLanguage, out var serverText) && !string.IsNullOrEmpty(serverText)) {
+      return FormatString(serverText, parameters);
+    }
+
+    // Last resort: return first available translation
+    var first = translations.Values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
+    return first != null ? FormatString(first, parameters) : key;
+  }
+
+  /// <summary>
+  /// Get a localized string for a player for a specific assembly.
+  /// This overload allows callers to specify which assembly owns the key,
+  /// avoiding issues when intermediate helper methods (like CommandContext)
+  /// are in a different assembly.
+  /// </summary>
+  public static string Get(PlayerData player, string key, Assembly assembly, params object[] parameters) {
+    if (string.IsNullOrWhiteSpace(key)) return string.Empty;
+    if (!_initialized) Initialize();
+
+    var useAssembly = assembly ?? GetCallingAssemblyFromStack();
+    var compositeKey = BuildCompositeKey(useAssembly, key.Trim());
+
+    if (!_customKeys.TryGetValue(compositeKey, out var translations) || translations == null || translations.IsEmpty) {
+      return key;
+    }
+
+    var playerLang = GetPlayerLanguage(player) ?? Plugin.Settings.Get<string>("DefaultPlayerLanguage") ?? _currentServerLanguage;
+    playerLang = playerLang.ToLower().Trim();
 
     if (translations.TryGetValue(playerLang, out string text) && !string.IsNullOrEmpty(text)) {
       return FormatString(text, parameters);
@@ -421,7 +485,7 @@ public static class LocalizationService {
   public static IEnumerable<string> GetKeysForAssembly(Assembly assembly = null) {
     if (!_initialized) Initialize();
 
-    assembly ??= Assembly.GetCallingAssembly();
+    assembly ??= GetCallingAssemblyFromStack();
     var assemblyName = assembly.GetName().Name;
     var prefix = $"{assemblyName}:";
 
@@ -439,7 +503,7 @@ public static class LocalizationService {
     if (string.IsNullOrWhiteSpace(key)) return false;
     if (!_initialized) Initialize();
 
-    var callingAssembly = Assembly.GetCallingAssembly();
+    var callingAssembly = GetCallingAssemblyFromStack();
     var compositeKey = BuildCompositeKey(callingAssembly, key.Trim());
     return _customKeys.ContainsKey(compositeKey);
   }
@@ -453,7 +517,7 @@ public static class LocalizationService {
   public static int Dispose(Assembly assembly = null) {
     if (!_initialized) Initialize();
 
-    assembly ??= Assembly.GetCallingAssembly();
+    assembly ??= GetCallingAssemblyFromStack();
     var assemblyName = assembly.GetName().Name;
     var prefix = $"{assemblyName}:";
 
@@ -466,6 +530,7 @@ public static class LocalizationService {
       if (_customKeys.TryRemove(k, out _)) removed++;
     }
 
+    Log.Info($"Disposed {removed} localization keys for assembly: {assemblyName}");
     return removed;
   }
 
