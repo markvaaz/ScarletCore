@@ -9,6 +9,7 @@ using ScarletCore.Data;
 using ScarletCore.Events;
 using ScarletCore.Utils;
 using Unity.Entities;
+using Unity.Collections;
 
 namespace ScarletCore.Services;
 
@@ -20,6 +21,10 @@ public sealed class CommandContext(Entity messageEntity, PlayerData sender, stri
   public PlayerData Sender { get; } = sender;
   public string Raw { get; } = raw;
   public string[] Args { get; } = args;
+  // The assembly that should be considered the owner of localization keys.
+  // When a command from another assembly invokes `ReplyLocalized`, CommandService
+  // will set this to the command's assembly so localization resolves correctly.
+  public Assembly CallingAssembly { get; set; }
 
   public void Reply(string message) {
     if (Sender != null) MessageService.SendRaw(Sender, message.Format());
@@ -43,8 +48,46 @@ public sealed class CommandContext(Entity messageEntity, PlayerData sender, stri
 
   public void ReplyLocalized(string key, params string[] parameters) {
     if (Sender != null) {
-      var localized = LocalizationService.Get(Sender, key, parameters);
+      string localized;
+      if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
+      else localized = LocalizationService.Get(Sender, key, parameters);
       MessageService.SendRaw(Sender, localized.Format());
+    }
+  }
+
+  public void ReplyLocalizedError(string key, params string[] parameters) {
+    if (Sender != null) {
+      string localized;
+      if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
+      else localized = LocalizationService.Get(Sender, key, parameters);
+      MessageService.SendRaw(Sender, localized.FormatError());
+    }
+  }
+
+  public void ReplyLocalizedWarning(string key, params string[] parameters) {
+    if (Sender != null) {
+      string localized;
+      if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
+      else localized = LocalizationService.Get(Sender, key, parameters);
+      MessageService.SendRaw(Sender, localized.FormatWarning());
+    }
+  }
+
+  public void ReplyLocalizedInfo(string key, params string[] parameters) {
+    if (Sender != null) {
+      string localized;
+      if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
+      else localized = LocalizationService.Get(Sender, key, parameters);
+      MessageService.SendRaw(Sender, localized.FormatInfo());
+    }
+  }
+
+  public void ReplyLocalizedSuccess(string key, params string[] parameters) {
+    if (Sender != null) {
+      string localized;
+      if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
+      else localized = LocalizationService.Get(Sender, key, parameters);
+      MessageService.SendRaw(Sender, localized.FormatSuccess());
     }
   }
 }
@@ -78,29 +121,28 @@ public static class CommandService {
     RegisterLocalizationKeys();
     RegisterCommands();
 
-    EventManager.On(PrefixEvents.OnChatMessage, (entities) => {
-      foreach (var e in entities) HandleChat(e);
-    });
-
     _initialized = true;
     Log.Info($"CommandService initialized with {_groups.Count} groups and {_noGroupCommands.Count} standalone commands");
   }
 
   /// <summary>
-  /// Registers all commands from the executing assembly.
+  /// Registers all commands from the calling assembly.
   /// </summary>
   public static void RegisterCommands() {
-    var asm = Assembly.GetExecutingAssembly();
+    // Get the calling assembly (the assembly that called this method)
+    var callingAssembly = new System.Diagnostics.StackTrace().GetFrame(1)?.GetMethod()?.ReflectedType?.Assembly;
+    var asm = callingAssembly ?? Assembly.GetCallingAssembly();
     RegisterAssembly(asm);
   }
 
   /// <summary>
   /// Registers all commands from a specific assembly. If `assembly` is null,
-  /// the currently executing assembly will be used.
+  /// the calling assembly will be used.
   /// </summary>
   public static void RegisterAssembly(Assembly assembly = null) {
-    var asm = assembly ?? Assembly.GetExecutingAssembly();
-    foreach (var type in asm.GetTypes()) {
+    if (assembly == null) return;
+
+    foreach (var type in assembly.GetTypes()) {
       var grpAttr = type.GetCustomAttribute<SCommandGroupAttribute>();
 
       if (grpAttr != null) {
@@ -111,7 +153,7 @@ public static class CommandService {
         // Register main group name
         if (!_groups.ContainsKey(groupName)) {
           _groups[groupName] = new Dictionary<string, List<CommandInfo>>(StringComparer.OrdinalIgnoreCase);
-          _groupToAssembly[groupName] = assembly;
+          _groupToAssembly[groupName] = assembly; // Use the type's assembly
         }
 
         // Register group aliases
@@ -119,7 +161,7 @@ public static class CommandService {
           var aliasLower = alias.ToLower();
           if (!_groups.ContainsKey(aliasLower)) {
             _groups[aliasLower] = _groups[groupName];
-            _groupToAssembly[aliasLower] = assembly;
+            _groupToAssembly[aliasLower] = assembly; // Use the type's assembly
           }
         }
 
@@ -136,7 +178,7 @@ public static class CommandService {
             Method = method,
             Attribute = cmdAttr,
             GroupAdminOnly = groupAdminOnly,
-            Assembly = asm,
+            Assembly = type.Assembly, // Use the type's assembly, not the executing assembly
             GroupName = groupName
           };
 
@@ -172,7 +214,7 @@ public static class CommandService {
             Method = method,
             Attribute = cmdAttr,
             GroupAdminOnly = false,
-            Assembly = asm,
+            Assembly = type.Assembly, // Use the type's assembly, not the executing assembly
             GroupName = null
           };
 
@@ -196,15 +238,15 @@ public static class CommandService {
       }
     }
 
-    Log.Info($"Registered commands from assembly: {asm.GetName().Name}");
+    Log.Info($"Registered commands from assembly: {assembly.GetName().Name}");
   }
 
   /// <summary>
   /// Unregisters all commands from a specific assembly. If `assembly` is null,
-  /// the currently executing assembly will be used.
+  /// the calling assembly will be used.
   /// </summary>
   public static void UnregisterAssembly(Assembly assembly = null) {
-    var asm = assembly ?? Assembly.GetExecutingAssembly();
+    var asm = assembly ?? Assembly.GetCallingAssembly();
     var groupsToRemove = new List<string>();
 
     // Find all groups from this assembly
@@ -224,7 +266,7 @@ public static class CommandService {
     var commandsToRemove = new List<(string group, string command)>();
     foreach (var groupKvp in _groups) {
       foreach (var cmdKvp in groupKvp.Value) {
-        if (cmdKvp.Value.Any(ci => ci.Assembly == assembly)) {
+        if (cmdKvp.Value.Any(ci => ci.Assembly == asm)) {
           commandsToRemove.Add((groupKvp.Key, cmdKvp.Key));
         }
       }
@@ -233,7 +275,7 @@ public static class CommandService {
     foreach (var (group, command) in commandsToRemove) {
       if (_groups.TryGetValue(group, out var cmds)) {
         if (cmds.TryGetValue(command, out var list)) {
-          list.RemoveAll(ci => ci.Assembly == assembly);
+          list.RemoveAll(ci => ci.Assembly == asm);
           if (list.Count == 0) cmds.Remove(command);
         }
       }
@@ -357,6 +399,12 @@ public static class CommandService {
     return false;
   }
 
+  internal static void HandleMessageEvents(NativeArray<Entity> messageEntities) {
+    foreach (var messageEntity in messageEntities) {
+      HandleChat(messageEntity);
+    }
+  }
+
   private static void HandleChat(Entity messageEntity) {
     try {
       if (!messageEntity.Exists() || !messageEntity.Has<ChatMessageEvent>()) return;
@@ -407,6 +455,8 @@ public static class CommandService {
         }
 
         try {
+          // Ensure context uses the command's declaring assembly for localization
+          ctx.CallingAssembly = selected.Assembly;
           selected.Method.Invoke(null, invokeArgs);
         } catch (Exception invokeEx) {
           Log.Error($"Error invoking standalone command {standaloneCommand}: {invokeEx}");
@@ -453,6 +503,8 @@ public static class CommandService {
       }
 
       try {
+        // Ensure group context uses the command's declaring assembly for localization
+        groupCtx.CallingAssembly = selectedCmd.Assembly;
         selectedCmd.Method.Invoke(null, groupInvokeArgs);
       } catch (Exception invokeEx) {
         Log.Error($"Error invoking command {group} {matchedCommand}: {invokeEx}");
