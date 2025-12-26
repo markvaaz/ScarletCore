@@ -440,6 +440,66 @@ public static class LocalizationService {
   }
 
   /// <summary>
+  /// Get a localized string using the server language instead of player language.
+  /// Returns the key string if not found.
+  /// The key is automatically prefixed with the calling assembly name.
+  /// </summary>
+  /// <param name="key">The localization key (will be prefixed with assembly name)</param>
+  /// <param name="parameters">Optional parameters to format the localized string (e.g., {0}, {1})</param>
+  /// <returns>The localized text in server language, or the key if not found</returns>
+  public static string GetServer(string key, params object[] parameters) {
+    if (string.IsNullOrWhiteSpace(key)) return string.Empty;
+    if (!_initialized) Initialize();
+
+    var callingAssembly = GetCallingAssemblyFromStack();
+    var compositeKey = BuildCompositeKey(callingAssembly, key.Trim());
+
+    if (!_customKeys.TryGetValue(compositeKey, out var translations) || translations == null || translations.IsEmpty) {
+      return key;
+    }
+
+    // Use server language directly
+    if (translations.TryGetValue(_currentServerLanguage, out string text) && !string.IsNullOrEmpty(text)) {
+      return FormatString(text, parameters);
+    }
+
+    // Last resort: return first available translation
+    var first = translations.Values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
+    return first != null ? FormatString(first, parameters) : key;
+  }
+
+  /// <summary>
+  /// Get a localized string using the server language for a specific assembly.
+  /// This overload allows callers to specify which assembly owns the key,
+  /// avoiding issues when intermediate helper methods (like CommandContext)
+  /// are in a different assembly.
+  /// </summary>
+  /// <param name="key">The localization key (will be prefixed with assembly name)</param>
+  /// <param name="assembly">The assembly that owns the key (null for calling assembly)</param>
+  /// <param name="parameters">Optional parameters to format the localized string (e.g., {0}, {1})</param>
+  /// <returns>The localized text in server language, or the key if not found</returns>
+  public static string GetServer(string key, Assembly assembly, params object[] parameters) {
+    if (string.IsNullOrWhiteSpace(key)) return string.Empty;
+    if (!_initialized) Initialize();
+
+    var useAssembly = assembly ?? GetCallingAssemblyFromStack();
+    var compositeKey = BuildCompositeKey(useAssembly, key.Trim());
+
+    if (!_customKeys.TryGetValue(compositeKey, out var translations) || translations == null || translations.IsEmpty) {
+      return key;
+    }
+
+    // Use server language directly
+    if (translations.TryGetValue(_currentServerLanguage, out string text) && !string.IsNullOrEmpty(text)) {
+      return FormatString(text, parameters);
+    }
+
+    // Last resort: return first available translation
+    var first = translations.Values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
+    return first != null ? FormatString(first, parameters) : key;
+  }
+
+  /// <summary>
   /// Get a localized string directly by composite key (assembly:key format).
   /// This method is for internal use or when you need to access keys from other assemblies.
   /// Falls back to server language, then first available language.
