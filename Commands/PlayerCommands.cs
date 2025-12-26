@@ -1,11 +1,12 @@
 using System.Linq;
+using ScarletCore.Commanding;
 using ScarletCore.Services;
 using ScarletCore.Utils;
 
 namespace ScarletCore.Commands;
 
 internal static class PlayerCommands {
-  [SCommand("language", aliases: ["lang"], description: "Set your preferred language (e.g. .language portuguese)")]
+  [Command("language", aliases: ["lang"], description: "Set your preferred language (e.g. .language portuguese)")]
   public static void SetLanguage(CommandContext ctx, string language = "") {
     var player = ctx.Sender;
     if (player == null) {
@@ -30,14 +31,14 @@ internal static class PlayerCommands {
     ctx.Reply($"Your language has been set to: ~{newLang}~".FormatSuccess());
   }
 
-  [SCommand("help", aliases: ["h", "commands"], description: "Shows available commands")]
+  [Command("help", aliases: ["h", "commands"], description: "Shows available commands")]
   public static void Help(CommandContext ctx, string modName) {
     var player = ctx.Sender;
     var playerLanguage = player != null ? LocalizationService.GetPlayerLanguage(player) : null;
     if (!string.IsNullOrWhiteSpace(playerLanguage)) playerLanguage = playerLanguage.ToLower().Trim();
 
     var asmName = modName.Trim();
-    var cmds = CommandService.GetAssemblyCommands(asmName, playerLanguage);
+    var cmds = CommandHandler.GetAssemblyCommands(asmName, playerLanguage);
     if (cmds == null || cmds.Length == 0) {
       ctx.ReplyInfo($"No commands found for assembly: {asmName}");
       return;
@@ -50,13 +51,13 @@ internal static class PlayerCommands {
     }
   }
 
-  [SCommand("help", aliases: ["h", "commands"], description: "Shows available commands")]
+  [Command("help", aliases: ["h", "commands"], description: "Shows available commands")]
   public static void Help(CommandContext ctx) {
     var player = ctx.Sender;
     var playerLanguage = player != null ? LocalizationService.GetPlayerLanguage(player) : null;
     if (!string.IsNullOrWhiteSpace(playerLanguage)) playerLanguage = playerLanguage.ToLower().Trim();
 
-    var all = CommandService.GetAllCommands(playerLanguage);
+    var all = CommandHandler.GetAllCommands(playerLanguage);
     if (all.Count == 0) {
       ctx.ReplyInfo("No commands available.");
       return;

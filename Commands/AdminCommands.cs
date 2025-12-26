@@ -1,12 +1,13 @@
 using System.Linq;
+using ScarletCore.Commanding;
 using ScarletCore.Services;
 using ScarletCore.Utils;
 
 namespace ScarletCore.Commands;
 
-[SCommandGroup("admin", aliases: ["sc"], adminOnly: true)]
+[CommandGroup("admin", aliases: ["sc"], adminOnly: true)]
 internal static class AdminCommands {
-  [SCommand("serverlanguage", aliases: ["svlang"], description: "Set localization language")]
+  [Command("serverlanguage", aliases: ["svlang"], description: "Set localization language")]
   public static void SetLanguage(CommandContext ctx, string language = "") {
     var newLanguage = language.ToLower().Trim();
     if (!LocalizationService.IsLanguageAvailable(newLanguage)) {
@@ -24,7 +25,7 @@ internal static class AdminCommands {
     }
   }
 
-  [SCommand("getlanguage", aliases: ["getlang"], description: "Get current localization language")]
+  [Command("getlanguage", aliases: ["getlang"], description: "Get current localization language")]
   public static void GetLanguage(CommandContext ctx) {
     var current = LocalizationService.CurrentServerLanguage;
     ctx.ReplyInfo($"~ScarletCore~ current localization language: ~{current}~");
