@@ -30,8 +30,8 @@ public class Plugin : BasePlugin {
     Database = new Database(MyPluginInfo.PLUGIN_GUID);
 
     Settings.Section("Language")
-      .Add("PrefabLocalizationLanguage", "english", $"Language code for localization. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}")
-      .Add("DefaultPlayerLanguage", "english", $"Default language code for new players. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}");
+      .Add("PrefabLocalizationLanguage", Language.English, $"Language code for localization. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}")
+      .Add("DefaultPlayerLanguage", Language.English, $"Default language code for new players. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}");
     EventManager.On(ServerEvents.OnInitialize, OnInitialize);
   }
 
