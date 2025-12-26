@@ -3,6 +3,7 @@ using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
+using ScarletCore.Commanding;
 using ScarletCore.Data;
 using ScarletCore.Events;
 using ScarletCore.Services;
@@ -38,7 +39,7 @@ public class Plugin : BasePlugin {
   [EventPriority(999)]
   private void OnInitialize() {
     LocalizationService.Initialize();
-    CommandService.Initialize();
+    CommandHandler.Initialize();
     Utils.Log.Message("ScarletCore Services initialized.");
   }
 
