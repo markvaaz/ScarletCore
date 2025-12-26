@@ -493,7 +493,15 @@ public static class EventManager {
   }
 
   public static int UnregisterAssembly(Assembly assembly = null) {
-    var asm = assembly ?? Assembly.GetExecutingAssembly();
+    Assembly asm;
+    if (assembly == null) {
+      var stackTrace = new System.Diagnostics.StackTrace();
+      var callingMethod = stackTrace.GetFrame(1)?.GetMethod();
+      asm = callingMethod?.DeclaringType?.Assembly ?? Assembly.GetExecutingAssembly();
+    } else {
+      asm = assembly;
+    }
+
     int removed = 0;
 
     lock (_customLock) {
