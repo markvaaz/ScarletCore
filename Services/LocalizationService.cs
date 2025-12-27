@@ -13,6 +13,7 @@ using ScarletCore.Events;
 namespace ScarletCore.Services;
 
 public static class Language {
+  public const string ServerDefault = "server_default";
   public const string Portuguese = "portuguese";
   public const string English = "english";
   public const string French = "french";

@@ -116,6 +116,8 @@ public static class CommandHandler {
   // Mapping from command key (the string used to lookup in dictionaries) to language code.
   // null or empty = default/main language for the command (no language-specific alias)
   private static readonly Dictionary<string, string> _commandKeyLanguage = new(StringComparer.OrdinalIgnoreCase);
+  // Cache for GetAllCommands keyed by player language (normalized). Cleared on register/unregister.
+  private static readonly Dictionary<string, Dictionary<string, string[]>> _commandsCache = new(StringComparer.OrdinalIgnoreCase);
   private static bool _initialized = false;
 
   public static void Initialize() {
@@ -150,7 +152,7 @@ public static class CommandHandler {
 
       if (grpAttr != null) {
         // Has group attribute - register as grouped commands
-        var groupName = grpAttr.Group.ToLower();
+        var groupName = grpAttr.Group.ToLowerInvariant();
         var groupAdminOnly = grpAttr.AdminOnly;
 
         // Register main group name
@@ -161,7 +163,7 @@ public static class CommandHandler {
 
         // Register group aliases
         foreach (var alias in grpAttr.Aliases) {
-          var aliasLower = alias.ToLower();
+          var aliasLower = alias.ToLowerInvariant();
           if (!_groups.ContainsKey(aliasLower)) {
             _groups[aliasLower] = _groups[groupName];
             _groupToAssembly[aliasLower] = assembly; // Use the type's assembly
@@ -185,7 +187,7 @@ public static class CommandHandler {
             GroupName = groupName
           };
 
-          var cmdName = cmdAttr.Name.ToLower();
+          var cmdName = cmdAttr.Name.ToLowerInvariant();
           if (!_groups[groupName].TryGetValue(cmdName, out var list)) {
             list = [];
             _groups[groupName][cmdName] = list;
@@ -196,7 +198,7 @@ public static class CommandHandler {
 
           // Register command aliases
           foreach (var alias in cmdAttr.Aliases) {
-            var aliasLower = alias.ToLower();
+            var aliasLower = alias.ToLowerInvariant();
             if (!_groups[groupName].TryGetValue(aliasLower, out var aliasList)) {
               aliasList = [];
               _groups[groupName][aliasLower] = aliasList;
@@ -209,22 +211,22 @@ public static class CommandHandler {
           var multiAliases = method.GetCustomAttributes<CommandAliasAttribute>();
           foreach (var ma in multiAliases) {
             if (string.IsNullOrWhiteSpace(ma.Name)) continue;
-            var multiName = ma.Name.ToLower();
+            var multiName = ma.Name.ToLowerInvariant();
             if (!_groups[groupName].TryGetValue(multiName, out var multiList)) {
               multiList = [];
               _groups[groupName][multiName] = multiList;
             }
             multiList.Add(cmdInfo);
-            _commandKeyLanguage[multiName] = ma.Language?.ToLower();
+            _commandKeyLanguage[multiName] = ma.Language?.ToLowerInvariant();
 
             foreach (var a in ma.Aliases) {
-              var aLower = a.ToLower();
+              var aLower = a.ToLowerInvariant();
               if (!_groups[groupName].TryGetValue(aLower, out var aList)) {
                 aList = [];
                 _groups[groupName][aLower] = aList;
               }
               aList.Add(cmdInfo);
-              _commandKeyLanguage[aLower] = ma.Language?.ToLower();
+              _commandKeyLanguage[aLower] = ma.Language?.ToLowerInvariant();
             }
           }
         }
@@ -247,7 +249,7 @@ public static class CommandHandler {
             GroupName = null
           };
 
-          var cmdName = cmdAttr.Name.ToLower();
+          var cmdName = cmdAttr.Name.ToLowerInvariant();
           if (!_noGroupCommands.TryGetValue(cmdName, out var list)) {
             list = [];
             _noGroupCommands[cmdName] = list;
@@ -257,7 +259,7 @@ public static class CommandHandler {
 
           // Register command aliases
           foreach (var alias in cmdAttr.Aliases) {
-            var aliasLower = alias.ToLower();
+            var aliasLower = alias.ToLowerInvariant();
             if (!_noGroupCommands.TryGetValue(aliasLower, out var aliasList)) {
               aliasList = [];
               _noGroupCommands[aliasLower] = aliasList;
@@ -270,22 +272,22 @@ public static class CommandHandler {
           var multiAliases = method.GetCustomAttributes<CommandAliasAttribute>();
           foreach (var ma in multiAliases) {
             if (string.IsNullOrWhiteSpace(ma.Name)) continue;
-            var multiName = ma.Name.ToLower();
+            var multiName = ma.Name.ToLowerInvariant();
             if (!_noGroupCommands.TryGetValue(multiName, out var multiList)) {
               multiList = [];
               _noGroupCommands[multiName] = multiList;
             }
             multiList.Add(cmdInfo);
-            _commandKeyLanguage[multiName] = ma.Language?.ToLower();
+            _commandKeyLanguage[multiName] = ma.Language?.ToLowerInvariant();
 
             foreach (var a in ma.Aliases) {
-              var aLower = a.ToLower();
+              var aLower = a.ToLowerInvariant();
               if (!_noGroupCommands.TryGetValue(aLower, out var aList)) {
                 aList = [];
                 _noGroupCommands[aLower] = aList;
               }
               aList.Add(cmdInfo);
-              _commandKeyLanguage[aLower] = ma.Language?.ToLower();
+              _commandKeyLanguage[aLower] = ma.Language?.ToLowerInvariant();
             }
           }
         }
@@ -293,6 +295,8 @@ public static class CommandHandler {
     }
 
     Log.Info($"Registered commands from assembly: {assembly.GetName().Name}");
+    // Invalidate cached command listings
+    _commandsCache.Clear();
   }
 
   /// <summary>
@@ -331,8 +335,8 @@ public static class CommandHandler {
         if (cmds.TryGetValue(command, out var list)) {
           list.RemoveAll(ci => ci.Assembly == asm);
           if (list.Count == 0) cmds.Remove(command);
-          // remove language mapping for this command key
-          _commandKeyLanguage.Remove(command);
+          // remove language mapping for this command key only if no other registration uses it
+          if (!IsCommandKeyRegistered(command)) _commandKeyLanguage.Remove(command);
         }
       }
     }
@@ -349,12 +353,24 @@ public static class CommandHandler {
       if (_noGroupCommands.TryGetValue(cmdName, out var list)) {
         list.RemoveAll(ci => ci.Assembly == asm);
         if (list.Count == 0) _noGroupCommands.Remove(cmdName);
-        // remove language mapping for this standalone key
-        _commandKeyLanguage.Remove(cmdName);
+        // remove language mapping for this standalone key only if no other registration uses it
+        if (!IsCommandKeyRegistered(cmdName)) _commandKeyLanguage.Remove(cmdName);
       }
     }
 
     Log.Info($"Unregistered commands from assembly: {asm.GetName().Name} ({groupsToRemove.Count} groups removed)");
+    // Invalidate cached command listings
+    _commandsCache.Clear();
+  }
+
+  // Returns true if the given command key is still present in any registered command map
+  private static bool IsCommandKeyRegistered(string key) {
+    if (string.IsNullOrWhiteSpace(key)) return false;
+    if (_noGroupCommands.ContainsKey(key)) return true;
+    foreach (var groupKvp in _groups) {
+      if (groupKvp.Value.ContainsKey(key)) return true;
+    }
+    return false;
   }
 
   private static string GenerateUsage(string group, string command, MethodInfo method) {
@@ -429,7 +445,7 @@ public static class CommandHandler {
     if (type == typeof(uint)) return "uint";
     if (type == typeof(short)) return "short";
     if (type == typeof(byte)) return "byte";
-    return type.Name.ToLower();
+    return type.Name.ToLowerInvariant();
   }
 
   /// <summary>
@@ -448,7 +464,7 @@ public static class CommandHandler {
     string anyCandidate = null;
 
     for (int wordCount = parts.Length - startIndex; wordCount >= 1; wordCount--) {
-      var candidateCommand = string.Join(" ", parts.Skip(startIndex).Take(wordCount)).ToLower();
+      var candidateCommand = string.Join(" ", parts.Skip(startIndex).Take(wordCount)).ToLowerInvariant();
 
       if (!commands.ContainsKey(candidateCommand)) continue;
 
@@ -512,7 +528,7 @@ public static class CommandHandler {
       var parts = SplitArgumentsPreservingQuotes(withoutDot);
       if (parts == null || parts.Length == 0) return;
 
-      var firstPart = parts[0].ToLower();
+      var firstPart = parts[0].ToLowerInvariant();
 
       // resolve sender (best-effort)
       PlayerData player = null;
@@ -520,12 +536,14 @@ public static class CommandHandler {
         try {
           var fromChar = messageEntity.Read<FromCharacter>();
           player = fromChar.Character.GetPlayerData();
-        } catch { }
+        } catch (Exception ex) {
+          Log.Warning($"Failed resolving player from message entity {messageEntity}: {ex}");
+        }
       }
 
       // determine player's language (null if not set)
       var playerLanguage = (player != null) ? LocalizationService.GetPlayerLanguage(player) : null;
-      if (!string.IsNullOrWhiteSpace(playerLanguage)) playerLanguage = playerLanguage.ToLower().Trim();
+      if (!string.IsNullOrWhiteSpace(playerLanguage)) playerLanguage = playerLanguage.ToLowerInvariant().Trim();
 
       // Try as standalone command first (no group)
       // Try multi-word matching for standalone commands
@@ -569,12 +587,21 @@ public static class CommandHandler {
 
       // Try to find multi-word command match starting after the group name
       if (parts.Length < 2) {
-        Log.Info($"Command group '{group}' invoked without subcommand.");
+        // Inform the player that the group requires a subcommand
+        if (player != null) {
+          var msg = LocalizationService.Get(player, "cmd_group_no_subcommand", group);
+          MessageService.SendRaw(player, msg.FormatInfo());
+        }
         return;
       }
 
       if (!TryFindMultiWordCommand(cmds, parts, 1, playerLanguage, out var matchedCommand, out var groupArgs)) {
-        Log.Info($"Unknown command in group '{group}': {string.Join(" ", parts.Skip(1))}");
+        // Inform the player that the subcommand is unknown
+        if (player != null) {
+          var unknown = string.Join(" ", parts.Skip(1));
+          var msg = LocalizationService.Get(player, "cmd_unknown_group_command", group, unknown);
+          MessageService.SendRaw(player, msg.FormatError());
+        }
         return;
       }
 
@@ -615,71 +642,92 @@ public static class CommandHandler {
   private static bool TryParseParameter(Type paramType, string value, out object result) {
     result = null;
 
-    // If no value provided, return false (will use default if optional)
     if (value == null) return false;
 
+    value = value.Trim();
+
     try {
-      if (paramType == typeof(string)) {
-        result = value;
-        return true;
+      var underlying = Nullable.GetUnderlyingType(paramType);
+      if (underlying != null) {
+        if (string.IsNullOrEmpty(value) || value.Equals("null", StringComparison.OrdinalIgnoreCase)) {
+          result = null;
+          return true;
+        }
+        return TryParseParameter(underlying, value, out result);
       }
+
+      if (paramType == typeof(string)) { result = value; return true; }
+
+      if (paramType.IsEnum) {
+        try { result = Enum.Parse(paramType, value, true); return true; } catch { return false; }
+      }
+
+      if (paramType == typeof(Guid)) { if (Guid.TryParse(value, out var g)) { result = g; return true; } return false; }
+
+      if (paramType == typeof(DateTime)) {
+        if (DateTime.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt)) { result = dt; return true; }
+        if (DateTime.TryParse(value, System.Globalization.CultureInfo.CurrentCulture, System.Globalization.DateTimeStyles.None, out dt)) { result = dt; return true; }
+        return false;
+      }
+
+      if (paramType == typeof(TimeSpan)) { if (TimeSpan.TryParse(value, out var ts)) { result = ts; return true; } return false; }
 
       if (paramType == typeof(int)) {
-        if (int.TryParse(value, out var intVal)) {
-          result = intVal;
-          return true;
-        }
-        return false;
-      }
-
-      if (paramType == typeof(float)) {
-        if (float.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var floatVal)) {
-          result = floatVal;
-          return true;
-        }
-        return false;
-      }
-
-      if (paramType == typeof(double)) {
-        if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var doubleVal)) {
-          result = doubleVal;
-          return true;
-        }
-        return false;
-      }
-
-      if (paramType == typeof(bool)) {
-        if (bool.TryParse(value, out var boolVal)) {
-          result = boolVal;
-          return true;
-        }
-        // Accept 1/0, yes/no, y/n
-        if (value == "1" || value.Equals("yes", StringComparison.OrdinalIgnoreCase) || value.Equals("y", StringComparison.OrdinalIgnoreCase)) {
-          result = true;
-          return true;
-        }
-        if (value == "0" || value.Equals("no", StringComparison.OrdinalIgnoreCase) || value.Equals("n", StringComparison.OrdinalIgnoreCase)) {
-          result = false;
-          return true;
-        }
+        if (int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
+        if (int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
         return false;
       }
 
       if (paramType == typeof(long)) {
-        if (long.TryParse(value, out var longVal)) {
-          result = longVal;
-          return true;
-        }
+        if (long.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
+        if (long.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
         return false;
       }
 
-      // Support Unity.Mathematics float3 and float2 in format "x,y,z" or "x,y"
+      if (paramType == typeof(uint)) {
+        if (uint.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
+        if (uint.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
+        return false;
+      }
+
+      if (paramType == typeof(short)) {
+        if (short.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
+        if (short.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
+        return false;
+      }
+
+      if (paramType == typeof(byte)) {
+        if (byte.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
+        if (byte.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
+        return false;
+      }
+
+      if (paramType == typeof(float)) {
+        if (float.TryParse(value, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
+        if (float.TryParse(value, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
+        return false;
+      }
+
+      if (paramType == typeof(double)) {
+        if (double.TryParse(value, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
+        if (double.TryParse(value, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
+        return false;
+      }
+
+      if (paramType == typeof(bool)) {
+        if (bool.TryParse(value, out var b)) { result = b; return true; }
+        var vv = value.Trim().ToLowerInvariant();
+        if (vv == "1" || vv == "yes" || vv == "y" || vv == "true") { result = true; return true; }
+        if (vv == "0" || vv == "no" || vv == "n" || vv == "false") { result = false; return true; }
+        return false;
+      }
+
       if (paramType == typeof(float3)) {
         var parts = value.Split(',');
         if (parts.Length != 3) return false;
-        if (!float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var x)) return false;
-        if (!float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var y)) return false;
-        if (!float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var z)) return false;
+        if (!float.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var x)) return false;
+        if (!float.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var y)) return false;
+        if (!float.TryParse(parts[2].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var z)) return false;
         result = new float3(x, y, z);
         return true;
       }
@@ -687,40 +735,20 @@ public static class CommandHandler {
       if (paramType == typeof(float2)) {
         var parts = value.Split(',');
         if (parts.Length != 2) return false;
-        if (!float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var x)) return false;
-        if (!float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var y)) return false;
+        if (!float.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var x)) return false;
+        if (!float.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var y)) return false;
         result = new float2(x, y);
         return true;
       }
 
-      if (paramType == typeof(uint)) {
-        if (uint.TryParse(value, out var uintVal)) {
-          result = uintVal;
-          return true;
-        }
+      try {
+        result = Convert.ChangeType(value, paramType, System.Globalization.CultureInfo.InvariantCulture);
+        return true;
+      } catch {
         return false;
       }
-
-      if (paramType == typeof(short)) {
-        if (short.TryParse(value, out var shortVal)) {
-          result = shortVal;
-          return true;
-        }
-        return false;
-      }
-
-      if (paramType == typeof(byte)) {
-        if (byte.TryParse(value, out var byteVal)) {
-          result = byteVal;
-          return true;
-        }
-        return false;
-      }
-
-      // Try to use Convert.ChangeType for other types
-      result = Convert.ChangeType(value, paramType, System.Globalization.CultureInfo.InvariantCulture);
-      return true;
-    } catch {
+    } catch (Exception ex) {
+      Log.Debug($"TryParseParameter failed for type {paramType} value '{value}': {ex}");
       return false;
     }
   }
@@ -920,6 +948,48 @@ public static class CommandHandler {
       { Language.Vietnamese, "Overload lệnh không rõ ràng; tìm thấy nhiều kết quả khớp." }
     });
 
+    LocalizationService.NewKey("cmd_group_no_subcommand", new Dictionary<string, string> {
+      { Language.English, "This command group requires a subcommand." },
+      { Language.Portuguese, "Este grupo de comandos requer um subcomando." },
+      { Language.French, "Ce groupe de commandes nécessite une sous-commande." },
+      { Language.German, "Diese Befehlsgruppe erfordert einen Unterbefehl." },
+      { Language.Hungarian, "Ehhez a parancscsoporthoz alparancs szükséges." },
+      { Language.Italian, "Questo gruppo di comandi richiede un sottocomando." },
+      { Language.Japanese, "このコマンドグループはサブコマンドが必要です。" },
+      { Language.Korean, "이 명령 그룹은 하위 명령이 필요합니다." },
+      { Language.Latam, "Este grupo de comandos requiere un subcomando." },
+      { Language.Polish, "Ta grupa poleceń wymaga podpolecenia." },
+      { Language.Russian, "Эта группа команд требует подкоманды." },
+      { Language.Spanish, "Este grupo de comandos requiere un subcomando." },
+      { Language.ChineseSimplified, "此命令组需要子命令。" },
+      { Language.ChineseTraditional, "此指令群組需要子指令。" },
+      { Language.Thai, "กลุ่มคำสั่งนี้ต้องการคำสั่งย่อย" },
+      { Language.Turkish, "Bu komut grubu bir alt komut gerektirir." },
+      { Language.Ukrainian, "Ця група команд вимагає підкоманди." },
+      { Language.Vietnamese, "Nhóm lệnh này yêu cầu một lệnh phụ." }
+    });
+
+    LocalizationService.NewKey("cmd_unknown_group_command", new Dictionary<string, string> {
+      { Language.English, "Unknown command in group '{0}': {1}" },
+      { Language.Portuguese, "Comando desconhecido no grupo '{0}': {1}" },
+      { Language.French, "Commande inconnue dans le groupe '{0}' : {1}" },
+      { Language.German, "Unbekannter Befehl in Gruppe '{0}': {1}" },
+      { Language.Hungarian, "Ismeretlen parancs a(z) '{0}' csoportban: {1}" },
+      { Language.Italian, "Comando sconosciuto nel gruppo '{0}': {1}" },
+      { Language.Japanese, "グループ '{0}' の不明なコマンド: {1}" },
+      { Language.Korean, "그룹 '{0}'에서 알 수 없는 명령: {1}" },
+      { Language.Latam, "Comando desconocido en el grupo '{0}': {1}" },
+      { Language.Polish, "Nieznane polecenie w grupie '{0}': {1}" },
+      { Language.Russian, "Неизвестная команда в группе '{0}': {1}" },
+      { Language.Spanish, "Comando desconocido en el grupo '{0}': {1}" },
+      { Language.ChineseSimplified, "组 '{0}' 中的未知命令：{1}" },
+      { Language.ChineseTraditional, "群組 '{0}' 中的未知指令：{1}" },
+      { Language.Thai, "คำสั่งไม่รู้จักในกลุ่ม '{0}': {1}" },
+      { Language.Turkish, "'{0}' grubunda bilinmeyen komut: {1}" },
+      { Language.Ukrainian, "Невідома команда в групі '{0}': {1}" },
+      { Language.Vietnamese, "Lệnh không xác định trong nhóm '{0}': {1}" }
+    });
+
 
   }
 
@@ -928,6 +998,9 @@ public static class CommandHandler {
   /// will be used to prefer language-specific aliases when available.
   /// </summary>
   public static Dictionary<string, string[]> GetAllCommands(string playerLanguage = null) {
+    var cacheKey = string.IsNullOrWhiteSpace(playerLanguage) ? string.Empty : playerLanguage.ToLowerInvariant().Trim();
+    if (_commandsCache.TryGetValue(cacheKey, out var cached)) return cached;
+
     var result = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
     // Map each CommandInfo to its list of candidate representations
@@ -939,12 +1012,12 @@ public static class CommandHandler {
         list = [];
         ciCandidates[ci] = list;
       }
-      list.Add((rep, string.IsNullOrWhiteSpace(keyLang) ? null : keyLang.ToLower().Trim()));
+      list.Add((rep, string.IsNullOrWhiteSpace(keyLang) ? null : keyLang.ToLowerInvariant().Trim()));
     }
 
     // Collect from standalone commands
     foreach (var kvp in _noGroupCommands) {
-      var key = kvp.Key.ToLower();
+      var key = kvp.Key.ToLowerInvariant();
       foreach (var ci in kvp.Value) {
         var usage = ci.Attribute?.Usage;
         string rep;
@@ -969,9 +1042,9 @@ public static class CommandHandler {
 
     // Collect from grouped commands
     foreach (var groupKvp in _groups) {
-      var group = groupKvp.Key.ToLower();
+      var group = groupKvp.Key.ToLowerInvariant();
       foreach (var cmdKvp in groupKvp.Value) {
-        var cmdKey = cmdKvp.Key.ToLower();
+        var cmdKey = cmdKvp.Key.ToLowerInvariant();
         foreach (var ci in cmdKvp.Value) {
           var usage = ci.Attribute?.Usage;
           string rep;
@@ -1000,7 +1073,7 @@ public static class CommandHandler {
       string chosen = null;
 
       if (!string.IsNullOrWhiteSpace(playerLanguage)) {
-        var pl = playerLanguage.ToLower().Trim();
+        var pl = playerLanguage.ToLowerInvariant().Trim();
         var match = candidates.FirstOrDefault(c => string.Equals(c.keyLang, pl, StringComparison.OrdinalIgnoreCase));
         if (match != default) chosen = match.rep;
       }
@@ -1020,8 +1093,10 @@ public static class CommandHandler {
       set.Add(chosen);
     }
 
-    // Convert HashSets to arrays
-    return result.ToDictionary(k => k.Key, v => v.Value.OrderBy(x => x).ToArray(), StringComparer.OrdinalIgnoreCase);
+    // Convert HashSets to arrays and cache result
+    var final = result.ToDictionary(k => k.Key, v => v.Value.OrderBy(x => x).ToArray(), StringComparer.OrdinalIgnoreCase);
+    _commandsCache[cacheKey] = final;
+    return final;
   }
 
   /// <summary>
