@@ -274,23 +274,19 @@ public static class CommandHandler {
   private static List<(string GroupName, Language Language)> GetCommandGroups(Type type) {
     var groups = new List<(string, Language)>();
 
-    // Pega o grupo principal
     var groupAttr = type.GetCustomAttribute<CommandGroupAttribute>();
     if (groupAttr != null) {
       groups.Add((groupAttr.Group, groupAttr.Language));
 
-      // Aliases do grupo principal mantêm a mesma linguagem
       foreach (var alias in groupAttr.Aliases ?? []) {
         groups.Add((alias, groupAttr.Language));
       }
     }
 
-    // Pega os grupos alias (traduções)
     var groupAliases = type.GetCustomAttributes<CommandGroupAliasAttribute>();
     foreach (var aliasAttr in groupAliases) {
       groups.Add((aliasAttr.Group, aliasAttr.Language));
 
-      // Aliases do grupo alias mantêm a linguagem do grupo alias
       foreach (var alias in aliasAttr.Aliases ?? []) {
         groups.Add((alias, aliasAttr.Language));
       }
