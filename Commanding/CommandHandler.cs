@@ -431,19 +431,16 @@ public static class CommandHandler {
       string commandName = BuildCommandName(tokens, commandTokens);
       var key = new CommandLookupKey(playerLanguage, commandTokens, commandName);
 
-      // Tenta encontrar comandos na linguagem do jogador
       if (CommandsByKey.TryGetValue(key, out var commands)) {
         foreach (var command in commands) {
-          // Primeira tentativa: validação estrita de tipos
           int score = CalculateCommandMatchScore(command, tokens, commandTokens, allowTypeFailure: false);
           if (score >= 0) {
-            score += 1000; // Bonus por match de linguagem
+            score += 1000;
             if (score > bestScore) {
               bestMatch = command;
               bestScore = score;
             }
           } else {
-            // Segunda tentativa: permite falha de tipo (mas ainda valida quantidade de parâmetros)
             score = CalculateCommandMatchScore(command, tokens, commandTokens, allowTypeFailure: true);
             if (score >= 0) {
               score += 1000;
@@ -456,7 +453,6 @@ public static class CommandHandler {
         }
       }
 
-      // Fallback para qualquer linguagem
       var fallbackKey = (commandTokens, commandName);
       if (FallbackCommandsByKey.TryGetValue(fallbackKey, out var fallbackCommands)) {
         foreach (var fallbackCommand in fallbackCommands) {
@@ -566,12 +562,10 @@ public static class CommandHandler {
   private static int CalculateCommandMatchScore(CommandInfo command, ReadOnlySpan<string> tokens, int commandTokenCount, bool allowTypeFailure = false) {
     int remainingTokens = tokens.Length - commandTokenCount;
 
-    // SEMPRE valida o número mínimo de parâmetros, independente de allowTypeFailure
     if (remainingTokens < command.MinParameterCount) {
       return -1;
     }
 
-    // Valida o número máximo de parâmetros
     if (remainingTokens > command.MaxParameterCount) {
       return -1;
     }
@@ -933,11 +927,9 @@ public static class CommandHandler {
   [CommandAlias("допомога", Language.Ukrainian, description: "Показує доступні команди")]
   [CommandAlias("trợgiúp", Language.Vietnamese, description: "Hiển thị các lệnh có sẵn")]
   internal static void HelpCommand(CommandContext ctx, int page = 1) {
-    // if (language == Language.None) language = ctx.Sender.Language;
     HelpCommandInternal(ctx, ctx.Sender.Language, page);
   }
 
-  // Método interno compartilhado
   private static void HelpCommandInternal(CommandContext ctx, Language targetLanguage, int page) {
     const int commandsPerMessage = 5;
     const int messagesPerPage = 8;
@@ -977,7 +969,6 @@ public static class CommandHandler {
         string headerText = LocalizationService.Get(ctx.Sender, LocalizationKey.HelpAvailableCommands, page, totalPages);
         messageBuilder.AppendLine(headerText.Bold());
 
-        // Show which language is being displayed if different from sender's language
         if (isCustomLanguage) {
           messageBuilder.AppendLine($"~Language: {targetLanguage}~".WithColor("yellow"));
         }
@@ -1057,7 +1048,6 @@ public static class CommandHandler {
   private static Dictionary<string, List<CommandInfo>> GetCommandsByAssembly(Language playerLanguage, bool isAdmin) {
     var result = new Dictionary<string, List<CommandInfo>>();
 
-    // Pega TODOS os comandos de todas as listas
     var allCommands = CommandsByKey.Values
       .SelectMany(list => list)
       .Where(cmd => isAdmin || !cmd.AdminOnly)
@@ -1068,7 +1058,6 @@ public static class CommandHandler {
       var assemblyName = assemblyGroup.Key;
       var commandList = new List<CommandInfo>();
 
-      // Agrupa por método e seleciona a melhor versão de cada comando
       var uniqueCommands = assemblyGroup
         .GroupBy(cmd => cmd.Method)
         .Select(methodGroup => {
