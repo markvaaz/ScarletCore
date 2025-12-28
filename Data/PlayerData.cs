@@ -7,6 +7,7 @@ using ProjectM;
 using Unity.Mathematics;
 using ScarletCore.Services;
 using Stunlock.Core;
+using ScarletCore.Utils;
 
 namespace ScarletCore.Data;
 
@@ -119,6 +120,16 @@ public class PlayerData() {
   /// Converts from UTC ticks to local DateTime for easier handling.
   /// </summary>
   public DateTime LastConnected => new DateTime(User.TimeLastConnected, DateTimeKind.Utc).ToLocalTime();
+
+  public Language Language {
+    get {
+      var lang = LocalizationService.GetPlayerLanguage(this);
+      if (lang == Language.None) {
+        lang = LocalizationService.CurrentServerLanguage;
+      }
+      return lang;
+    }
+  }
 
   /// <summary>
   /// Gets the player's clan name if they belong to one.
@@ -340,9 +351,45 @@ public class PlayerData() {
     MessageService.Send(this, message);
   }
 
+  public void SendErrorMessage(string message) {
+    MessageService.SendError(this, message);
+  }
+
+  public void SendInfoMessage(string message) {
+    MessageService.SendInfo(this, message);
+  }
+
+  public void SendSuccessMessage(string message) {
+    MessageService.SendSuccess(this, message);
+  }
+
+  public void SendWarningMessage(string message) {
+    MessageService.SendWarning(this, message);
+  }
+
   public void SendLocalizedMessage(string key, params object[] args) {
     var localized = LocalizationService.Get(this, key, args);
     SendMessage(localized);
+  }
+
+  public void SendLocalizedErrorMessage(string key, params object[] args) {
+    var localized = LocalizationService.Get(this, key, args);
+    SendErrorMessage(localized);
+  }
+
+  public void SendLocalizedInfoMessage(string key, params object[] args) {
+    var localized = LocalizationService.Get(this, key, args);
+    SendInfoMessage(localized);
+  }
+
+  public void SendLocalizedSuccessMessage(string key, params object[] args) {
+    var localized = LocalizationService.Get(this, key, args);
+    SendSuccessMessage(localized);
+  }
+
+  public void SendLocalizedWarningMessage(string key, params object[] args) {
+    var localized = LocalizationService.Get(this, key, args);
+    SendWarningMessage(localized);
   }
 
   /// <summary>

@@ -1,509 +1,31 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using ProjectM.Network;
-using Unity.Mathematics;
 using ScarletCore.Data;
-using ScarletCore.Utils;
-using Unity.Entities;
-using Unity.Collections;
 using ScarletCore.Services;
+using ScarletCore.Utils;
+using Stunlock.Core;
+using Unity.Collections;
+using Unity.Entities;
+using Unity.Mathematics;
 
 namespace ScarletCore.Commanding;
 
-/// <summary>
-/// Context passed to command handlers.
-/// </summary>
-public sealed class CommandContext(Entity messageEntity, PlayerData sender, string raw, string[] args) {
-  public Entity MessageEntity { get; } = messageEntity;
-  public PlayerData Sender { get; } = sender;
-  public string Raw { get; } = raw;
-  public string[] Args { get; } = args;
-  // The assembly that should be considered the owner of localization keys.
-  // When a command from another assembly invokes `ReplyLocalized`, CommandService
-  // will set this to the command's assembly so localization resolves correctly.
-  public Assembly CallingAssembly { get; set; }
+internal readonly record struct CommandLookupKey(Language Language, int TokenCount, string CommandName);
 
-  public void Reply(string message) {
-    if (Sender != null) MessageService.SendRaw(Sender, message.Format());
-  }
-
-  public void ReplyError(string message) {
-    if (Sender != null) MessageService.SendRaw(Sender, message.FormatError());
-  }
-
-  public void ReplyWarning(string message) {
-    if (Sender != null) MessageService.SendRaw(Sender, message.FormatWarning());
-  }
-
-  public void ReplyInfo(string message) {
-    if (Sender != null) MessageService.SendRaw(Sender, message.FormatInfo());
-  }
-
-  public void ReplySuccess(string message) {
-    if (Sender != null) MessageService.SendRaw(Sender, message.FormatSuccess());
-  }
-
-  public void ReplyLocalized(string key, params string[] parameters) {
-    if (Sender != null) {
-      string localized;
-      if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
-      else localized = LocalizationService.Get(Sender, key, parameters);
-      MessageService.SendRaw(Sender, localized.Format());
-    }
-  }
-
-  public void ReplyLocalizedError(string key, params string[] parameters) {
-    if (Sender != null) {
-      string localized;
-      if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
-      else localized = LocalizationService.Get(Sender, key, parameters);
-      MessageService.SendRaw(Sender, localized.FormatError());
-    }
-  }
-
-  public void ReplyLocalizedWarning(string key, params string[] parameters) {
-    if (Sender != null) {
-      string localized;
-      if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
-      else localized = LocalizationService.Get(Sender, key, parameters);
-      MessageService.SendRaw(Sender, localized.FormatWarning());
-    }
-  }
-
-  public void ReplyLocalizedInfo(string key, params string[] parameters) {
-    if (Sender != null) {
-      string localized;
-      if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
-      else localized = LocalizationService.Get(Sender, key, parameters);
-      MessageService.SendRaw(Sender, localized.FormatInfo());
-    }
-  }
-
-  public void ReplyLocalizedSuccess(string key, params string[] parameters) {
-    if (Sender != null) {
-      string localized;
-      if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
-      else localized = LocalizationService.Get(Sender, key, parameters);
-      MessageService.SendRaw(Sender, localized.FormatSuccess());
-    }
-  }
-}
-
-/// <summary>
-/// Stores command metadata including attributes and method info.
-/// </summary>
-internal sealed class CommandInfo {
-  public MethodInfo Method { get; set; }
-  public CommandAttribute Attribute { get; set; }
-  public bool GroupAdminOnly { get; set; }
-  public Assembly Assembly { get; set; }
-  public string GroupName { get; set; } // null if no group
-}
-
-/// <summary>
-/// Responsible for scanning command classes, detecting `.group` messages and invoking handlers.
-/// Supports N parameters with optional and required parameters using default values.
-/// Now supports commands without groups - can be invoked directly as `.command`
-/// Also supports multi-word commands like `.quest create npc`
-/// </summary>
 public static class CommandHandler {
-  private static readonly Dictionary<string, Dictionary<string, List<CommandInfo>>> _groups = new(StringComparer.OrdinalIgnoreCase);
-  private static readonly Dictionary<string, List<CommandInfo>> _noGroupCommands = new(StringComparer.OrdinalIgnoreCase);
-  private static readonly Dictionary<string, Assembly> _groupToAssembly = new(StringComparer.OrdinalIgnoreCase);
-  // Mapping from command key (the string used to lookup in dictionaries) to language code.
-  // null or empty = default/main language for the command (no language-specific alias)
-  private static readonly Dictionary<string, string> _commandKeyLanguage = new(StringComparer.OrdinalIgnoreCase);
-  // Cache for GetAllCommands keyed by player language (normalized). Cleared on register/unregister.
-  private static readonly Dictionary<string, Dictionary<string, string[]>> _commandsCache = new(StringComparer.OrdinalIgnoreCase);
-  private static bool _initialized = false;
+  public const char CommandPrefix = '.';
+  private static readonly Dictionary<CommandLookupKey, List<CommandInfo>> CommandsByKey = [];
+  private static readonly Dictionary<(int TokenCount, string CommandName), List<CommandInfo>> FallbackCommandsByKey = [];
+  private static readonly Dictionary<Assembly, List<CommandLookupKey>> CommandKeysByAssembly = [];
+  private static readonly Dictionary<Assembly, List<(int, string)>> FallbackKeysByAssembly = [];
 
-  public static void Initialize() {
-    if (_initialized) return;
-
+  internal static void Initialize() {
     RegisterLocalizationKeys();
-    RegisterCommands();
-
-    _initialized = true;
-    Log.Info($"CommandService initialized with {_groups.Count} groups and {_noGroupCommands.Count} standalone commands");
-  }
-
-  /// <summary>
-  /// Registers all commands from the calling assembly.
-  /// </summary>
-  public static void RegisterCommands() {
-    // Get the calling assembly (the assembly that called this method)
-    var callingAssembly = new System.Diagnostics.StackTrace().GetFrame(1)?.GetMethod()?.ReflectedType?.Assembly;
-    var asm = callingAssembly ?? Assembly.GetCallingAssembly();
-    RegisterAssembly(asm);
-  }
-
-  /// <summary>
-  /// Registers all commands from a specific assembly. If `assembly` is null,
-  /// the calling assembly will be used.
-  /// </summary>
-  public static void RegisterAssembly(Assembly assembly = null) {
-    if (assembly == null) return;
-
-    foreach (var type in assembly.GetTypes()) {
-      var grpAttr = type.GetCustomAttribute<CommandGroupAttribute>();
-
-      if (grpAttr != null) {
-        // Has group attribute - register as grouped commands
-        var groupName = grpAttr.Group.ToLowerInvariant();
-        var groupAdminOnly = grpAttr.AdminOnly;
-
-        // Register main group name
-        if (!_groups.ContainsKey(groupName)) {
-          _groups[groupName] = new Dictionary<string, List<CommandInfo>>(StringComparer.OrdinalIgnoreCase);
-          _groupToAssembly[groupName] = assembly; // Use the type's assembly
-        }
-
-        // Register group aliases
-        foreach (var alias in grpAttr.Aliases) {
-          var aliasLower = alias.ToLowerInvariant();
-          if (!_groups.ContainsKey(aliasLower)) {
-            _groups[aliasLower] = _groups[groupName];
-            _groupToAssembly[aliasLower] = assembly; // Use the type's assembly
-          }
-        }
-
-        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)) {
-          var cmdAttr = method.GetCustomAttribute<CommandAttribute>();
-          if (cmdAttr == null) continue;
-
-          // Generate usage if empty
-          if (string.IsNullOrEmpty(cmdAttr.Usage)) {
-            cmdAttr.Usage = GenerateUsage(groupName, cmdAttr.Name, method);
-          }
-
-          var cmdInfo = new CommandInfo {
-            Method = method,
-            Attribute = cmdAttr,
-            GroupAdminOnly = groupAdminOnly,
-            Assembly = type.Assembly, // Use the type's assembly, not the executing assembly
-            GroupName = groupName
-          };
-
-          var cmdName = cmdAttr.Name.ToLowerInvariant();
-          if (!_groups[groupName].TryGetValue(cmdName, out var list)) {
-            list = [];
-            _groups[groupName][cmdName] = list;
-          }
-          list.Add(cmdInfo);
-          // mark this command key as default (no language)
-          if (!_commandKeyLanguage.ContainsKey(cmdName)) _commandKeyLanguage[cmdName] = null;
-
-          // Register command aliases
-          foreach (var alias in cmdAttr.Aliases) {
-            var aliasLower = alias.ToLowerInvariant();
-            if (!_groups[groupName].TryGetValue(aliasLower, out var aliasList)) {
-              aliasList = [];
-              _groups[groupName][aliasLower] = aliasList;
-            }
-            aliasList.Add(cmdInfo);
-            if (!_commandKeyLanguage.ContainsKey(aliasLower)) _commandKeyLanguage[aliasLower] = null;
-          }
-
-          // Register any multilingual aliases defined on the method
-          var multiAliases = method.GetCustomAttributes<CommandAliasAttribute>();
-          foreach (var ma in multiAliases) {
-            if (string.IsNullOrWhiteSpace(ma.Name)) continue;
-            var multiName = ma.Name.ToLowerInvariant();
-            if (!_groups[groupName].TryGetValue(multiName, out var multiList)) {
-              multiList = [];
-              _groups[groupName][multiName] = multiList;
-            }
-            multiList.Add(cmdInfo);
-            _commandKeyLanguage[multiName] = ma.Language?.ToLowerInvariant();
-
-            foreach (var a in ma.Aliases) {
-              var aLower = a.ToLowerInvariant();
-              if (!_groups[groupName].TryGetValue(aLower, out var aList)) {
-                aList = [];
-                _groups[groupName][aLower] = aList;
-              }
-              aList.Add(cmdInfo);
-              _commandKeyLanguage[aLower] = ma.Language?.ToLowerInvariant();
-            }
-          }
-        }
-      } else {
-        // No group attribute - register as standalone commands
-        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)) {
-          var cmdAttr = method.GetCustomAttribute<CommandAttribute>();
-          if (cmdAttr == null) continue;
-
-          // Generate usage if empty (no group prefix)
-          if (string.IsNullOrEmpty(cmdAttr.Usage)) {
-            cmdAttr.Usage = GenerateUsage(null, cmdAttr.Name, method);
-          }
-
-          var cmdInfo = new CommandInfo {
-            Method = method,
-            Attribute = cmdAttr,
-            GroupAdminOnly = false,
-            Assembly = type.Assembly, // Use the type's assembly, not the executing assembly
-            GroupName = null
-          };
-
-          var cmdName = cmdAttr.Name.ToLowerInvariant();
-          if (!_noGroupCommands.TryGetValue(cmdName, out var list)) {
-            list = [];
-            _noGroupCommands[cmdName] = list;
-          }
-          list.Add(cmdInfo);
-          if (!_commandKeyLanguage.ContainsKey(cmdName)) _commandKeyLanguage[cmdName] = null;
-
-          // Register command aliases
-          foreach (var alias in cmdAttr.Aliases) {
-            var aliasLower = alias.ToLowerInvariant();
-            if (!_noGroupCommands.TryGetValue(aliasLower, out var aliasList)) {
-              aliasList = [];
-              _noGroupCommands[aliasLower] = aliasList;
-            }
-            aliasList.Add(cmdInfo);
-            if (!_commandKeyLanguage.ContainsKey(aliasLower)) _commandKeyLanguage[aliasLower] = null;
-          }
-
-          // Register multilingual aliases on the method
-          var multiAliases = method.GetCustomAttributes<CommandAliasAttribute>();
-          foreach (var ma in multiAliases) {
-            if (string.IsNullOrWhiteSpace(ma.Name)) continue;
-            var multiName = ma.Name.ToLowerInvariant();
-            if (!_noGroupCommands.TryGetValue(multiName, out var multiList)) {
-              multiList = [];
-              _noGroupCommands[multiName] = multiList;
-            }
-            multiList.Add(cmdInfo);
-            _commandKeyLanguage[multiName] = ma.Language?.ToLowerInvariant();
-
-            foreach (var a in ma.Aliases) {
-              var aLower = a.ToLowerInvariant();
-              if (!_noGroupCommands.TryGetValue(aLower, out var aList)) {
-                aList = [];
-                _noGroupCommands[aLower] = aList;
-              }
-              aList.Add(cmdInfo);
-              _commandKeyLanguage[aLower] = ma.Language?.ToLowerInvariant();
-            }
-          }
-        }
-      }
-    }
-
-    Log.Info($"Registered commands from assembly: {assembly.GetName().Name}");
-    // Invalidate cached command listings
-    _commandsCache.Clear();
-  }
-
-  /// <summary>
-  /// Unregisters all commands from a specific assembly. If `assembly` is null,
-  /// the calling assembly will be used.
-  /// </summary>
-  public static void UnregisterAssembly(Assembly assembly = null) {
-    var asm = assembly ?? Assembly.GetCallingAssembly();
-    var groupsToRemove = new List<string>();
-
-    // Find all groups from this assembly
-    foreach (var kvp in _groupToAssembly) {
-      if (kvp.Value == asm) {
-        groupsToRemove.Add(kvp.Key);
-      }
-    }
-
-    // Remove groups and their commands
-    foreach (var groupName in groupsToRemove) {
-      _groups.Remove(groupName);
-      _groupToAssembly.Remove(groupName);
-    }
-
-    // Clean up any remaining commands from this assembly in shared groups
-    var commandsToRemove = new List<(string group, string command)>();
-    foreach (var groupKvp in _groups) {
-      foreach (var cmdKvp in groupKvp.Value) {
-        if (cmdKvp.Value.Any(ci => ci.Assembly == asm)) {
-          commandsToRemove.Add((groupKvp.Key, cmdKvp.Key));
-        }
-      }
-    }
-
-    foreach (var (group, command) in commandsToRemove) {
-      if (_groups.TryGetValue(group, out var cmds)) {
-        if (cmds.TryGetValue(command, out var list)) {
-          list.RemoveAll(ci => ci.Assembly == asm);
-          if (list.Count == 0) cmds.Remove(command);
-          // remove language mapping for this command key only if no other registration uses it
-          if (!IsCommandKeyRegistered(command)) _commandKeyLanguage.Remove(command);
-        }
-      }
-    }
-
-    // Remove standalone commands from this assembly
-    var standaloneToRemove = new List<string>();
-    foreach (var cmdKvp in _noGroupCommands) {
-      if (cmdKvp.Value.Any(ci => ci.Assembly == asm)) {
-        standaloneToRemove.Add(cmdKvp.Key);
-      }
-    }
-
-    foreach (var cmdName in standaloneToRemove) {
-      if (_noGroupCommands.TryGetValue(cmdName, out var list)) {
-        list.RemoveAll(ci => ci.Assembly == asm);
-        if (list.Count == 0) _noGroupCommands.Remove(cmdName);
-        // remove language mapping for this standalone key only if no other registration uses it
-        if (!IsCommandKeyRegistered(cmdName)) _commandKeyLanguage.Remove(cmdName);
-      }
-    }
-
-    Log.Info($"Unregistered commands from assembly: {asm.GetName().Name} ({groupsToRemove.Count} groups removed)");
-    // Invalidate cached command listings
-    _commandsCache.Clear();
-  }
-
-  // Returns true if the given command key is still present in any registered command map
-  private static bool IsCommandKeyRegistered(string key) {
-    if (string.IsNullOrWhiteSpace(key)) return false;
-    if (_noGroupCommands.ContainsKey(key)) return true;
-    foreach (var groupKvp in _groups) {
-      if (groupKvp.Value.ContainsKey(key)) return true;
-    }
-    return false;
-  }
-
-  private static string GenerateUsage(string group, string command, MethodInfo method) {
-    var parameters = method.GetParameters();
-    var usage = group != null ? $".{group} {command}" : $".{command}";
-
-    foreach (var param in parameters) {
-      // Skip CommandContext parameter
-      if (param.ParameterType == typeof(CommandContext)) continue;
-
-      var paramName = param.Name;
-      var typeName = GetFriendlyTypeName(param.ParameterType);
-
-      if (param.HasDefaultValue) {
-        usage += $" [{paramName}:{typeName}]";
-      } else {
-        usage += $" <{paramName}:{typeName}>";
-      }
-    }
-
-    return usage;
-  }
-
-
-  // Simple template replacement for named placeholders like {paramName}
-  private static string ApplyTemplate(string template, params (string key, string value)[] pairs) {
-    if (string.IsNullOrEmpty(template)) return template;
-    foreach (var (key, value) in pairs) {
-      template = template.Replace("{" + key + "}", value ?? string.Empty);
-    }
-    return template;
-  }
-
-  // Splits a command line into tokens preserving quoted segments (double quotes).
-  // Example: .cmd "this is a text" 1 => tokens: [".cmd", "this is a text", "1"]
-  private static string[] SplitArgumentsPreservingQuotes(string input) {
-    var parts = new List<string>();
-    var sb = new StringBuilder();
-    bool inQuotes = false;
-
-    for (int i = 0; i < input.Length; i++) {
-      var c = input[i];
-
-      if (c == '"') {
-        inQuotes = !inQuotes;
-        continue;
-      }
-
-      if (char.IsWhiteSpace(c) && !inQuotes) {
-        if (sb.Length > 0) {
-          parts.Add(sb.ToString());
-          sb.Clear();
-        }
-        continue;
-      }
-
-      sb.Append(c);
-    }
-
-    if (sb.Length > 0) parts.Add(sb.ToString());
-
-    return [.. parts];
-  }
-
-  private static string GetFriendlyTypeName(Type type) {
-    if (type == typeof(int)) return "int";
-    if (type == typeof(float)) return "float";
-    if (type == typeof(double)) return "double";
-    if (type == typeof(bool)) return "bool";
-    if (type == typeof(string)) return "string";
-    if (type == typeof(long)) return "long";
-    if (type == typeof(uint)) return "uint";
-    if (type == typeof(short)) return "short";
-    if (type == typeof(byte)) return "byte";
-    return type.Name.ToLowerInvariant();
-  }
-
-  /// <summary>
-  /// Tries to find a multi-word command match in a dictionary.
-  /// Searches from longest possible match down to single word.
-  /// Returns the matched command key and remaining args.
-  /// </summary>
-  private static bool TryFindMultiWordCommand(Dictionary<string, List<CommandInfo>> commands, string[] parts, int startIndex, string playerLanguage, out string matchedCommand, out string[] remainingArgs) {
-    matchedCommand = null;
-    remainingArgs = null;
-
-    // Try matching from longest to shortest
-    // e.g., if parts = ["create", "npc", "here", "arg1"]
-    // Try: "create npc here", then "create npc", then "create"
-    string defaultCandidate = null;
-    string anyCandidate = null;
-
-    for (int wordCount = parts.Length - startIndex; wordCount >= 1; wordCount--) {
-      var candidateCommand = string.Join(" ", parts.Skip(startIndex).Take(wordCount)).ToLowerInvariant();
-
-      if (!commands.ContainsKey(candidateCommand)) continue;
-
-      // Determine language mapping for this candidate key
-      _commandKeyLanguage.TryGetValue(candidateCommand, out var keyLang);
-
-      // Normalize
-      if (string.IsNullOrWhiteSpace(keyLang)) keyLang = null;
-      if (string.IsNullOrWhiteSpace(playerLanguage)) playerLanguage = null;
-
-      // Prefer exact language match (including both null)
-      if (string.Equals(keyLang, playerLanguage, StringComparison.OrdinalIgnoreCase)) {
-        matchedCommand = candidateCommand;
-        remainingArgs = [.. parts.Skip(startIndex + wordCount)];
-        return true;
-      }
-
-      // remember a default (null) candidate if present
-      if (keyLang == null && defaultCandidate == null) {
-        defaultCandidate = candidateCommand;
-      }
-
-      // remember any candidate as last resort
-      anyCandidate ??= candidateCommand;
-    }
-
-    if (defaultCandidate != null) {
-      matchedCommand = defaultCandidate;
-      remainingArgs = [.. parts.Skip(startIndex + defaultCandidate.Split(' ').Length)];
-      return true;
-    }
-
-    if (anyCandidate != null) {
-      matchedCommand = anyCandidate;
-      remainingArgs = [.. parts.Skip(startIndex + anyCandidate.Split(' ').Length)];
-      return true;
-    }
-
-    return false;
+    RegisterAll();
   }
 
   internal static void HandleMessageEvents(NativeArray<Entity> messageEntities) {
@@ -516,355 +38,647 @@ public static class CommandHandler {
     try {
       if (!messageEntity.Exists() || !messageEntity.Has<ChatMessageEvent>()) return;
       var chat = messageEntity.Read<ChatMessageEvent>();
-      if (chat.MessageType != ChatMessageType.Local) return;
 
       var text = chat.MessageText.Value?.Trim();
-      if (string.IsNullOrEmpty(text)) return;
 
-      if (!text.StartsWith('.')) return; // not a command
-
-      // remove leading dot and split (preserve quoted segments)
-      var withoutDot = text[1..].Trim();
-      var parts = SplitArgumentsPreservingQuotes(withoutDot);
-      if (parts == null || parts.Length == 0) return;
-
-      var firstPart = parts[0].ToLowerInvariant();
-
-      // resolve sender (best-effort)
-      PlayerData player = null;
-      if (messageEntity.Has<FromCharacter>()) {
-        try {
-          var fromChar = messageEntity.Read<FromCharacter>();
-          player = fromChar.Character.GetPlayerData();
-        } catch (Exception ex) {
-          Log.Warning($"Failed resolving player from message entity {messageEntity}: {ex}");
-        }
-      }
-
-      // determine player's language (null if not set)
-      var playerLanguage = (player != null) ? LocalizationService.GetPlayerLanguage(player) : null;
-      if (!string.IsNullOrWhiteSpace(playerLanguage)) playerLanguage = playerLanguage.ToLowerInvariant().Trim();
-
-      // Try as standalone command first (no group)
-      // Try multi-word matching for standalone commands
-      if (TryFindMultiWordCommand(_noGroupCommands, parts, 0, playerLanguage, out var standaloneCommand, out var standaloneArgs)) {
-        var standaloneCmdInfos = _noGroupCommands[standaloneCommand];
-        var ctx = new CommandContext(messageEntity, player, withoutDot, standaloneArgs);
-
-        if (!SelectBestCommand(standaloneCmdInfos, ctx, standaloneArgs, out var selected, out var invokeArgs, out var selectError)) {
-          if (!string.IsNullOrEmpty(selectError)) ctx.ReplyError(selectError);
-          var usages = string.Join("\n", standaloneCmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
-          if (!string.IsNullOrEmpty(usages)) {
-            var tmpl = LocalizationService.Get(player, "cmd_available_usages");
-            ctx.ReplyInfo(ApplyTemplate(tmpl, ("usages", $"~{usages}~")));
-          }
-          return;
-        }
-
-        var requiresAdmin = selected.GroupAdminOnly || selected.Attribute.AdminOnly;
-        if (requiresAdmin && (player == null || !player.IsAdmin)) {
-          ctx.ReplyError(LocalizationService.Get(player, "cmd_requires_admin"));
-          return;
-        }
-
-        try {
-          // Ensure context uses the command's declaring assembly for localization
-          ctx.CallingAssembly = selected.Assembly;
-          selected.Method.Invoke(null, invokeArgs);
-        } catch (Exception invokeEx) {
-          Log.Error($"Error invoking standalone command {standaloneCommand}: {invokeEx}");
-          ctx.ReplyError(LocalizationService.Get(player, "cmd_execution_error"));
-        }
-
-        messageEntity.Destroy(true);
+      if (string.IsNullOrEmpty(text)) {
         return;
       }
 
-      // Try as grouped command (.group command args)
-      var group = firstPart;
-
-      if (!_groups.TryGetValue(group, out var cmds)) return;
-
-      // Try to find multi-word command match starting after the group name
-      if (parts.Length < 2) {
-        // Inform the player that the group requires a subcommand
-        if (player != null) {
-          var msg = LocalizationService.Get(player, "cmd_group_no_subcommand", group);
-          MessageService.SendRaw(player, msg.FormatInfo());
-        }
+      if (!text.StartsWith(CommandPrefix)) {
         return;
       }
 
-      if (!TryFindMultiWordCommand(cmds, parts, 1, playerLanguage, out var matchedCommand, out var groupArgs)) {
-        // Inform the player that the subcommand is unknown
-        if (player != null) {
-          var unknown = string.Join(" ", parts.Skip(1));
-          var msg = LocalizationService.Get(player, "cmd_unknown_group_command", group, unknown);
-          MessageService.SendRaw(player, msg.FormatError());
-        }
+      PlayerData playerSender = null;
+
+      messageEntity.HasWith((ref FromCharacter fromChar) => {
+        playerSender = fromChar.Character.GetPlayerData();
+      });
+
+      if (playerSender == null) {
+        Log.Fatal($"[CommandHandler] Could not determine player from chat message entity {messageEntity.Index} this should never happen.");
         return;
       }
 
-      var cmdInfos = cmds[matchedCommand];
-      var groupCtx = new CommandContext(messageEntity, player, withoutDot, groupArgs);
-
-      if (!SelectBestCommand(cmdInfos, groupCtx, groupArgs, out var selectedCmd, out var groupInvokeArgs, out var groupSelectError)) {
-        if (!string.IsNullOrEmpty(groupSelectError)) groupCtx.ReplyError(groupSelectError);
-        var usages = string.Join("\n", cmdInfos.Select(ci => ci.Attribute.Usage).Where(u => !string.IsNullOrEmpty(u)));
-        if (!string.IsNullOrEmpty(usages)) {
-          var tmpl = LocalizationService.Get(player, "cmd_available_usages");
-          groupCtx.ReplyInfo(ApplyTemplate(tmpl, ("usages", $"~{usages}~")));
-        }
-        return;
-      }
-
-      var groupRequiresAdmin = selectedCmd.GroupAdminOnly || selectedCmd.Attribute.AdminOnly;
-      if (groupRequiresAdmin && (player == null || !player.IsAdmin)) {
-        groupCtx.ReplyError(LocalizationService.Get(player, "cmd_requires_admin"));
-        return;
-      }
-
-      try {
-        // Ensure group context uses the command's declaring assembly for localization
-        groupCtx.CallingAssembly = selectedCmd.Assembly;
-        selectedCmd.Method.Invoke(null, groupInvokeArgs);
-      } catch (Exception invokeEx) {
-        Log.Error($"Error invoking command {group} {matchedCommand}: {invokeEx}");
-        groupCtx.ReplyError(LocalizationService.Get(player, "cmd_execution_error"));
-      }
-
-      messageEntity.Destroy(true);
+      HandleCommand(playerSender, text, messageEntity);
     } catch (Exception ex) {
-      Log.Error($"CommandService.HandleChat failed: {ex}");
+      Log.Error($"[CommandHandler] Error handling chat message entity {messageEntity.Index}: {ex}");
     }
   }
 
-  private static bool TryParseParameter(Type paramType, string value, out object result) {
-    result = null;
+  internal static void HandleCommand(PlayerData player, string fullMessageText, Entity messageEntity) {
+    var text = fullMessageText.Trim();
+    if (string.IsNullOrEmpty(text) || !text.StartsWith(CommandPrefix)) return;
+    text = text[1..].Trim();
 
-    if (value == null) return false;
+    var tokens = Tokenize(text);
 
-    value = value.Trim();
+    if (tokens.Length == 0) {
+      return;
+    }
+
+    var playerLanguage = player.Language;
+    var commandInfo = FindCommand(playerLanguage, tokens);
+
+    if (commandInfo == null) {
+      return;
+    }
+
+    if (!IsHelpCommand(commandInfo) || !IsVCFLoaded()) {
+      try {
+        messageEntity.Destroy(true);
+      } catch (Exception ex) {
+        Log.Error($"[CommandHandler] Error destroying chat message entity {messageEntity.Index}: {ex}");
+      }
+    }
+
+    int commandNameTokens = commandInfo.NameTokenCount + commandInfo.GroupTokenCount;
+    var args = tokens.AsSpan()[commandNameTokens..].ToArray();
+
+    if (commandInfo.AdminOnly && !player.IsAdmin) {
+      player.SendLocalizedErrorMessage(LocalizationKey.CmdRequiresAdmin);
+      return;
+    }
+
+    if (args.Length < commandInfo.MinParameterCount || args.Length > commandInfo.MaxParameterCount) {
+      player.SendLocalizedErrorMessage(LocalizationKey.CmdAvailableUsages, GetCommandUsages(commandInfo));
+      return;
+    }
+
+    var method = commandInfo.Method;
+    var parameters = method.GetParameters();
+    var paramValues = new object[parameters.Length];
+    int argIndex = 0;
+
+    bool hasTypeError = false;
+    int tempArgIndex = 0;
+
+    for (int i = 0; i < parameters.Length; i++) {
+      var param = parameters[i];
+
+      if (param.ParameterType == typeof(CommandContext)) {
+        continue;
+      }
+
+      if (tempArgIndex < args.Length) {
+        int typePriority = GetTypeConversionPriority(param.ParameterType, args[tempArgIndex]);
+        if (typePriority == 0) {
+          hasTypeError = true;
+          break;
+        }
+        tempArgIndex++;
+      }
+    }
+
+    if (hasTypeError) {
+      player.SendLocalizedErrorMessage(LocalizationKey.CmdAvailableUsages, GetCommandUsages(commandInfo));
+      return;
+    }
+
+    for (int i = 0; i < parameters.Length; i++) {
+      var param = parameters[i];
+
+      if (param.ParameterType == typeof(CommandContext)) {
+        paramValues[i] = new CommandContext(Entity.Null, player, fullMessageText, args);
+        continue;
+      }
+
+      if (argIndex < args.Length) {
+        if (!TryConvertParameter(args[argIndex], param.ParameterType, out var convertedValue)) {
+          player.SendLocalizedErrorMessage(LocalizationKey.CmdInvalidParameter, param.Name, param.ParameterType.Name, args[argIndex]);
+          return;
+        }
+        paramValues[i] = convertedValue;
+        argIndex++;
+      } else if (param.IsOptional) {
+        paramValues[i] = param.DefaultValue;
+      } else {
+        player.SendLocalizedErrorMessage(LocalizationKey.CmdAvailableUsages, GetCommandUsages(commandInfo));
+        return;
+      }
+    }
 
     try {
-      var underlying = Nullable.GetUnderlyingType(paramType);
-      if (underlying != null) {
-        if (string.IsNullOrEmpty(value) || value.Equals("null", StringComparison.OrdinalIgnoreCase)) {
-          result = null;
-          return true;
-        }
-        return TryParseParameter(underlying, value, out result);
-      }
-
-      if (paramType == typeof(string)) { result = value; return true; }
-
-      if (paramType.IsEnum) {
-        try { result = Enum.Parse(paramType, value, true); return true; } catch { return false; }
-      }
-
-      if (paramType == typeof(Guid)) { if (Guid.TryParse(value, out var g)) { result = g; return true; } return false; }
-
-      if (paramType == typeof(DateTime)) {
-        if (DateTime.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt)) { result = dt; return true; }
-        if (DateTime.TryParse(value, System.Globalization.CultureInfo.CurrentCulture, System.Globalization.DateTimeStyles.None, out dt)) { result = dt; return true; }
-        return false;
-      }
-
-      if (paramType == typeof(TimeSpan)) { if (TimeSpan.TryParse(value, out var ts)) { result = ts; return true; } return false; }
-
-      if (paramType == typeof(int)) {
-        if (int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
-        if (int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
-        return false;
-      }
-
-      if (paramType == typeof(long)) {
-        if (long.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
-        if (long.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
-        return false;
-      }
-
-      if (paramType == typeof(uint)) {
-        if (uint.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
-        if (uint.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
-        return false;
-      }
-
-      if (paramType == typeof(short)) {
-        if (short.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
-        if (short.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
-        return false;
-      }
-
-      if (paramType == typeof(byte)) {
-        if (byte.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
-        if (byte.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
-        return false;
-      }
-
-      if (paramType == typeof(float)) {
-        if (float.TryParse(value, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
-        if (float.TryParse(value, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
-        return false;
-      }
-
-      if (paramType == typeof(double)) {
-        if (double.TryParse(value, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.InvariantCulture, out var v)) { result = v; return true; }
-        if (double.TryParse(value, System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands, System.Globalization.CultureInfo.CurrentCulture, out v)) { result = v; return true; }
-        return false;
-      }
-
-      if (paramType == typeof(bool)) {
-        if (bool.TryParse(value, out var b)) { result = b; return true; }
-        var vv = value.Trim().ToLowerInvariant();
-        if (vv == "1" || vv == "yes" || vv == "y" || vv == "true") { result = true; return true; }
-        if (vv == "0" || vv == "no" || vv == "n" || vv == "false") { result = false; return true; }
-        return false;
-      }
-
-      if (paramType == typeof(float3)) {
-        var parts = value.Split(',');
-        if (parts.Length != 3) return false;
-        if (!float.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var x)) return false;
-        if (!float.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var y)) return false;
-        if (!float.TryParse(parts[2].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var z)) return false;
-        result = new float3(x, y, z);
-        return true;
-      }
-
-      if (paramType == typeof(float2)) {
-        var parts = value.Split(',');
-        if (parts.Length != 2) return false;
-        if (!float.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var x)) return false;
-        if (!float.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var y)) return false;
-        result = new float2(x, y);
-        return true;
-      }
-
-      try {
-        result = Convert.ChangeType(value, paramType, System.Globalization.CultureInfo.InvariantCulture);
-        return true;
-      } catch {
-        return false;
-      }
+      method.Invoke(null, paramValues);
+      Log.Message($"[CommandHandler] {player.Name} executed command: {commandInfo.FullCommandName} with args: {string.Join(", ", args)}");
     } catch (Exception ex) {
-      Log.Debug($"TryParseParameter failed for type {paramType} value '{value}': {ex}");
+      Log.Error($"[CommandHandler] Error executing command '{commandInfo.FullCommandName}': {ex}");
+      player.SendLocalizedErrorMessage(LocalizationKey.CmdExecutionError);
+    }
+  }
+
+  private static bool IsHelpCommand(CommandInfo commandInfo) {
+    return commandInfo.Method.DeclaringType == typeof(CommandHandler) && commandInfo.Method.Name == nameof(HelpCommand);
+  }
+
+  private static bool IsVCFLoaded() {
+    try {
+      var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+      return assemblies.Any(a => a.GetName().Name == "VampireCommandFramework");
+    } catch {
       return false;
     }
   }
 
-  // Evaluate a candidate CommandInfo against provided args. Returns true if candidate is compatible.
-  // Also produces a score used to choose the best overload (higher is better).
-  private static bool EvaluateCandidate(CommandInfo cmdInfo, CommandContext ctx, string[] args, out object[] invokeArgs, out int score, out string errorMsg) {
-    errorMsg = null;
-    score = 0;
-    var method = cmdInfo.Method;
+  public static void RegisterAll(Assembly assembly = null) {
+    assembly ??= Assembly.GetCallingAssembly();
+
+    UnregisterAssemblyInternal(assembly);
+
+    var commandKeys = new List<CommandLookupKey>();
+    var fallbackKeys = new List<(int, string)>();
+
+    var types = assembly.GetTypes()
+      .Where(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
+                   .Any(m => m.GetCustomAttribute<CommandAttribute>() != null ||
+                            m.GetCustomAttribute<CommandAliasAttribute>() != null) ||
+                  t.GetCustomAttributes<CommandGroupAttribute>().Any() ||
+                  t.GetCustomAttributes<CommandGroupAliasAttribute>().Any());
+
+    foreach (var type in types) {
+      var groups = GetCommandGroups(type);
+      bool groupAdminOnly = GetGroupAdminOnly(type);
+
+      var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
+        .Where(m => m.GetCustomAttribute<CommandAttribute>() != null);
+
+      foreach (var method in methods) {
+        var commandAttr = method.GetCustomAttribute<CommandAttribute>();
+        if (commandAttr != null) {
+          bool effectiveAdminOnly = commandAttr.AdminOnly || groupAdminOnly;
+
+          if (groups.Count > 0) {
+            foreach (var (groupName, groupLanguage) in groups) {
+              var commandInfo = CreateCommandInfo(method, commandAttr, groupName, assembly, isMain: true, effectiveAdminOnly);
+              RegisterCommandInfo(commandInfo, commandKeys, fallbackKeys);
+            }
+          } else {
+            var commandInfo = CreateCommandInfo(method, commandAttr, null, assembly, isMain: true, effectiveAdminOnly);
+            RegisterCommandInfo(commandInfo, commandKeys, fallbackKeys);
+          }
+        }
+
+        var aliasAttrs = method.GetCustomAttributes<CommandAliasAttribute>();
+        foreach (var aliasAttr in aliasAttrs) {
+          bool effectiveAdminOnly = commandAttr?.AdminOnly ?? false || groupAdminOnly;
+
+          if (groups.Count > 0) {
+            foreach (var (groupName, groupLanguage) in groups) {
+              var commandInfo = CreateCommandInfo(method, aliasAttr, groupName, assembly, isMain: false, effectiveAdminOnly);
+              RegisterCommandInfo(commandInfo, commandKeys, fallbackKeys);
+            }
+          } else {
+            var commandInfo = CreateCommandInfo(method, aliasAttr, null, assembly, isMain: false, effectiveAdminOnly);
+            RegisterCommandInfo(commandInfo, commandKeys, fallbackKeys);
+          }
+        }
+      }
+    }
+
+    CommandKeysByAssembly[assembly] = commandKeys;
+    FallbackKeysByAssembly[assembly] = fallbackKeys;
+    Log.Message($"[CommandHandler] Registered {commandKeys.Count} commands from assembly '{assembly.GetName().Name}'.");
+  }
+
+  public static void UnregisterAssembly(Assembly assembly = null) {
+    assembly ??= Assembly.GetCallingAssembly();
+    UnregisterAssemblyInternal(assembly);
+  }
+
+  private static void UnregisterAssemblyInternal(Assembly assembly) {
+    if (CommandKeysByAssembly.TryGetValue(assembly, out var commandKeys)) {
+      foreach (var key in commandKeys) {
+        if (CommandsByKey.TryGetValue(key, out var commands)) {
+          commands.RemoveAll(c => c.Assembly == assembly);
+          if (commands.Count == 0) {
+            CommandsByKey.Remove(key);
+          }
+        }
+      }
+      CommandKeysByAssembly.Remove(assembly);
+    }
+
+    if (FallbackKeysByAssembly.TryGetValue(assembly, out var fallbackKeys)) {
+      foreach (var key in fallbackKeys) {
+        if (FallbackCommandsByKey.TryGetValue(key, out var commands)) {
+          commands.RemoveAll(c => c.Assembly == assembly);
+          if (commands.Count == 0) {
+            FallbackCommandsByKey.Remove(key);
+          }
+        }
+      }
+      FallbackKeysByAssembly.Remove(assembly);
+    }
+  }
+
+  private static List<(string GroupName, Language Language)> GetCommandGroups(Type type) {
+    var groups = new List<(string, Language)>();
+
+    var groupAttr = type.GetCustomAttribute<CommandGroupAttribute>();
+    if (groupAttr != null) {
+      groups.Add((groupAttr.Group, groupAttr.Language));
+
+      foreach (var alias in groupAttr.Aliases ?? []) {
+        groups.Add((alias, groupAttr.Language));
+      }
+    }
+
+    var groupAliases = type.GetCustomAttributes<CommandGroupAliasAttribute>();
+    foreach (var aliasAttr in groupAliases) {
+      groups.Add((aliasAttr.Group, aliasAttr.Language));
+
+      foreach (var alias in aliasAttr.Aliases ?? []) {
+        groups.Add((alias, aliasAttr.Language));
+      }
+    }
+
+    return groups;
+  }
+
+  private static bool GetGroupAdminOnly(Type type) {
+    var groupAttr = type.GetCustomAttribute<CommandGroupAttribute>();
+    if (groupAttr != null && groupAttr.AdminOnly) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private static CommandInfo CreateCommandInfo(MethodInfo method, Attribute attr, string group, Assembly assembly, bool isMain, bool effectiveAdminOnly) {
+    string name;
+    Language language;
+
+    if (attr is CommandAttribute cmdAttr) {
+      name = cmdAttr.Name;
+      language = cmdAttr.Language;
+    } else if (attr is CommandAliasAttribute aliasAttr) {
+      name = aliasAttr.Name;
+      language = aliasAttr.Language;
+    } else {
+      return null;
+    }
+
     var parameters = method.GetParameters();
-    invokeArgs = new object[parameters.Length];
 
-    int contextParamCount = 0;
-    if (parameters.Length > 0 && parameters[0].ParameterType == typeof(CommandContext)) {
-      invokeArgs[0] = ctx;
-      contextParamCount = 1;
+    var commandParams = parameters.Length > 0 && parameters[0].ParameterType == typeof(CommandContext)
+      ? [.. parameters.Skip(1)]
+      : parameters;
+
+    int minParams = commandParams.Count(p => !p.IsOptional);
+    int maxParams = commandParams.Length;
+
+    var commandInfo = new CommandInfo {
+      Name = name,
+      Group = group,
+      NameTokenCount = CountTokens(name),
+      GroupTokenCount = string.IsNullOrEmpty(group) ? 0 : CountTokens(group),
+      MinParameterCount = minParams,
+      MaxParameterCount = maxParams,
+      Parameters = commandParams,
+      AdminOnly = effectiveAdminOnly,
+      Language = language,
+      Method = method,
+      Attribute = isMain ? (CommandAttribute)attr : null,
+      AliasAttribute = isMain ? null : (CommandAliasAttribute)attr,
+      Assembly = assembly,
+      IsMainCommand = isMain
+    };
+
+    return commandInfo;
+  }
+
+  private static void RegisterCommandInfo(CommandInfo command, List<CommandLookupKey> commandKeys, List<(int, string)> fallbackKeys) {
+    string fullCommandName = command.FullCommandName.ToLowerInvariant();
+    int commandNameTokenCount = command.NameTokenCount + command.GroupTokenCount;
+    var key = new CommandLookupKey(command.Language, commandNameTokenCount, fullCommandName);
+
+    if (!CommandsByKey.TryGetValue(key, out List<CommandInfo> commandByKeyList)) {
+      commandByKeyList = [];
+      CommandsByKey[key] = commandByKeyList;
     }
 
-    for (int i = contextParamCount; i < parameters.Length; i++) {
-      var param = parameters[i];
-      var argIndex = i - contextParamCount;
-      var hasValue = argIndex < args.Length;
-      var providedValue = hasValue ? args[argIndex] : null;
-      bool isOptional = param.HasDefaultValue;
+    commandByKeyList.Add(command);
+    commandKeys.Add(key);
 
-      if (!hasValue) {
-        if (!isOptional) {
-          var tmpl = LocalizationService.Get(ctx?.Sender, "cmd_missing_required_param");
-          errorMsg = ApplyTemplate(tmpl, ("paramName", param.Name), ("paramType", GetFriendlyTypeName(param.ParameterType)));
-          return false;
+    if (command.Attribute != null && command.Attribute.Aliases != null) {
+      foreach (var alias in command.Attribute.Aliases) {
+        string aliasFullName = string.IsNullOrEmpty(command.Group)
+          ? alias
+          : $"{command.Group} {alias}";
+
+        var aliasKey = new CommandLookupKey(command.Language, commandNameTokenCount, aliasFullName.ToLowerInvariant());
+        if (!CommandsByKey.TryGetValue(aliasKey, out List<CommandInfo> commandAliasList)) {
+          commandAliasList = [];
+          CommandsByKey[aliasKey] = commandAliasList;
         }
-        invokeArgs[i] = param.DefaultValue;
-        score += 1; // small score for using default
-        continue;
-      }
 
-      // PlayerData special handling
-      if (param.ParameterType == typeof(PlayerData)) {
-        if (!PlayerService.TryGetByName(providedValue, out var playerData)) {
-          var tmpl = LocalizationService.Get(ctx?.Sender, "cmd_player_not_found");
-          errorMsg = ApplyTemplate(tmpl, ("playerName", providedValue));
-          return false;
+        commandAliasList.Add(command);
+        commandKeys.Add(aliasKey);
+
+        if (command.IsMainCommand) {
+          var fallbackKey = (commandNameTokenCount, aliasFullName.ToLowerInvariant());
+          if (!FallbackCommandsByKey.TryGetValue(fallbackKey, out List<CommandInfo> commandList)) {
+            commandList = [];
+            FallbackCommandsByKey[fallbackKey] = commandList;
+          }
+
+          commandList.Add(command);
+          fallbackKeys.Add(fallbackKey);
         }
-        invokeArgs[i] = playerData;
-        score += 5; // strong match for non-string player
-        continue;
+      }
+    } else if (command.AliasAttribute != null && command.AliasAttribute.Aliases != null) {
+      foreach (var alias in command.AliasAttribute.Aliases) {
+        string aliasFullName = string.IsNullOrEmpty(command.Group)
+          ? alias
+          : $"{command.Group} {alias}";
+
+        var aliasKey = new CommandLookupKey(command.Language, commandNameTokenCount, aliasFullName.ToLowerInvariant());
+        if (!CommandsByKey.TryGetValue(aliasKey, out List<CommandInfo> commandAliasList)) {
+          commandAliasList = [];
+          CommandsByKey[aliasKey] = commandAliasList;
+        }
+
+        commandAliasList.Add(command);
+        commandKeys.Add(aliasKey);
+      }
+    }
+
+    if (command.IsMainCommand) {
+      var fallbackKey = (commandNameTokenCount, fullCommandName);
+      if (!FallbackCommandsByKey.TryGetValue(fallbackKey, out List<CommandInfo> commandList)) {
+        commandList = [];
+        FallbackCommandsByKey[fallbackKey] = commandList;
       }
 
-      // Try parse other types
-      if (!TryParseParameter(param.ParameterType, providedValue, out var parsed)) {
-        var tmpl = LocalizationService.Get(ctx?.Sender, "cmd_invalid_param");
-        errorMsg = ApplyTemplate(tmpl, ("paramName", param.Name), ("paramType", GetFriendlyTypeName(param.ParameterType)));
-        return false;
+      commandList.Add(command);
+      fallbackKeys.Add(fallbackKey);
+    }
+  }
+
+  private static int CountTokens(string text) {
+    if (string.IsNullOrWhiteSpace(text)) return 0;
+    return text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+  }
+
+  internal static CommandInfo FindCommand(Language playerLanguage, ReadOnlySpan<string> tokens) {
+    if (tokens.Length == 0) return null;
+
+    int totalTokens = tokens.Length;
+    CommandInfo bestMatch = null;
+    int bestScore = -1;
+
+    for (int commandTokens = totalTokens; commandTokens > 0; commandTokens--) {
+      string commandName = BuildCommandName(tokens, commandTokens);
+      var key = new CommandLookupKey(playerLanguage, commandTokens, commandName);
+
+      // Tenta encontrar comandos na linguagem do jogador
+      if (CommandsByKey.TryGetValue(key, out var commands)) {
+        foreach (var command in commands) {
+          // Primeira tentativa: validação estrita de tipos
+          int score = CalculateCommandMatchScore(command, tokens, commandTokens, allowTypeFailure: false);
+          if (score >= 0) {
+            score += 1000; // Bonus por match de linguagem
+            if (score > bestScore) {
+              bestMatch = command;
+              bestScore = score;
+            }
+          } else {
+            // Segunda tentativa: permite falha de tipo (mas ainda valida quantidade de parâmetros)
+            score = CalculateCommandMatchScore(command, tokens, commandTokens, allowTypeFailure: true);
+            if (score >= 0) {
+              score += 1000;
+              if (score > bestScore) {
+                bestMatch = command;
+                bestScore = score;
+              }
+            }
+          }
+        }
       }
 
-      invokeArgs[i] = parsed;
+      // Fallback para qualquer linguagem
+      var fallbackKey = (commandTokens, commandName);
+      if (FallbackCommandsByKey.TryGetValue(fallbackKey, out var fallbackCommands)) {
+        foreach (var fallbackCommand in fallbackCommands) {
+          int score = CalculateCommandMatchScore(fallbackCommand, tokens, commandTokens, allowTypeFailure: false);
+          if (score >= 0) {
+            if (score > bestScore) {
+              bestMatch = fallbackCommand;
+              bestScore = score;
+            }
+          } else {
+            score = CalculateCommandMatchScore(fallbackCommand, tokens, commandTokens, allowTypeFailure: true);
+            if (score >= 0) {
+              if (score > bestScore) {
+                bestMatch = fallbackCommand;
+                bestScore = score;
+              }
+            }
+          }
+        }
+      }
+    }
 
-      // Scoring: prefer non-string typed parameters
-      if (param.ParameterType == typeof(string)) {
-        // string is lowest priority
-        score += 1;
+    return bestMatch;
+  }
+
+  private static string BuildCommandName(ReadOnlySpan<string> tokens, int count) {
+    Span<char> buffer = stackalloc char[512];
+    int position = 0;
+
+    for (int i = 0; i < count && i < tokens.Length; i++) {
+      if (i > 0 && position < buffer.Length) {
+        buffer[position++] = ' ';
+      }
+
+      ReadOnlySpan<char> token = tokens[i].AsSpan();
+      foreach (char c in token) {
+        if (position >= buffer.Length) break;
+        buffer[position++] = char.ToLowerInvariant(c);
+      }
+    }
+
+    return new string(buffer[..position]);
+  }
+
+  private static int GetTypeConversionPriority(Type parameterType, string token) {
+    if (parameterType == typeof(string)) {
+      return 10;
+    }
+
+    if (parameterType == typeof(int) && int.TryParse(token, out _)) return 100;
+    if (parameterType == typeof(long) && long.TryParse(token, out _)) return 100;
+    if (parameterType == typeof(ulong) && ulong.TryParse(token, out _)) return 100;
+    if (parameterType == typeof(uint) && uint.TryParse(token, out _)) return 100;
+    if (parameterType == typeof(short) && short.TryParse(token, out _)) return 100;
+    if (parameterType == typeof(byte) && byte.TryParse(token, out _)) return 100;
+    if (parameterType == typeof(float) && float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out _)) return 90;
+    if (parameterType == typeof(double) && double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out _)) return 90;
+
+    if (parameterType == typeof(bool)) {
+      string lower = token.ToLowerInvariant();
+      if (lower == "true" || lower == "false" || lower == "1" || lower == "0") return 95;
+    }
+
+    if (parameterType.IsEnum && Enum.TryParse(parameterType, token, true, out _)) return 85;
+
+    if (parameterType == typeof(PrefabGUID) && PrefabGUID.TryParse(token, out _)) return 80;
+
+    if (parameterType == typeof(PlayerData)) {
+      if (ulong.TryParse(token, out _)) return 75;
+
+      return 60;
+    }
+
+    if (parameterType == typeof(float2)) {
+      var parts = token.Split(',');
+      if (parts.Length == 2 &&
+          float.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _) &&
+          float.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _)) {
+        return 70;
+      }
+    }
+
+    if (parameterType == typeof(float3)) {
+      var parts = token.Split(',');
+      if (parts.Length == 3 &&
+          float.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _) &&
+          float.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _) &&
+          float.TryParse(parts[2].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _)) {
+        return 70;
+      }
+    }
+
+    if (parameterType == typeof(float4) || parameterType == typeof(quaternion)) {
+      var parts = token.Split(',');
+      if (parts.Length == 4 &&
+          float.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _) &&
+          float.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _) &&
+          float.TryParse(parts[2].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _) &&
+          float.TryParse(parts[3].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _)) {
+        return 70;
+      }
+    }
+
+    return 0;
+  }
+
+  private static int CalculateCommandMatchScore(CommandInfo command, ReadOnlySpan<string> tokens, int commandTokenCount, bool allowTypeFailure = false) {
+    int remainingTokens = tokens.Length - commandTokenCount;
+
+    // SEMPRE valida o número mínimo de parâmetros, independente de allowTypeFailure
+    if (remainingTokens < command.MinParameterCount) {
+      return -1;
+    }
+
+    // Valida o número máximo de parâmetros
+    if (remainingTokens > command.MaxParameterCount) {
+      return -1;
+    }
+
+    int score = 0;
+
+    score += commandTokenCount * 10000;
+
+    for (int i = 0; i < remainingTokens && i < command.Parameters.Length; i++) {
+      string token = tokens[commandTokenCount + i].ToString();
+      Type paramType = command.Parameters[i].ParameterType;
+
+      int typePriority = GetTypeConversionPriority(paramType, token);
+      if (typePriority == 0) {
+        if (allowTypeFailure) {
+          score += 1;
+        } else {
+          return -1;
+        }
       } else {
-        score += 3;
+        score += typePriority;
       }
     }
 
-    return true;
+    score += remainingTokens * 5;
+
+    return score;
   }
 
-  // Selects the best command overload from a list based on argument compatibility and scoring.
-  private static bool SelectBestCommand(List<CommandInfo> candidates, CommandContext ctx, string[] args, out CommandInfo selected, out object[] invokeArgs, out string errorMsg) {
-    selected = null;
-    invokeArgs = null;
-    errorMsg = null;
+  private static bool TryConvertParameter(string input, Type targetType, out object result) {
+    result = null;
 
-    var viable = new List<(CommandInfo info, object[] invokeArgs, int score, string error)>();
+    try {
+      result = TypeConverter.ConvertToType(input, targetType);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
-    foreach (var ci in candidates) {
-      if (!EvaluateCandidate(ci, ctx, args, out var invArgs, out var score, out var err)) {
-        // keep parse error for reporting if none match
-        viable.Add((ci, null, -1, err));
+  private static string[] Tokenize(string input) {
+    var tokens = new List<string>();
+    bool inQuotes = false;
+    var current = new System.Text.StringBuilder();
+    for (int i = 0; i < input.Length; i++) {
+      char c = input[i];
+      if (c == '"') {
+        inQuotes = !inQuotes;
         continue;
       }
-      viable.Add((ci, invArgs, score, null));
+      if (char.IsWhiteSpace(c) && !inQuotes) {
+        if (current.Length > 0) {
+          tokens.Add(current.ToString());
+          current.Clear();
+        }
+      } else {
+        current.Append(c);
+      }
     }
-
-    // Filter only successful matches
-    var matches = viable.Where(v => v.score >= 0).ToList();
-    if (matches.Count == 0) {
-      // prefer first error message that is not null
-      var firstErr = viable.Select(v => v.error).FirstOrDefault(e => !string.IsNullOrEmpty(e));
-      errorMsg = firstErr ?? LocalizationService.Get(ctx?.Sender, "cmd_no_suitable_overload");
-      return false;
-    }
-
-    // Choose highest score
-    var bestScore = matches.Max(m => m.score);
-    var bestMatches = matches.Where(m => m.score == bestScore).ToList();
-
-    if (bestMatches.Count > 1) {
-      // Ambiguous
-      errorMsg = LocalizationService.Get(ctx?.Sender, "cmd_ambiguous_overload");
-      return false;
-    }
-
-    var best = bestMatches[0];
-    selected = best.info;
-    invokeArgs = best.invokeArgs;
-    return true;
+    if (current.Length > 0) tokens.Add(current.ToString());
+    return [.. tokens];
   }
 
-  // Register localization keys used by CommandService
+  private static string GetCommandUsages(CommandInfo info) {
+    var usage = new System.Text.StringBuilder();
+    usage.Append("<mark=#ff3d3d15>");
+    usage.Append(CommandPrefix);
+
+    if (!string.IsNullOrEmpty(info.Group)) {
+      usage.Append(info.Group);
+      usage.Append(' ');
+    }
+
+    usage.Append(info.Name);
+
+    foreach (var param in info.Parameters) {
+      usage.Append(' ');
+
+      string typeName = TypeConverter.GetFriendlyTypeName(param.ParameterType);
+
+      if (param.IsOptional) {
+        usage.Append($"[{param.Name}:{typeName}]");
+      } else {
+        usage.Append($"<{param.Name}:{typeName}>");
+      }
+    }
+
+    usage.Append("</mark>");
+
+    return usage.ToString();
+  }
+
+  private class LocalizationKey {
+    public const string CmdRequiresAdmin = "cmd_requires_admin";
+    public const string CmdExecutionError = "cmd_execution_error";
+    public const string CmdAvailableUsages = "cmd_available_usages";
+    public const string CmdInvalidParameter = "cmd_invalid_parameter";
+    public const string CmdAmbiguousOverload = "cmd_ambiguous_overload";
+    public const string CmdGroupNoSubcommand = "cmd_group_no_subcommand";
+    public const string CmdUnknownGroupCommand = "cmd_unknown_group_command";
+    public const string HelpNoCommands = "help_no_commands";
+    public const string HelpAvailableCommands = "help_available_commands";
+    public const string HelpNextPage = "help_next_page";
+  }
+
   private static void RegisterLocalizationKeys() {
-    // Use simple english and portuguese translations. Calling assembly is used by LocalizationService.
-    LocalizationService.NewKey("cmd_requires_admin", new Dictionary<string, string> {
+    LocalizationService.NewKey(LocalizationKey.CmdRequiresAdmin, new Dictionary<Language, string> {
       { Language.English, "This command requires administrator privileges." },
       { Language.Portuguese, "Este comando requer privilégios de administrador." },
       { Language.French, "Cette commande nécessite des privilèges d'administrateur." },
@@ -885,7 +699,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Lệnh này yêu cầu quyền quản trị viên." }
     });
 
-    LocalizationService.NewKey("cmd_execution_error", new Dictionary<string, string> {
+    LocalizationService.NewKey(LocalizationKey.CmdExecutionError, new Dictionary<Language, string> {
       { Language.English, "An error occurred while executing the command." },
       { Language.Portuguese, "Ocorreu um erro ao executar o comando." },
       { Language.French, "Une erreur est survenue lors de l'exécution de la commande." },
@@ -906,28 +720,49 @@ public static class CommandHandler {
       { Language.Vietnamese, "Đã xảy ra lỗi khi thực hiện lệnh." }
     });
 
-    LocalizationService.NewKey("cmd_available_usages", new Dictionary<string, string> {
-      { Language.English, "Available usages:\n{usages}" },
-      { Language.Portuguese, "Formas de uso disponíveis:\n{usages}" },
-      { Language.French, "Utilisations disponibles :\n{usages}" },
-      { Language.German, "Verfügbare Aufrufe:\n{usages}" },
-      { Language.Hungarian, "Elérhető használatok:\n{usages}" },
-      { Language.Italian, "Utilizzi disponibili:\n{usages}" },
-      { Language.Japanese, "利用可能な使い方:\n{usages}" },
-      { Language.Korean, "사용 가능한 명령 형식:\n{usages}" },
-      { Language.Latam, "Usos disponibles:\n{usages}" },
-      { Language.Polish, "Dostępne użycia:\n{usages}" },
-      { Language.Russian, "Доступные варианты использования:\n{usages}" },
-      { Language.Spanish, "Usos disponibles:\n{usages}" },
-      { Language.ChineseSimplified, "可用用法：\n{usages}" },
-      { Language.ChineseTraditional, "可用用法：\n{usages}" },
-      { Language.Thai, "รูปแบบที่ใช้ได้: {usages}" },
-      { Language.Turkish, "Kullanılabilir kullanımlar:\n{usages}" },
-      { Language.Ukrainian, "Доступні варіанти використання:\n{usages}" },
-      { Language.Vietnamese, "Cách sử dụng có sẵn:\n{usages}" }
+    LocalizationService.NewKey(LocalizationKey.CmdAvailableUsages, new Dictionary<Language, string> {
+      { Language.English, "~Available usages:~\n{0}" },
+      { Language.Portuguese, "~Formas de uso disponíveis:~\n{0}" },
+      { Language.French, "~Utilisations disponibles :~\n{0}" },
+      { Language.German, "~Verfügbare Aufrufe:~\n{0}" },
+      { Language.Hungarian, "~Elérhető használatok:~\n{0}" },
+      { Language.Italian, "~Utilizzi disponibili:~\n{0}" },
+      { Language.Japanese, "~利用可能な使い方:~\n{0}" },
+      { Language.Korean, "~사용 가능한 명령 형식:~\n{0}" },
+      { Language.Latam, "~Usos disponibles:~\n{0}" },
+      { Language.Polish, "~Dostępne użycia:~\n{0}" },
+      { Language.Russian, "~Доступные варианты использования:~\n{0}" },
+      { Language.Spanish, "~Usos disponibles:~\n{0}" },
+      { Language.ChineseSimplified, "~可用用法：~\n{0}" },
+      { Language.ChineseTraditional, "~可用用法：~\n{0}" },
+      { Language.Thai, "~รูปแบบที่ใช้ได้: ~\n{0}" },
+      { Language.Turkish, "~Kullanılabilir kullanımlar:~\n{0}" },
+      { Language.Ukrainian, "~Доступні варіанти використання:~\n{0}" },
+      { Language.Vietnamese, "~Cách sử dụng có sẵn:~\n{0}" }
     });
 
-    LocalizationService.NewKey("cmd_ambiguous_overload", new Dictionary<string, string> {
+    LocalizationService.NewKey(LocalizationKey.CmdInvalidParameter, new Dictionary<Language, string> {
+      { Language.English, "Invalid parameter '{0}' for type {1}: {2}" },
+      { Language.Portuguese, "Parâmetro inválido '{0}' para o tipo {1}: {2}" },
+      { Language.French, "Paramètre invalide '{0}' pour le type {1}: {2}" },
+      { Language.German, "Ungültiger Parameter '{0}' für Typ {1}: {2}" },
+      { Language.Hungarian, "Érvénytelen paraméter '{0}' a(z) {1} típushoz: {2}" },
+      { Language.Italian, "Parametro non valido '{0}' per il tipo {1}: {2}" },
+      { Language.Japanese, "型 {1} の無効なパラメータ '{0}': {2}" },
+      { Language.Korean, "유효하지 않은 매개변수 '{0}' (형식 {1}): {2}" },
+      { Language.Latam, "Parámetro inválido '{0}' para el tipo {1}: {2}" },
+      { Language.Polish, "Nieprawidłowy parametr '{0}' dla typu {1}: {2}" },
+      { Language.Russian, "Неверный параметр '{0}' для типа {1}: {2}" },
+      { Language.Spanish, "Parámetro inválido '{0}' para el tipo {1}: {2}" },
+      { Language.ChineseSimplified, "无效参数 '{0}'，类型 {1}：{2}" },
+      { Language.ChineseTraditional, "無效參數 '{0}'，類型 {1}：{2}" },
+      { Language.Thai, "พารามิเตอร์ไม่ถูกต้อง '{0}' สำหรับประเภท {1}: {2}" },
+      { Language.Turkish, "Geçersiz parametre '{0}' türü {1}: {2}" },
+      { Language.Ukrainian, "Неприпустимий параметр '{0}' для типу {1}: {2}" },
+      { Language.Vietnamese, "Tham số không hợp lệ '{0}' cho kiểu {1}: {2}" }
+    });
+
+    LocalizationService.NewKey(LocalizationKey.CmdAmbiguousOverload, new Dictionary<Language, string> {
       { Language.English, "Ambiguous command overload; multiple matches found." },
       { Language.Portuguese, "Sobrecarga ambígua do comando; múltiplas correspondências encontradas." },
       { Language.French, "Surcharge de commande ambiguë ; plusieurs correspondances trouvées." },
@@ -948,7 +783,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Overload lệnh không rõ ràng; tìm thấy nhiều kết quả khớp." }
     });
 
-    LocalizationService.NewKey("cmd_group_no_subcommand", new Dictionary<string, string> {
+    LocalizationService.NewKey(LocalizationKey.CmdGroupNoSubcommand, new Dictionary<Language, string> {
       { Language.English, "This command group requires a subcommand." },
       { Language.Portuguese, "Este grupo de comandos requer um subcomando." },
       { Language.French, "Ce groupe de commandes nécessite une sous-commande." },
@@ -969,7 +804,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Nhóm lệnh này yêu cầu một lệnh phụ." }
     });
 
-    LocalizationService.NewKey("cmd_unknown_group_command", new Dictionary<string, string> {
+    LocalizationService.NewKey(LocalizationKey.CmdUnknownGroupCommand, new Dictionary<Language, string> {
       { Language.English, "Unknown command in group '{0}': {1}" },
       { Language.Portuguese, "Comando desconhecido no grupo '{0}': {1}" },
       { Language.French, "Commande inconnue dans le groupe '{0}' : {1}" },
@@ -990,122 +825,269 @@ public static class CommandHandler {
       { Language.Vietnamese, "Lệnh không xác định trong nhóm '{0}': {1}" }
     });
 
+    LocalizationService.NewKey(LocalizationKey.HelpNoCommands, new Dictionary<Language, string> {
+      { Language.English, "No commands available." },
+      { Language.Portuguese, "Nenhum comando disponível." },
+      { Language.French, "Aucune commande disponible." },
+      { Language.German, "Keine Befehle verfügbar." },
+      { Language.Hungarian, "Nincsenek elérhető parancsok." },
+      { Language.Italian, "Nessun comando disponibile." },
+      { Language.Japanese, "利用可能なコマンドがありません。" },
+      { Language.Korean, "사용 가능한 명령이 없습니다." },
+      { Language.Latam, "No hay comandos disponibles." },
+      { Language.Polish, "Brak dostępnych poleceń." },
+      { Language.Russian, "Команды недоступны." },
+      { Language.Spanish, "No hay comandos disponibles." },
+      { Language.ChineseSimplified, "没有可用的命令。" },
+      { Language.ChineseTraditional, "沒有可用的指令。" },
+      { Language.Thai, "ไม่มีคำสั่งที่ใช้ได้" },
+      { Language.Turkish, "Kullanılabilir komut yok." },
+      { Language.Ukrainian, "Немає доступних команд." },
+      { Language.Vietnamese, "Không có lệnh nào khả dụng." }
+    });
 
+    LocalizationService.NewKey(LocalizationKey.HelpAvailableCommands, new Dictionary<Language, string> {
+      { Language.English, "Available Commands (Page {0}/{1}):" },
+      { Language.Portuguese, "Comandos Disponíveis (Página {0}/{1}):" },
+      { Language.French, "Commandes Disponibles (Page {0}/{1}) :" },
+      { Language.German, "Verfügbare Befehle (Seite {0}/{1}):" },
+      { Language.Hungarian, "Elérhető Parancsok (Oldal {0}/{1}):" },
+      { Language.Italian, "Comandi Disponibili (Pagina {0}/{1}):" },
+      { Language.Japanese, "利用可能なコマンド (ページ {0}/{1}):" },
+      { Language.Korean, "사용 가능한 명령 (페이지 {0}/{1}):" },
+      { Language.Latam, "Comandos Disponibles (Página {0}/{1}):" },
+      { Language.Polish, "Dostępne Polecenia (Strona {0}/{1}):" },
+      { Language.Russian, "Доступные Команды (Страница {0}/{1}):" },
+      { Language.Spanish, "Comandos Disponibles (Página {0}/{1}):" },
+      { Language.ChineseSimplified, "可用命令（第 {0}/{1} 页）：" },
+      { Language.ChineseTraditional, "可用指令（第 {0}/{1} 頁）：" },
+      { Language.Thai, "คำสั่งที่ใช้ได้ (หน้า {0}/{1}):" },
+      { Language.Turkish, "Kullanılabilir Komutlar (Sayfa {0}/{1}):" },
+      { Language.Ukrainian, "Доступні Команди (Сторінка {0}/{1}):" },
+      { Language.Vietnamese, "Lệnh Khả Dụng (Trang {0}/{1}):" }
+    });
+
+    LocalizationService.NewKey(LocalizationKey.HelpNextPage, new Dictionary<Language, string> {
+      { Language.English, "Type {0}help {1} for next page" },
+      { Language.Portuguese, "Digite {0}ajuda {1} para a próxima página" },
+      { Language.French, "Tapez {0}aide {1} pour la page suivante" },
+      { Language.German, "Geben Sie {0}hilfe {1} für die nächste Seite ein" },
+      { Language.Hungarian, "Írja be: {0}segítség {1} a következő oldalhoz" },
+      { Language.Italian, "Digita {0}aiuto {1} per la pagina successiva" },
+      { Language.Japanese, "次のページには {0}ヘルプ {1} と入力してください" },
+      { Language.Korean, "다음 페이지를 보려면 {0}도움말 {1}을 입력하세요" },
+      { Language.Latam, "Escribe {0}ayuda {1} para la siguiente página" },
+      { Language.Polish, "Wpisz {0}pomoc {1} aby przejść do następnej strony" },
+      { Language.Russian, "Введите {0}помощь {1} для следующей страницы" },
+      { Language.Spanish, "Escribe {0}ayuda {1} para la siguiente página" },
+      { Language.ChineseSimplified, "输入 {0}帮助 {1} 查看下一页" },
+      { Language.ChineseTraditional, "輸入 {0}幫助 {1} 查看下一頁" },
+      { Language.Thai, "พิมพ์ {0}ช่วยเหลือ {1} สำหรับหน้าถัดไป" },
+      { Language.Turkish, "Sonraki sayfa için {0}yardım {1} yazın" },
+      { Language.Ukrainian, "Введіть {0}допомога {1} для наступної сторінки" },
+      { Language.Vietnamese, "Gõ {0}trợgiúp {1} để xem trang tiếp theo" }
+    });
   }
 
-  /// <summary>
-  /// Returns all commands grouped by assembly name. The optional playerLanguage
-  /// will be used to prefer language-specific aliases when available.
-  /// </summary>
-  public static Dictionary<string, string[]> GetAllCommands(string playerLanguage = null) {
-    var cacheKey = string.IsNullOrWhiteSpace(playerLanguage) ? string.Empty : playerLanguage.ToLowerInvariant().Trim();
-    if (_commandsCache.TryGetValue(cacheKey, out var cached)) return cached;
 
-    var result = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+  [Command("help", Language.English, description: "Shows available commands")]
+  [CommandAlias("aide", Language.French, description: "Affiche les commandes disponibles")]
+  [CommandAlias("hilfe", Language.German, description: "Zeigt verfügbare Befehle an")]
+  [CommandAlias("segítség", Language.Hungarian, description: "Megjeleníti az elérhető parancsokat")]
+  [CommandAlias("aiuto", Language.Italian, description: "Mostra i comandi disponibili")]
+  [CommandAlias("ヘルプ", Language.Japanese, description: "利用可能なコマンドを表示します")]
+  [CommandAlias("도움말", Language.Korean, description: "사용 가능한 명령을 표시합니다")]
+  [CommandAlias("ayuda", Language.Latam, description: "Muestra los comandos disponibles")]
+  [CommandAlias("pomoc", Language.Polish, description: "Pokazuje dostępne polecenia")]
+  [CommandAlias("ajuda", Language.Portuguese, description: "Mostra os comandos disponíveis")]
+  [CommandAlias("помощь", Language.Russian, description: "Показывает доступные команды")]
+  [CommandAlias("ayuda", Language.Spanish, description: "Muestra los comandos disponibles")]
+  [CommandAlias("帮助", Language.ChineseSimplified, description: "显示可用命令")]
+  [CommandAlias("幫助", Language.ChineseTraditional, description: "顯示可用指令")]
+  [CommandAlias("ช่วยเหลือ", Language.Thai, description: "แสดงคำสั่งที่ใช้ได้")]
+  [CommandAlias("yardım", Language.Turkish, description: "Kullanılabilir komutları gösterir")]
+  [CommandAlias("допомога", Language.Ukrainian, description: "Показує доступні команди")]
+  [CommandAlias("trợgiúp", Language.Vietnamese, description: "Hiển thị các lệnh có sẵn")]
+  internal static void HelpCommand(CommandContext ctx, string language, int page = 1) {
+    var targetLanguage = LocalizationService.GetLanguageFromString(language);
+    if (targetLanguage == Language.None) targetLanguage = ctx.Sender.Language;
+    HelpCommandInternal(ctx, targetLanguage, page);
+  }
 
-    // Map each CommandInfo to its list of candidate representations
-    var ciCandidates = new Dictionary<CommandInfo, List<(string rep, string keyLang)>>();
+  [Command("help", Language.English, description: "Shows available commands")]
+  [CommandAlias("aide", Language.French, description: "Affiche les commandes disponibles")]
+  [CommandAlias("hilfe", Language.German, description: "Zeigt verfügbare Befehle an")]
+  [CommandAlias("segítség", Language.Hungarian, description: "Megjeleníti az elérhető parancsokat")]
+  [CommandAlias("aiuto", Language.Italian, description: "Mostra i comandi disponibili")]
+  [CommandAlias("ヘルプ", Language.Japanese, description: "利用可能なコマンドを表示します")]
+  [CommandAlias("도움말", Language.Korean, description: "사용 가능한 명령을 표시합니다")]
+  [CommandAlias("ayuda", Language.Latam, description: "Muestra los comandos disponibles")]
+  [CommandAlias("pomoc", Language.Polish, description: "Pokazuje dostępne polecenia")]
+  [CommandAlias("ajuda", Language.Portuguese, description: "Mostra os comandos disponíveis")]
+  [CommandAlias("помощь", Language.Russian, description: "Показывает доступные команды")]
+  [CommandAlias("ayuda", Language.Spanish, description: "Muestra los comandos disponibles")]
+  [CommandAlias("帮助", Language.ChineseSimplified, description: "显示可用命令")]
+  [CommandAlias("幫助", Language.ChineseTraditional, description: "顯示可用指令")]
+  [CommandAlias("ช่วยเหลือ", Language.Thai, description: "แสดงคำสั่งที่ใช้ได้")]
+  [CommandAlias("yardım", Language.Turkish, description: "Kullanılabilir komutları gösterir")]
+  [CommandAlias("допомога", Language.Ukrainian, description: "Показує доступні команди")]
+  [CommandAlias("trợgiúp", Language.Vietnamese, description: "Hiển thị các lệnh có sẵn")]
+  internal static void HelpCommand(CommandContext ctx, int page = 1) {
+    // if (language == Language.None) language = ctx.Sender.Language;
+    HelpCommandInternal(ctx, ctx.Sender.Language, page);
+  }
 
-    // Helper to add candidate
-    void AddCandidate(CommandInfo ci, string rep, string keyLang) {
-      if (!ciCandidates.TryGetValue(ci, out var list)) {
-        list = [];
-        ciCandidates[ci] = list;
-      }
-      list.Add((rep, string.IsNullOrWhiteSpace(keyLang) ? null : keyLang.ToLowerInvariant().Trim()));
+  // Método interno compartilhado
+  private static void HelpCommandInternal(CommandContext ctx, Language targetLanguage, int page) {
+    const int commandsPerMessage = 5;
+    const int messagesPerPage = 8;
+    const int commandsPerPage = commandsPerMessage * messagesPerPage;
+
+    if (page < 1) page = 1;
+
+    bool isCustomLanguage = targetLanguage != ctx.Sender.Language;
+
+    var commandsByAssembly = GetCommandsByAssembly(targetLanguage, ctx.Sender.IsAdmin);
+
+    if (commandsByAssembly.Count == 0) {
+      ctx.Reply(LocalizationService.Get(ctx.Sender, LocalizationKey.HelpNoCommands).FormatError());
+      return;
     }
 
-    // Collect from standalone commands
-    foreach (var kvp in _noGroupCommands) {
-      var key = kvp.Key.ToLowerInvariant();
-      foreach (var ci in kvp.Value) {
-        var usage = ci.Attribute?.Usage;
-        string rep;
-        if (!string.IsNullOrWhiteSpace(usage) && ci.Attribute != null) {
-          // replace the original command name in the usage with the key (alias)
-          var orig = ci.Attribute.Name ?? string.Empty;
-          var idx = usage.IndexOf(orig, StringComparison.OrdinalIgnoreCase);
-          if (idx >= 0) {
-            rep = string.Concat(usage.AsSpan(0, idx), key, usage.AsSpan(idx + orig.Length));
-            // ensure leading dot if missing
-            if (!rep.StartsWith('.')) rep = "." + rep;
-          } else {
-            rep = $".{key}" + (usage.StartsWith('.') ? usage[usage.IndexOf(' ')..] : "");
+    var flatCommandList = new List<(string AssemblyName, CommandInfo Command)>();
+    foreach (var (assemblyName, commands) in commandsByAssembly) {
+      foreach (var cmd in commands) {
+        flatCommandList.Add((assemblyName, cmd));
+      }
+    }
+
+    int totalCommands = flatCommandList.Count;
+    int totalPages = (int)Math.Ceiling(totalCommands / (double)commandsPerPage);
+
+    if (page > totalPages) page = totalPages;
+
+    int startIndex = (page - 1) * commandsPerPage;
+    int endIndex = Math.Min(startIndex + commandsPerPage, totalCommands);
+    var pageCommands = flatCommandList.Skip(startIndex).Take(endIndex - startIndex).ToList();
+
+    for (int i = 0; i < pageCommands.Count; i += commandsPerMessage) {
+      var messageBuilder = new System.Text.StringBuilder();
+
+      if (i == 0) {
+        string headerText = LocalizationService.Get(ctx.Sender, LocalizationKey.HelpAvailableCommands, page, totalPages);
+        messageBuilder.AppendLine(headerText.Bold());
+
+        // Show which language is being displayed if different from sender's language
+        if (isCustomLanguage) {
+          messageBuilder.AppendLine($"~Language: {targetLanguage}~".WithColor("yellow"));
+        }
+
+        messageBuilder.AppendLine();
+      }
+
+      string currentAssembly = null;
+      int commandsInMessage = 0;
+
+      for (int j = i; j < Math.Min(i + commandsPerMessage, pageCommands.Count); j++) {
+        var (assemblyName, command) = pageCommands[j];
+
+        if (currentAssembly != assemblyName) {
+          if (currentAssembly != null) {
+            messageBuilder.AppendLine();
           }
+          messageBuilder.AppendLine($"~[{assemblyName}]~");
+          currentAssembly = assemblyName;
+        }
+
+        string commandWithParams = FormatCommandWithParameters(command);
+        messageBuilder.AppendLine($"  {CommandPrefix}{commandWithParams}".FormatSuccess());
+        commandsInMessage++;
+      }
+
+      if (i + commandsPerMessage >= pageCommands.Count && page < totalPages) {
+        messageBuilder.AppendLine();
+
+        string nextPageText = LocalizationService.Get(ctx.Sender, LocalizationKey.HelpNextPage, CommandPrefix, page + 1);
+        messageBuilder.AppendLine(nextPageText.WithColor("white"));
+      }
+
+      ctx.Reply(messageBuilder.ToString());
+    }
+  }
+
+  private static string FormatCommandWithParameters(CommandInfo command) {
+    var result = new System.Text.StringBuilder();
+    result.Append(command.FullCommandName);
+
+    foreach (var param in command.Parameters) {
+      result.Append(' ');
+
+      string paramName = param.Name;
+
+      if (param.IsOptional) {
+        string defaultValue = FormatDefaultValue(param.DefaultValue);
+        if (string.IsNullOrEmpty(defaultValue)) {
+          result.Append($"[{paramName}]");
         } else {
-          rep = $".{key}";
+          result.Append($"[{paramName}={defaultValue}]");
         }
-        _commandKeyLanguage.TryGetValue(key, out var keyLang);
-        AddCandidate(ci, rep, keyLang);
+      } else {
+        result.Append($"<{paramName}>");
       }
     }
 
-    // Collect from grouped commands
-    foreach (var groupKvp in _groups) {
-      var group = groupKvp.Key.ToLowerInvariant();
-      foreach (var cmdKvp in groupKvp.Value) {
-        var cmdKey = cmdKvp.Key.ToLowerInvariant();
-        foreach (var ci in cmdKvp.Value) {
-          var usage = ci.Attribute?.Usage;
-          string rep;
-          if (!string.IsNullOrWhiteSpace(usage) && ci.Attribute != null) {
-            var orig = ci.Attribute.Name ?? string.Empty;
-            var idx = usage.IndexOf(orig, StringComparison.OrdinalIgnoreCase);
-            if (idx >= 0) {
-              rep = string.Concat(usage.AsSpan(0, idx), cmdKey, usage.AsSpan(idx + orig.Length));
-              if (!rep.StartsWith('.')) rep = "." + rep;
-            } else {
-              rep = $".{group} {cmdKey}";
-            }
-          } else {
-            rep = $".{group} {cmdKey}";
-          }
-          _commandKeyLanguage.TryGetValue(cmdKey, out var keyLang);
-          AddCandidate(ci, rep, keyLang);
-        }
-      }
-    }
-
-    // Choose best representation per CommandInfo and add to assembly buckets
-    foreach (var kv in ciCandidates) {
-      var ci = kv.Key;
-      var candidates = kv.Value;
-      string chosen = null;
-
-      if (!string.IsNullOrWhiteSpace(playerLanguage)) {
-        var pl = playerLanguage.ToLowerInvariant().Trim();
-        var match = candidates.FirstOrDefault(c => string.Equals(c.keyLang, pl, StringComparison.OrdinalIgnoreCase));
-        if (match != default) chosen = match.rep;
-      }
-
-      if (chosen == null) {
-        var def = candidates.FirstOrDefault(c => c.keyLang == null);
-        if (def != default) chosen = def.rep;
-      }
-
-      chosen ??= candidates[0].rep;
-
-      var asmName = ci.Assembly?.GetName()?.Name ?? "(unknown)";
-      if (!result.TryGetValue(asmName, out var set)) {
-        set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        result[asmName] = set;
-      }
-      set.Add(chosen);
-    }
-
-    // Convert HashSets to arrays and cache result
-    var final = result.ToDictionary(k => k.Key, v => v.Value.OrderBy(x => x).ToArray(), StringComparer.OrdinalIgnoreCase);
-    _commandsCache[cacheKey] = final;
-    return final;
+    return result.ToString();
   }
 
-  /// <summary>
-  /// Returns commands for a specific assembly name (by assembly.GetName().Name).
-  /// </summary>
-  public static string[] GetAssemblyCommands(string assemblyName, string playerLanguage = null) {
-    if (string.IsNullOrWhiteSpace(assemblyName)) return [];
-    var all = GetAllCommands(playerLanguage);
-    if (all.TryGetValue(assemblyName, out var arr)) return arr;
-    return [];
+  private static string FormatDefaultValue(object defaultValue) {
+    if (defaultValue == null) return "null";
+    if (defaultValue is string s) return string.IsNullOrEmpty(s) ? "null" : s;
+    if (defaultValue is bool b) return b ? "true" : "false";
+    if (defaultValue is int i && i == 0) return null;
+    if (defaultValue is float f && f == 0f) return null;
+    if (defaultValue is double d && d == 0.0) return null;
+
+    if (defaultValue.GetType().IsEnum) {
+      return defaultValue.ToString();
+    }
+
+    return defaultValue.ToString();
+  }
+
+  private static Dictionary<string, List<CommandInfo>> GetCommandsByAssembly(Language playerLanguage, bool isAdmin) {
+    var result = new Dictionary<string, List<CommandInfo>>();
+
+    // Pega TODOS os comandos de todas as listas
+    var allCommands = CommandsByKey.Values
+      .SelectMany(list => list)
+      .Where(cmd => isAdmin || !cmd.AdminOnly)
+      .GroupBy(cmd => cmd.Assembly.GetName().Name)
+      .OrderBy(g => g.Key);
+
+    foreach (var assemblyGroup in allCommands) {
+      var assemblyName = assemblyGroup.Key;
+      var commandList = new List<CommandInfo>();
+
+      // Agrupa por método e seleciona a melhor versão de cada comando
+      var uniqueCommands = assemblyGroup
+        .GroupBy(cmd => cmd.Method)
+        .Select(methodGroup => {
+          var playerLangCmd = methodGroup.FirstOrDefault(c => c.Language == playerLanguage);
+          var mainCmd = methodGroup.FirstOrDefault(c => c.Attribute != null);
+          return playerLangCmd ?? mainCmd ?? methodGroup.First();
+        })
+        .OrderBy(cmd => cmd.Group ?? "")
+        .ThenBy(cmd => cmd.Name);
+
+      foreach (var cmd in uniqueCommands) {
+        commandList.Add(cmd);
+      }
+
+      if (commandList.Count > 0) {
+        result[assemblyName] = commandList;
+      }
+    }
+
+    return result;
   }
 }

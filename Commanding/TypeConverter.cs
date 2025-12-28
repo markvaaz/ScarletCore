@@ -166,4 +166,26 @@ public static class TypeConverter {
 
     return quaternion.identity;
   }
+
+  public static string GetFriendlyTypeName(Type type) {
+    return type.Name switch {
+      "String" => "text",
+      "Int32" => "number",
+      "Int64" => "number",
+      "UInt64" => "number",
+      "UInt32" => "number",
+      "Single" => "decimal",
+      "Double" => "decimal",
+      "Boolean" => "true/false",
+      "Byte" => "number",
+      "Int16" => "number",
+      "PlayerData" => "player",
+      "PrefabGUID" => "prefabGuid",
+      "float2" => "x,y",
+      "float3" => "x,y,z",
+      "float4" => "x,y,z,w",
+      "quaternion" => "x,y,z,w",
+      _ => type.Name
+    };
+  }
 }

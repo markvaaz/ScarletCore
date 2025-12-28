@@ -17,12 +17,9 @@ public static class ChatMessageSystemPatch {
   [HarmonyPrefix]
   public static void Prefix(ChatMessageSystem __instance) {
     if (!GameSystems.Initialized) return;
-    // Early exit if no subscribers to avoid allocating NativeArray
-    if (EventManager.GetSubscriberCount(PrefixEvents.OnChatMessage) == 0) return;
     NativeArray<Entity> entities = __instance.__query_661171423_0.ToEntityArray(Allocator.Temp);
 
     try {
-      if (entities.Length == 0) return;
       CommandHandler.HandleMessageEvents(entities);
       EventManager.Emit(PrefixEvents.OnChatMessage, entities);
     } catch (Exception e) {

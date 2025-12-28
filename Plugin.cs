@@ -32,15 +32,10 @@ public class Plugin : BasePlugin {
 
     Settings.Section("Language")
       .Add("PrefabLocalizationLanguage", Language.English, $"Language code for localization. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}")
-      .Add("DefaultPlayerLanguage", Language.English, $"Default language code for new players. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}");
-    EventManager.On(ServerEvents.OnInitialize, OnInitialize);
-  }
-
-  [EventPriority(999)]
-  private void OnInitialize() {
+      .Add("DefaultPlayerLanguage", Language.English, $"Default language code for new players. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}")
+      .Add("WelcomeMessage", "~Welcome to {ServerName}!~\n\nThis server uses ~ScarletMods~ to enhance your experience.\n\nTo get started, please set ~your preferred language~:\n\n{AvailableLanguages}\nUse: ~.language <language>~", "Welcome message shown to players who haven't set their language. Placeholders: {ServerName}, {AvailableLanguages}, {PlayerName}");
     LocalizationService.Initialize();
     CommandHandler.Initialize();
-    Utils.Log.Message("ScarletCore Services initialized.");
   }
 
   public override bool Unload() {

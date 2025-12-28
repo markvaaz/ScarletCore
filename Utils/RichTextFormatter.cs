@@ -202,28 +202,28 @@ public static class RichTextFormatter {
   /// </summary>
   /// <param name="text">Error message text</param>
   /// <returns>Formatted error message in red</returns>
-  public static string AsError(this string text) => $"[ERROR] {text}".WithColor(Red);
+  public static string AsError(this string text) => text.FormatError();
 
   /// <summary>
   /// Formats text as a success message with [SUCCESS] prefix.
   /// </summary>
   /// <param name="text">Success message text</param>
   /// <returns>Formatted success message in green</returns>
-  public static string AsSuccess(this string text) => $"[SUCCESS] {text}".WithColor(Green);
+  public static string AsSuccess(this string text) => text.FormatSuccess();
 
   /// <summary>
   /// Formats text as a warning message with [WARNING] prefix.
   /// </summary>
   /// <param name="text">Warning message text</param>
   /// <returns>Formatted warning message in yellow</returns>
-  public static string AsWarning(this string text) => $"[WARNING] {text}".WithColor(Yellow);
+  public static string AsWarning(this string text) => text.FormatWarning();
 
   /// <summary>
   /// Formats text as an info message with [INFO] prefix.
   /// </summary>
   /// <param name="text">Info message text</param>
   /// <returns>Formatted info message in blue</returns>
-  public static string AsInfo(this string text) => $"[INFO] {text}".WithColor(Blue);
+  public static string AsInfo(this string text) => text.FormatInfo();
 
   /// <summary>
   /// Formats text as an announcement with [ANNOUNCEMENT] prefix.

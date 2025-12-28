@@ -9,29 +9,35 @@ using ScarletCore.Utils;
 using ScarletCore.Data;
 using Stunlock.Core;
 using ScarletCore.Events;
+using ScarletCore.Systems;
+using ProjectM;
+using ScarletCore.Commanding;
 
 namespace ScarletCore.Services;
 
-public static class Language {
-  public const string ServerDefault = "server_default";
-  public const string Portuguese = "portuguese";
-  public const string English = "english";
-  public const string French = "french";
-  public const string German = "german";
-  public const string Hungarian = "hungarian";
-  public const string Italian = "italian";
-  public const string Japanese = "japanese";
-  public const string Korean = "korean";
-  public const string Latam = "latam";
-  public const string Polish = "polish";
-  public const string Russian = "russian";
-  public const string Spanish = "spanish";
-  public const string ChineseSimplified = "chinese_simplified";
-  public const string ChineseTraditional = "chinese_traditional";
-  public const string Thai = "thai";
-  public const string Turkish = "turkish";
-  public const string Ukrainian = "ukrainian";
-  public const string Vietnamese = "vietnamese";
+/// <summary>
+/// Enum representing supported languages in the localization system.
+/// </summary>
+public enum Language {
+  None,
+  English,
+  Portuguese,
+  French,
+  German,
+  Hungarian,
+  Italian,
+  Japanese,
+  Korean,
+  Latam,
+  Polish,
+  Russian,
+  Spanish,
+  ChineseSimplified,
+  ChineseTraditional,
+  Thai,
+  Turkish,
+  Ukrainian,
+  Vietnamese
 }
 
 /// <summary>
@@ -53,7 +59,7 @@ public static class LocalizationService {
   /// <summary>
   /// Custom localization keys created at runtime. Composite key (assembly:key) -> (language -> text)
   /// </summary>
-  private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, string>> _customKeys = new(StringComparer.OrdinalIgnoreCase);
+  private static readonly ConcurrentDictionary<string, ConcurrentDictionary<Language, string>> _customKeys = new(StringComparer.OrdinalIgnoreCase);
 
   /// <summary>
   /// Read-only view of translations for safe external access
@@ -71,14 +77,14 @@ public static class LocalizationService {
   private static bool _initialized = false;
 
   /// <summary>
-  /// The currently loaded language code
+  /// The currently loaded language
   /// </summary>
-  private static string _currentServerLanguage = Language.English;
+  private static Language _currentServerLanguage = Language.English;
 
   /// <summary>
-  /// Mapping of language codes to their corresponding embedded resource file names
+  /// Mapping of language enum values to their corresponding embedded resource file names
   /// </summary>
-  private static readonly Dictionary<string, string> _languageFileMapping = new() {
+  private static readonly Dictionary<Language, string> _languageFileMapping = new() {
     { Language.Portuguese, "Brazilian" },
     { Language.English, "English" },
     { Language.French, "French" },
@@ -99,23 +105,67 @@ public static class LocalizationService {
     { Language.Vietnamese, "Vietnamese" }
   };
 
-
   /// <summary>
-  /// Get all available language codes
+  /// Get all available languages
   /// </summary>
-  public static string[] AvailableServerLanguages => [.. _languageFileMapping.Keys];
+  public static Language[] AvailableServerLanguages => [.. _languageFileMapping.Keys];
 
   /// <summary>
   /// Get the current loaded language
   /// </summary>
-  public static string CurrentServerLanguage => _currentServerLanguage;
+  public static Language CurrentServerLanguage => _currentServerLanguage;
+
+  /// <summary>
+  /// Converts a string representation to GameLanguage enum.
+  /// Returns null if the string doesn't match any language.
+  /// </summary>
+  /// <param name="languageString">The language string to convert</param>
+  /// <returns>The corresponding GameLanguage enum value, or null if not found</returns>
+  public static Language GetLanguageFromString(string languageString) {
+    if (string.IsNullOrWhiteSpace(languageString)) return _currentServerLanguage;
+
+    var normalized = languageString.ToLower().Trim()
+      .Replace(" ", "")
+      .Replace("_", "")
+      .Replace("-", "");
+
+    foreach (Language lang in Enum.GetValues<Language>()) {
+      var enumName = lang.ToString().ToLower();
+      if (enumName == normalized) return lang;
+    }
+
+    // Special cases for common variations
+    return normalized switch {
+      "pt" or "ptbr" or "brazilian" or "portuguese" or "portugues" or "português" => Language.Portuguese,
+      "en" or "enus" or "engb" or "english" => Language.English,
+      "fr" or "french" or "francais" or "français" => Language.French,
+      "de" or "german" or "deutsch" => Language.German,
+      "hu" or "hungarian" or "magyar" => Language.Hungarian,
+      "it" or "italian" or "italiano" => Language.Italian,
+      "ja" or "jp" or "japanese" or "nihongo" => Language.Japanese,
+      "ko" or "kr" or "korean" or "hangul" => Language.Korean,
+      "es" or "eses" or "spanish" or "espanol" or "español" => Language.Spanish,
+      "esmx" or "latam" or "latinamerican" or "latinamericanspanish" => Language.Latam,
+      "pl" or "polish" or "polski" => Language.Polish,
+      "ru" or "russian" or "russkiy" or "русский" => Language.Russian,
+      "zh" or "zhcn" or "chs" or "chinesesimplified" or "simplifiedchinese" => Language.ChineseSimplified,
+      "zhtw" or "cht" or "chinesetraditional" or "traditionalchinese" => Language.ChineseTraditional,
+      "th" or "thai" or "thaithai" => Language.Thai,
+      "tr" or "turkish" or "turkce" or "türkçe" => Language.Turkish,
+      "uk" or "ua" or "ukrainian" or "українська" => Language.Ukrainian,
+      "vi" or "vn" or "vietnamese" or "tiếngviệt" => Language.Vietnamese,
+      _ => Language.None
+    };
+
+  }
 
   /// <summary>
   /// Initialize the localization service. Loads English by default.
   /// Call this during game initialization to load embedded localization resources.
   /// </summary>
   public static void Initialize() {
-    var language = Plugin.Settings.Get<string>("PrefabLocalizationLanguage") ?? Language.English;
+    // Read the configured language enum directly from settings
+    var language = Plugin.Settings.Get<Language>("PrefabLocalizationLanguage");
 
     try {
       LoadPrefabMapping();
@@ -133,11 +183,27 @@ public static class LocalizationService {
       if (player == null) return;
 
       var lang = GetPlayerLanguage(player);
-      if (!string.IsNullOrWhiteSpace(lang)) return; // already set
 
-      // Prompt the player to choose a language
-      var available = string.Join(", ", AvailableServerLanguages);
-      player.SendMessage($"Welcome! Please set your language using ~.setlang <language>~.\nAvailable: {available}");
+      if (lang != Language.None) return;
+
+      // Get custom welcome message or use default
+      var welcomeMessage = Plugin.Settings.Get<string>("WelcomeMessage");
+
+      // Replace placeholders
+      var serverName = SettingsManager.ServerHostSettings.Name ?? "the Server";
+      var availableLanguages = string.Join(", ", AvailableServerLanguages);
+      var playerName = player.Name;
+
+      welcomeMessage = welcomeMessage
+        .Replace("{ServerName}", serverName)
+        .Replace("{AvailableLanguages}", availableLanguages.WithColor("#ffd93d"))
+        .Replace("{PlayerName}", playerName);
+
+      var messages = welcomeMessage.Split("\n");
+
+      foreach (var line in messages) {
+        player.SendMessage(line.Trim());
+      }
     } catch (Exception ex) {
       Log.Error($"CheckLanguageOnJoin failed: {ex}");
     }
@@ -147,12 +213,10 @@ public static class LocalizationService {
   /// Load a language file from embedded resources.
   /// Replaces all current translations with the new language data.
   /// </summary>
-  /// <param name="language">The language code to load (e.g., "english", "portuguese")</param>
-  public static void LoadLanguage(string language) {
+  /// <param name="language">The language to load</param>
+  public static void LoadLanguage(Language language) {
     try {
-      var normalizedLanguage = language.ToLower().Trim();
-
-      if (!_languageFileMapping.TryGetValue(normalizedLanguage, out var fileName)) {
+      if (!_languageFileMapping.TryGetValue(language, out var fileName)) {
         Log.Warning($"Language not supported: {language}. Available languages: {string.Join(", ", AvailableServerLanguages)}");
         return;
       }
@@ -189,8 +253,8 @@ public static class LocalizationService {
         }
       }
 
-      _currentServerLanguage = normalizedLanguage;
-      Log.Info($"Loaded {Translations.Count} translations for language: {normalizedLanguage}");
+      _currentServerLanguage = language;
+      Log.Info($"Loaded {Translations.Count} translations for language: {language}");
     } catch (Exception ex) {
       Log.Error($"Error loading language {language}: {ex}");
     }
@@ -331,22 +395,21 @@ public static class LocalizationService {
 
   /// <summary>
   /// Register a new custom localization key with translations for multiple languages.
-  /// Language codes should match the server/player language keys (e.g. "english", "portuguese").
   /// The key is automatically prefixed with the calling assembly name to avoid conflicts.
   /// </summary>
   /// <param name="key">The localization key (will be prefixed with assembly name)</param>
-  /// <param name="translations">Dictionary mapping language codes to translated text</param>
-  public static void NewKey(string key, IDictionary<string, string> translations) {
+  /// <param name="translations">Dictionary mapping languages to translated text</param>
+  public static void NewKey(string key, IDictionary<Language, string> translations) {
     if (string.IsNullOrWhiteSpace(key) || translations == null || translations.Count == 0) return;
 
     var callingAssembly = GetCallingAssemblyFromStack();
     var compositeKey = BuildCompositeKey(callingAssembly, key.Trim());
 
-    var map = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    var map = new ConcurrentDictionary<Language, string>();
 
     foreach (var kv in translations) {
-      if (string.IsNullOrWhiteSpace(kv.Key) || kv.Value == null) continue;
-      map[kv.Key.ToLower().Trim()] = kv.Value;
+      if (kv.Value == null) continue;
+      map[kv.Key] = kv.Value;
     }
 
     if (map.IsEmpty) return;
@@ -358,21 +421,20 @@ public static class LocalizationService {
   /// Loads multiple custom keys from a dictionary organized by language.
   /// Expected format:
   /// {
-  ///   "portuguese": { "help message": "mensagem de ajuda" },
-  ///   "english": { "help message": "help message" }
+  ///   GameLanguage.Portuguese: { "help message": "mensagem de ajuda" },
+  ///   GameLanguage.English: { "help message": "help message" }
   /// }
-  /// The outer key is the language code and the value is a map of (key -> translated text).
   /// Keys are automatically prefixed with the calling assembly name.
   /// </summary>
-  public static void LoadCustomKeys(IDictionary<string, IDictionary<string, string>> languageMap) {
+  public static void LoadCustomKeys(IDictionary<Language, IDictionary<string, string>> languageMap) {
     if (languageMap == null || languageMap.Count == 0) return;
 
     var callingAssembly = GetCallingAssemblyFromStack();
 
     foreach (var langEntry in languageMap) {
-      if (string.IsNullOrWhiteSpace(langEntry.Key) || langEntry.Value == null) continue;
+      if (langEntry.Value == null) continue;
 
-      var lang = langEntry.Key.ToLower().Trim();
+      var lang = langEntry.Key;
 
       foreach (var kv in langEntry.Value) {
         if (kv.Key == null || kv.Value == null) continue;
@@ -381,7 +443,7 @@ public static class LocalizationService {
         if (string.IsNullOrEmpty(normalizedKey)) continue;
 
         var compositeKey = BuildCompositeKey(callingAssembly, normalizedKey);
-        var map = _customKeys.GetOrAdd(compositeKey, _ => new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        var map = _customKeys.GetOrAdd(compositeKey, _ => new ConcurrentDictionary<Language, string>());
         map[lang] = kv.Value;
       }
     }
@@ -410,15 +472,17 @@ public static class LocalizationService {
     }
 
     // Determine player language: try per-player, then DefaultPlayerLanguage setting, then server language
-    var playerLang = GetPlayerLanguage(player) ?? Plugin.Settings.Get<string>("DefaultPlayerLanguage") ?? _currentServerLanguage;
-    playerLang = playerLang.ToLower().Trim();
+    var playerLang = GetPlayerLanguage(player);
 
+    if (playerLang == Language.None) {
+      playerLang = _currentServerLanguage;
+    }
 
     if (translations.TryGetValue(playerLang, out string text) && !string.IsNullOrEmpty(text)) {
       return FormatString(text, parameters);
     }
 
-    if (!string.Equals(playerLang, _currentServerLanguage, StringComparison.OrdinalIgnoreCase) &&
+    if (playerLang != _currentServerLanguage &&
         translations.TryGetValue(_currentServerLanguage, out var serverText) && !string.IsNullOrEmpty(serverText)) {
       return FormatString(serverText, parameters);
     }
@@ -445,14 +509,17 @@ public static class LocalizationService {
       return key;
     }
 
-    var playerLang = GetPlayerLanguage(player) ?? Plugin.Settings.Get<string>("DefaultPlayerLanguage") ?? _currentServerLanguage;
-    playerLang = playerLang.ToLower().Trim();
+    var playerLang = GetPlayerLanguage(player);
+
+    if (playerLang == Language.None) {
+      playerLang = _currentServerLanguage;
+    }
 
     if (translations.TryGetValue(playerLang, out string text) && !string.IsNullOrEmpty(text)) {
       return FormatString(text, parameters);
     }
 
-    if (!string.Equals(playerLang, _currentServerLanguage, StringComparison.OrdinalIgnoreCase) &&
+    if (playerLang != _currentServerLanguage &&
         translations.TryGetValue(_currentServerLanguage, out var serverText) && !string.IsNullOrEmpty(serverText)) {
       return FormatString(serverText, parameters);
     }
@@ -541,14 +608,17 @@ public static class LocalizationService {
       return parts.Length > 1 ? parts[1] : compositeKey;
     }
 
-    var playerLang = GetPlayerLanguage(player) ?? Plugin.Settings.Get<string>("DefaultPlayerLanguage") ?? _currentServerLanguage;
-    playerLang = playerLang.ToLower().Trim();
+    var playerLang = GetPlayerLanguage(player);
+
+    if (playerLang == Language.None) {
+      playerLang = _currentServerLanguage;
+    }
 
     if (translations.TryGetValue(playerLang, out string text) && !string.IsNullOrEmpty(text)) {
       return FormatString(text, parameters);
     }
 
-    if (!string.Equals(playerLang, _currentServerLanguage, StringComparison.OrdinalIgnoreCase) &&
+    if (playerLang != _currentServerLanguage &&
         translations.TryGetValue(_currentServerLanguage, out var serverText) && !string.IsNullOrEmpty(serverText)) {
       return FormatString(serverText, parameters);
     }
@@ -618,19 +688,16 @@ public static class LocalizationService {
   }
 
   /// <summary>
-  /// Set a player's preferred language. Stored using PlayerData.SetData for this assembly.
+  /// Set a player's preferred language. Stored using the database for persistence.
   /// </summary>
-  public static void SetPlayerLanguage(PlayerData player, string language) {
+  public static void SetPlayerLanguage(PlayerData player, Language language) {
     if (player == null) return;
-    if (string.IsNullOrWhiteSpace(language)) return;
 
     try {
-      var lang = language.ToLower().Trim();
-
       // Load or create the player languages map from the database
       var map = Plugin.Database.GetOrCreate("player_languages", () => new Dictionary<string, string>());
       var key = player.PlatformId.ToString();
-      map[key] = lang;
+      map[key] = language.ToString();
       Plugin.Database.Save("player_languages", map);
     } catch (Exception ex) {
       Log.Error($"Failed to set player language: {ex}");
@@ -640,17 +707,21 @@ public static class LocalizationService {
   /// <summary>
   /// Get a player's preferred language if set, otherwise null.
   /// </summary>
-  public static string GetPlayerLanguage(PlayerData player) {
-    if (player == null) return null;
+  public static Language GetPlayerLanguage(PlayerData player) {
+    if (player == null) return Language.None;
     try {
-      var map = Plugin.Database.Get<Dictionary<string, string>>("player_languages");
-      if (map == null) return null;
+      var map = Plugin.Database.GetOrCreate<Dictionary<string, string>>("player_languages");
+
+      if (map == null) return Language.None;
+
       var key = player.PlatformId.ToString();
-      if (map.TryGetValue(key, out var lang) && !string.IsNullOrWhiteSpace(lang)) return lang.ToLower().Trim();
-      return null;
+      if (map.TryGetValue(key, out var langString) && !string.IsNullOrWhiteSpace(langString)) {
+        return GetLanguageFromString(langString);
+      }
+      return Language.None;
     } catch (Exception ex) {
       Log.Error($"Failed to get player language: {ex}");
-      return null;
+      return Language.None;
     }
   }
 
@@ -719,27 +790,84 @@ public static class LocalizationService {
   /// Change the current language at runtime.
   /// Reloads all translations with the new language data.
   /// </summary>
-  /// <param name="language">The language code to switch to</param>
+  /// <param name="language">The language to switch to</param>
   /// <returns>True if the language was successfully changed, false if not supported</returns>
-  public static bool ChangeLanguage(string language) {
-    var normalizedLanguage = language.ToLower().Trim();
-
-    if (!_languageFileMapping.ContainsKey(normalizedLanguage)) {
+  public static bool ChangeLanguage(Language language) {
+    if (!_languageFileMapping.ContainsKey(language)) {
       Log.Warning($"Language not supported: {language}");
       return false;
     }
 
-    LoadLanguage(normalizedLanguage);
+    LoadLanguage(language);
     return true;
   }
 
   /// <summary>
   /// Check if a language is available.
-  /// Validates if the language code exists in the supported languages.
+  /// Validates if the language is supported.
   /// </summary>
-  /// <param name="language">The language code to check</param>
+  /// <param name="language">The language to check</param>
   /// <returns>True if the language is supported, false otherwise</returns>
-  public static bool IsLanguageAvailable(string language) {
-    return _languageFileMapping.ContainsKey(language.ToLower().Trim());
+  public static bool IsLanguageAvailable(Language language) {
+    return _languageFileMapping.ContainsKey(language);
+  }
+}
+
+[CommandGroup("admin", language: Language.English, aliases: ["sc"], adminOnly: true)]
+internal static class ServerCommands {
+  [Command("serverlanguage", language: Language.English, aliases: ["svlang"], description: "Set server language")]
+  [CommandAlias("linguagemserver", language: Language.Portuguese, aliases: ["lingsv"], description: "Definir linguagem do servidor")]
+  public static void SetLanguage(CommandContext ctx, string language = "") {
+    var newLanguage = LocalizationService.GetLanguageFromString(language);
+
+    if (string.IsNullOrWhiteSpace(language)) {
+      var current = LocalizationService.CurrentServerLanguage;
+      ctx.ReplyInfo($"~ScarletCore~ current localization language: ~{current}~");
+      return;
+    }
+
+    if (!LocalizationService.IsLanguageAvailable(newLanguage)) {
+      ctx.ReplyError($"Language not supported: ~{newLanguage}~");
+      ctx.ReplyInfo($"Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages.Select(l => "<mark=#a963ff25>" + l + "</mark>"))}");
+      return;
+    }
+
+    if (LocalizationService.ChangeLanguage(newLanguage)) {
+      Plugin.Settings.Set("PrefabLocalizationLanguage", newLanguage);
+      ctx.Reply($"~ScarletCore~ localization language changed to: ~{newLanguage}~".FormatSuccess());
+      Log.Info($"ScarletCore localization language changed to: {newLanguage} by admin {ctx.Sender?.Name}");
+    } else {
+      ctx.ReplyError($"Failed to change language to: ~{newLanguage}~");
+    }
+  }
+}
+
+
+internal static class PlayerCommands {
+  [Command("language", language: Language.English, aliases: ["lang"], description: "Set your preferred language (e.g. .language portuguese)")]
+  [CommandAlias("linguagem", language: Language.Portuguese, aliases: ["ling"], description: "Set your preferred language (e.g. .linguagem portuguese)")]
+  public static void SetLanguage(CommandContext ctx, string language = "") {
+    var player = ctx.Sender;
+    if (player == null) {
+      ctx.ReplyError("This command must be run by a player.");
+      return;
+    }
+
+    if (string.IsNullOrWhiteSpace(language)) {
+      var current = LocalizationService.GetPlayerLanguage(player);
+      ctx.ReplyInfo($"Your current language: ~{current}~");
+      return;
+    }
+
+    var newLang = LocalizationService.GetLanguageFromString(language);
+
+    if (!LocalizationService.IsLanguageAvailable(newLang)) {
+      ctx.ReplyError($"Language not supported: ~{newLang}~");
+      ctx.ReplyInfo($"~Available languages~: {string.Join(", ", LocalizationService.AvailableServerLanguages)}");
+      return;
+    }
+
+    LocalizationService.SetPlayerLanguage(player, newLang);
+    ctx.Reply($"Your language has been set to: ~{newLang}~".FormatSuccess());
   }
 }
