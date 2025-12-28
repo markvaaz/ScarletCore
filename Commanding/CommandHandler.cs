@@ -168,7 +168,7 @@ public static class CommandHandler {
   }
 
   private static bool IsHelpCommand(CommandInfo commandInfo) {
-    return commandInfo.Method.DeclaringType == typeof(CommandHandler) && commandInfo.Method.Name == nameof(HelpCommand);
+    return commandInfo.Language == Language.English && commandInfo.Method.DeclaringType == typeof(CommandHandler) && commandInfo.Method.Name == nameof(HelpCommand);
   }
 
   private static bool IsVCFLoaded() {
@@ -658,6 +658,80 @@ public static class CommandHandler {
     return usage.ToString();
   }
 
+  private static string FormatCommandWithParameters(CommandInfo command) {
+    var result = new System.Text.StringBuilder();
+    result.Append(command.FullCommandName);
+
+    foreach (var param in command.Parameters) {
+      result.Append(' ');
+
+      string paramName = param.Name;
+
+      if (param.IsOptional) {
+        string defaultValue = FormatDefaultValue(param.DefaultValue);
+        if (string.IsNullOrEmpty(defaultValue)) {
+          result.Append($"[{paramName}]");
+        } else {
+          result.Append($"[{paramName}={defaultValue}]");
+        }
+      } else {
+        result.Append($"<{paramName}>");
+      }
+    }
+
+    return result.ToString();
+  }
+
+  private static string FormatDefaultValue(object defaultValue) {
+    if (defaultValue == null) return "null";
+    if (defaultValue is string s) return string.IsNullOrEmpty(s) ? "null" : s;
+    if (defaultValue is bool b) return b ? "true" : "false";
+    if (defaultValue is int i && i == 0) return null;
+    if (defaultValue is float f && f == 0f) return null;
+    if (defaultValue is double d && d == 0.0) return null;
+
+    if (defaultValue.GetType().IsEnum) {
+      return defaultValue.ToString();
+    }
+
+    return defaultValue.ToString();
+  }
+
+  private static Dictionary<string, List<CommandInfo>> GetCommandsByAssembly(Language playerLanguage, bool isAdmin) {
+    var result = new Dictionary<string, List<CommandInfo>>();
+
+    var allCommands = CommandsByKey.Values
+      .SelectMany(list => list)
+      .Where(cmd => isAdmin || !cmd.AdminOnly)
+      .GroupBy(cmd => cmd.Assembly.GetName().Name)
+      .OrderBy(g => g.Key);
+
+    foreach (var assemblyGroup in allCommands) {
+      var assemblyName = assemblyGroup.Key;
+      var commandList = new List<CommandInfo>();
+
+      var uniqueCommands = assemblyGroup
+        .GroupBy(cmd => cmd.Method)
+        .Select(methodGroup => {
+          var playerLangCmd = methodGroup.FirstOrDefault(c => c.Language == playerLanguage);
+          var mainCmd = methodGroup.FirstOrDefault(c => c.Attribute != null);
+          return playerLangCmd ?? mainCmd ?? methodGroup.First();
+        })
+        .OrderBy(cmd => cmd.Group ?? "")
+        .ThenBy(cmd => cmd.Name);
+
+      foreach (var cmd in uniqueCommands) {
+        commandList.Add(cmd);
+      }
+
+      if (commandList.Count > 0) {
+        result[assemblyName] = commandList;
+      }
+    }
+
+    return result;
+  }
+
   private class LocalizationKey {
     public const string CmdRequiresAdmin = "cmd_requires_admin";
     public const string CmdExecutionError = "cmd_execution_error";
@@ -669,6 +743,14 @@ public static class CommandHandler {
     public const string HelpNoCommands = "help_no_commands";
     public const string HelpAvailableCommands = "help_available_commands";
     public const string HelpNextPage = "help_next_page";
+    public const string ServerLanguageCurrent = "server_language_current";
+    public const string LanguageNotSupported = "language_not_supported";
+    public const string AvailableLanguages = "available_languages";
+    public const string ServerLanguageChanged = "server_language_changed";
+    public const string LanguageChangeFailed = "language_change_failed";
+    public const string PlayerLanguageCurrent = "player_language_current";
+    public const string PlayerLanguageChanged = "player_language_changed";
+    public const string MustBePlayer = "must_be_player";
   }
 
   private static void RegisterLocalizationKeys() {
@@ -881,6 +963,174 @@ public static class CommandHandler {
       { Language.Ukrainian, "Введіть {0}допомога {1} для наступної сторінки" },
       { Language.Vietnamese, "Gõ {0}trợgiúp {1} để xem trang tiếp theo" }
     });
+
+    LocalizationService.NewKey(LocalizationKey.ServerLanguageCurrent, new Dictionary<Language, string> {
+      { Language.English, "ScarletCore current localization language: {0}" },
+      { Language.Portuguese, "Linguagem de localização atual do ScarletCore: {0}" },
+      { Language.French, "Langue de localisation actuelle de ScarletCore: {0}" },
+      { Language.German, "Aktuelle Lokalisierungssprache von ScarletCore: {0}" },
+      { Language.Hungarian, "ScarletCore jelenlegi lokalizációs nyelve: {0}" },
+      { Language.Italian, "Lingua di localizzazione attuale di ScarletCore: {0}" },
+      { Language.Japanese, "ScarletCoreの現在のローカライゼーション言語: {0}" },
+      { Language.Korean, "ScarletCore 현재 로컬라이제이션 언어: {0}" },
+      { Language.Latam, "Idioma de localización actual de ScarletCore: {0}" },
+      { Language.Polish, "Bieżący język lokalizacji ScarletCore: {0}" },
+      { Language.Russian, "Текущий язык локализации ScarletCore: {0}" },
+      { Language.Spanish, "Idioma de localización actual de ScarletCore: {0}" },
+      { Language.ChineseSimplified, "ScarletCore当前本地化语言: {0}" },
+      { Language.ChineseTraditional, "ScarletCore目前本地化語言: {0}" },
+      { Language.Thai, "ภาษาโลคัลไลเซชันปัจจุบันของ ScarletCore: {0}" },
+      { Language.Turkish, "ScarletCore mevcut yerelleştirme dili: {0}" },
+      { Language.Ukrainian, "Поточна мова локалізації ScarletCore: {0}" },
+      { Language.Vietnamese, "Ngôn ngữ bản địa hóa hiện tại của ScarletCore: {0}" }
+    });
+
+    LocalizationService.NewKey(LocalizationKey.LanguageNotSupported, new Dictionary<Language, string> {
+      { Language.English, "Language not supported: {0}" },
+      { Language.Portuguese, "Idioma não suportado: {0}" },
+      { Language.French, "Langue non prise en charge: {0}" },
+      { Language.German, "Sprache nicht unterstützt: {0}" },
+      { Language.Hungarian, "A nyelv nem támogatott: {0}" },
+      { Language.Italian, "Lingua non supportata: {0}" },
+      { Language.Japanese, "サポートされていない言語: {0}" },
+      { Language.Korean, "지원되지 않는 언어: {0}" },
+      { Language.Latam, "Idioma no compatible: {0}" },
+      { Language.Polish, "Język nie jest obsługiwany: {0}" },
+      { Language.Russian, "Язык не поддерживается: {0}" },
+      { Language.Spanish, "Idioma no compatible: {0}" },
+      { Language.ChineseSimplified, "不支持的语言: {0}" },
+      { Language.ChineseTraditional, "不支援的語言: {0}" },
+      { Language.Thai, "ไม่รองรับภาษา: {0}" },
+      { Language.Turkish, "Desteklenmeyen dil: {0}" },
+      { Language.Ukrainian, "Мова не підтримується: {0}" },
+      { Language.Vietnamese, "Ngôn ngữ không được hỗ trợ: {0}" }
+    });
+
+    LocalizationService.NewKey(LocalizationKey.AvailableLanguages, new Dictionary<Language, string> {
+      { Language.English, "Available languages: {0}" },
+      { Language.Portuguese, "Idiomas disponíveis: {0}" },
+      { Language.French, "Langues disponibles: {0}" },
+      { Language.German, "Verfügbare Sprachen: {0}" },
+      { Language.Hungarian, "Elérhető nyelvek: {0}" },
+      { Language.Italian, "Lingue disponibili: {0}" },
+      { Language.Japanese, "利用可能な言語: {0}" },
+      { Language.Korean, "사용 가능한 언어: {0}" },
+      { Language.Latam, "Idiomas disponibles: {0}" },
+      { Language.Polish, "Dostępne języki: {0}" },
+      { Language.Russian, "Доступные языки: {0}" },
+      { Language.Spanish, "Idiomas disponibles: {0}" },
+      { Language.ChineseSimplified, "可用语言: {0}" },
+      { Language.ChineseTraditional, "可用語言: {0}" },
+      { Language.Thai, "ภาษาที่มี: {0}" },
+      { Language.Turkish, "Mevcut diller: {0}" },
+      { Language.Ukrainian, "Доступні мови: {0}" },
+      { Language.Vietnamese, "Ngôn ngữ khả dụng: {0}" }
+    });
+
+    LocalizationService.NewKey(LocalizationKey.ServerLanguageChanged, new Dictionary<Language, string> {
+      { Language.English, "ScarletCore localization language changed to: {0}" },
+      { Language.Portuguese, "Linguagem de localização do ScarletCore alterada para: {0}" },
+      { Language.French, "Langue de localisation de ScarletCore changée en: {0}" },
+      { Language.German, "ScarletCore-Lokalisierungssprache geändert zu: {0}" },
+      { Language.Hungarian, "ScarletCore lokalizációs nyelve megváltoztatva: {0}" },
+      { Language.Italian, "Lingua di localizzazione di ScarletCore cambiata in: {0}" },
+      { Language.Japanese, "ScarletCoreのローカライゼーション言語が次に変更されました: {0}" },
+      { Language.Korean, "ScarletCore 로컬라이제이션 언어가 다음으로 변경되었습니다: {0}" },
+      { Language.Latam, "Idioma de localización de ScarletCore cambiado a: {0}" },
+      { Language.Polish, "Język lokalizacji ScarletCore zmieniony na: {0}" },
+      { Language.Russian, "Язык локализации ScarletCore изменен на: {0}" },
+      { Language.Spanish, "Idioma de localización de ScarletCore cambiado a: {0}" },
+      { Language.ChineseSimplified, "ScarletCore本地化语言已更改为: {0}" },
+      { Language.ChineseTraditional, "ScarletCore本地化語言已更改為: {0}" },
+      { Language.Thai, "เปลี่ยนภาษาโลคัลไลเซชันของ ScarletCore เป็น: {0}" },
+      { Language.Turkish, "ScarletCore yerelleştirme dili şu şekilde değiştirildi: {0}" },
+      { Language.Ukrainian, "Мову локалізації ScarletCore змінено на: {0}" },
+      { Language.Vietnamese, "Ngôn ngữ bản địa hóa ScarletCore đã được thay đổi thành: {0}" }
+    });
+
+    LocalizationService.NewKey(LocalizationKey.LanguageChangeFailed, new Dictionary<Language, string> {
+      { Language.English, "Failed to change language to: {0}" },
+      { Language.Portuguese, "Falha ao alterar idioma para: {0}" },
+      { Language.French, "Échec du changement de langue vers: {0}" },
+      { Language.German, "Fehler beim Ändern der Sprache zu: {0}" },
+      { Language.Hungarian, "Nem sikerült megváltoztatni a nyelvet erre: {0}" },
+      { Language.Italian, "Impossibile cambiare lingua in: {0}" },
+      { Language.Japanese, "言語の変更に失敗しました: {0}" },
+      { Language.Korean, "언어 변경 실패: {0}" },
+      { Language.Latam, "Error al cambiar el idioma a: {0}" },
+      { Language.Polish, "Nie udało się zmienić języka na: {0}" },
+      { Language.Russian, "Не удалось изменить язык на: {0}" },
+      { Language.Spanish, "Error al cambiar el idioma a: {0}" },
+      { Language.ChineseSimplified, "更改语言失败: {0}" },
+      { Language.ChineseTraditional, "更改語言失敗: {0}" },
+      { Language.Thai, "ไม่สามารถเปลี่ยนภาษาเป็น: {0}" },
+      { Language.Turkish, "Dil değiştirilemedi: {0}" },
+      { Language.Ukrainian, "Не вдалося змінити мову на: {0}" },
+      { Language.Vietnamese, "Không thể thay đổi ngôn ngữ thành: {0}" }
+    });
+
+    LocalizationService.NewKey(LocalizationKey.PlayerLanguageCurrent, new Dictionary<Language, string> {
+      { Language.English, "Your current language: {0}" },
+      { Language.Portuguese, "Seu idioma atual: {0}" },
+      { Language.French, "Votre langue actuelle: {0}" },
+      { Language.German, "Ihre aktuelle Sprache: {0}" },
+      { Language.Hungarian, "Az Ön jelenlegi nyelve: {0}" },
+      { Language.Italian, "La tua lingua attuale: {0}" },
+      { Language.Japanese, "あなたの現在の言語: {0}" },
+      { Language.Korean, "현재 언어: {0}" },
+      { Language.Latam, "Tu idioma actual: {0}" },
+      { Language.Polish, "Twój obecny język: {0}" },
+      { Language.Russian, "Ваш текущий язык: {0}" },
+      { Language.Spanish, "Tu idioma actual: {0}" },
+      { Language.ChineseSimplified, "您当前的语言: {0}" },
+      { Language.ChineseTraditional, "您目前的語言: {0}" },
+      { Language.Thai, "ภาษาปัจจุบันของคุณ: {0}" },
+      { Language.Turkish, "Mevcut diliniz: {0}" },
+      { Language.Ukrainian, "Ваша поточна мова: {0}" },
+      { Language.Vietnamese, "Ngôn ngữ hiện tại của bạn: {0}" }
+    });
+
+    LocalizationService.NewKey(LocalizationKey.PlayerLanguageChanged, new Dictionary<Language, string> {
+      { Language.English, "Your language has been set to: {0}" },
+      { Language.Portuguese, "Seu idioma foi definido para: {0}" },
+      { Language.French, "Votre langue a été définie sur: {0}" },
+      { Language.German, "Ihre Sprache wurde eingestellt auf: {0}" },
+      { Language.Hungarian, "Az Ön nyelve beállítva: {0}" },
+      { Language.Italian, "La tua lingua è stata impostata su: {0}" },
+      { Language.Japanese, "あなたの言語が次に設定されました: {0}" },
+      { Language.Korean, "언어가 다음으로 설정되었습니다: {0}" },
+      { Language.Latam, "Tu idioma ha sido configurado a: {0}" },
+      { Language.Polish, "Twój język został ustawiony na: {0}" },
+      { Language.Russian, "Ваш язык установлен на: {0}" },
+      { Language.Spanish, "Tu idioma ha sido configurado a: {0}" },
+      { Language.ChineseSimplified, "您的语言已设置为: {0}" },
+      { Language.ChineseTraditional, "您的語言已設定為: {0}" },
+      { Language.Thai, "ภาษาของคุณถูกตั้งค่าเป็น: {0}" },
+      { Language.Turkish, "Diliniz şu şekilde ayarlandı: {0}" },
+      { Language.Ukrainian, "Вашу мову встановлено на: {0}" },
+      { Language.Vietnamese, "Ngôn ngữ của bạn đã được đặt thành: {0}" }
+    });
+
+    LocalizationService.NewKey(LocalizationKey.MustBePlayer, new Dictionary<Language, string> {
+      { Language.English, "This command must be run by a player." },
+      { Language.Portuguese, "Este comando deve ser executado por um jogador." },
+      { Language.French, "Cette commande doit être exécutée par un joueur." },
+      { Language.German, "Dieser Befehl muss von einem Spieler ausgeführt werden." },
+      { Language.Hungarian, "Ezt a parancsot egy játékosnak kell futtatnia." },
+      { Language.Italian, "Questo comando deve essere eseguito da un giocatore." },
+      { Language.Japanese, "このコマンドはプレイヤーが実行する必要があります。" },
+      { Language.Korean, "이 명령은 플레이어가 실행해야 합니다." },
+      { Language.Latam, "Este comando debe ser ejecutado por un jugador." },
+      { Language.Polish, "To polecenie musi być uruchomione przez gracza." },
+      { Language.Russian, "Эта команда должна быть выполнена игроком." },
+      { Language.Spanish, "Este comando debe ser ejecutado por un jugador." },
+      { Language.ChineseSimplified, "此命令必须由玩家运行。" },
+      { Language.ChineseTraditional, "此指令必須由玩家執行。" },
+      { Language.Thai, "คำสั่งนี้ต้องรันโดยผู้เล่น" },
+      { Language.Turkish, "Bu komut bir oyuncu tarafından çalıştırılmalıdır." },
+      { Language.Ukrainian, "Ця команда повинна бути виконана гравцем." },
+      { Language.Vietnamese, "Lệnh này phải được thực thi bởi người chơi." }
+    });
   }
 
 
@@ -1006,77 +1256,98 @@ public static class CommandHandler {
     }
   }
 
-  private static string FormatCommandWithParameters(CommandInfo command) {
-    var result = new System.Text.StringBuilder();
-    result.Append(command.FullCommandName);
 
-    foreach (var param in command.Parameters) {
-      result.Append(' ');
 
-      string paramName = param.Name;
+  [Command("language", language: Language.English, aliases: ["lang"], description: "Set your preferred language (e.g. .language portuguese)")]
+  [CommandAlias("linguagem", language: Language.Portuguese, aliases: ["ling"], description: "Defina seu idioma preferido (ex: .linguagem portuguese)")]
+  [CommandAlias("langue", language: Language.French, aliases: ["lg"], description: "Définissez votre langue préférée (ex: .langue portuguese)")]
+  [CommandAlias("sprache", language: Language.German, aliases: ["spr"], description: "Stellen Sie Ihre bevorzugte Sprache ein (z.B. .sprache portuguese)")]
+  [CommandAlias("nyelv", language: Language.Hungarian, aliases: ["ny"], description: "Állítsa be az előnyben részesített nyelvét (pl. .nyelv portuguese)")]
+  [CommandAlias("lingua", language: Language.Italian, aliases: ["lng"], description: "Imposta la tua lingua preferita (es. .lingua portuguese)")]
+  [CommandAlias("言語", language: Language.Japanese, aliases: ["げんご"], description: "希望する言語を設定します (例: .言語 portuguese)")]
+  [CommandAlias("언어", language: Language.Korean, aliases: ["언"], description: "선호하는 언어를 설정합니다 (예: .언어 portuguese)")]
+  [CommandAlias("idioma", language: Language.Latam, aliases: ["idm"], description: "Establece tu idioma preferido (ej: .idioma portuguese)")]
+  [CommandAlias("język", language: Language.Polish, aliases: ["jęz"], description: "Ustaw preferowany język (np. .język portuguese)")]
+  [CommandAlias("язык", language: Language.Russian, aliases: ["яз"], description: "Установите предпочитаемый язык (напр. .язык portuguese)")]
+  [CommandAlias("idioma", language: Language.Spanish, aliases: ["idm"], description: "Establece tu idioma preferido (ej: .idioma portuguese)")]
+  [CommandAlias("语言", language: Language.ChineseSimplified, aliases: ["语"], description: "设置您的首选语言 (例如: .语言 portuguese)")]
+  [CommandAlias("語言", language: Language.ChineseTraditional, aliases: ["語"], description: "設定您的偏好語言 (例如: .語言 portuguese)")]
+  [CommandAlias("ภาษา", language: Language.Thai, aliases: ["ภษ"], description: "ตั้งค่าภาษาที่คุณต้องการ (เช่น: .ภาษา portuguese)")]
+  [CommandAlias("dil", language: Language.Turkish, aliases: ["dl"], description: "Tercih ettiğiniz dili ayarlayın (örn: .dil portuguese)")]
+  [CommandAlias("мова", language: Language.Ukrainian, aliases: ["мв"], description: "Встановіть бажану мову (напр: .мова portuguese)")]
+  [CommandAlias("ngônngữ", language: Language.Vietnamese, aliases: ["nn"], description: "Đặt ngôn ngữ ưa thích của bạn (ví dụ: .ngônngữ portuguese)")]
+  public static void SetLanguage(CommandContext ctx, string language = "") {
+    var player = ctx.Sender;
+    if (player == null) {
+      ctx.ReplyError(LocalizationService.Get(ctx.Sender, LocalizationKey.MustBePlayer));
+      return;
+    }
 
-      if (param.IsOptional) {
-        string defaultValue = FormatDefaultValue(param.DefaultValue);
-        if (string.IsNullOrEmpty(defaultValue)) {
-          result.Append($"[{paramName}]");
-        } else {
-          result.Append($"[{paramName}={defaultValue}]");
-        }
+    if (string.IsNullOrWhiteSpace(language)) {
+      var current = LocalizationService.GetPlayerLanguage(player);
+      ctx.ReplyInfo(LocalizationService.Get(ctx.Sender, LocalizationKey.PlayerLanguageCurrent, current));
+      return;
+    }
+
+    var newLang = LocalizationService.GetLanguageFromString(language);
+
+    if (!LocalizationService.IsLanguageAvailable(newLang)) {
+      ctx.ReplyError(LocalizationService.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, newLang));
+
+      var availableLanguages = string.Join(", ", LocalizationService.AvailableServerLanguages);
+      ctx.ReplyInfo(LocalizationService.Get(ctx.Sender, LocalizationKey.AvailableLanguages, availableLanguages));
+      return;
+    }
+
+    LocalizationService.SetPlayerLanguage(player, newLang);
+    ctx.Reply(LocalizationService.Get(ctx.Sender, LocalizationKey.PlayerLanguageChanged, newLang).FormatSuccess());
+  }
+
+  [CommandGroup("admin", language: Language.English, aliases: ["sc"], adminOnly: true)]
+  internal static class ServerCommands {
+
+    [Command("serverlanguage", language: Language.English, aliases: ["svlang"], description: "Set server language")]
+    [CommandAlias("linguagemserver", language: Language.Portuguese, aliases: ["lingsv"], description: "Definir linguagem do servidor")]
+    [CommandAlias("langueserveur", language: Language.French, aliases: ["lgsv"], description: "Définir la langue du serveur")]
+    [CommandAlias("serversprache", language: Language.German, aliases: ["svspr"], description: "Serversprache festlegen")]
+    [CommandAlias("szervernyelv", language: Language.Hungarian, aliases: ["sznyelv"], description: "Szerver nyelv beállítása")]
+    [CommandAlias("linguaserver", language: Language.Italian, aliases: ["lingsv"], description: "Imposta lingua server")]
+    [CommandAlias("サーバー言語", language: Language.Japanese, aliases: ["sv言語"], description: "サーバーの言語を設定")]
+    [CommandAlias("서버언어", language: Language.Korean, aliases: ["sv언어"], description: "서버 언어 설정")]
+    [CommandAlias("idiomaservidor", language: Language.Latam, aliases: ["idiomasv"], description: "Establecer idioma del servidor")]
+    [CommandAlias("językservera", language: Language.Polish, aliases: ["jęzsv"], description: "Ustaw język serwera")]
+    [CommandAlias("языксервера", language: Language.Russian, aliases: ["языксв"], description: "Установить язык сервера")]
+    [CommandAlias("idiomaservidor", language: Language.Spanish, aliases: ["idiomasv"], description: "Establecer idioma del servidor")]
+    [CommandAlias("服务器语言", language: Language.ChineseSimplified, aliases: ["服务器语"], description: "设置服务器语言")]
+    [CommandAlias("伺服器語言", language: Language.ChineseTraditional, aliases: ["伺服器語"], description: "設定伺服器語言")]
+    [CommandAlias("ภาษาเซิร์ฟเวอร์", language: Language.Thai, aliases: ["ภาษาsv"], description: "ตั้งค่าภาษาเซิร์ฟเวอร์")]
+    [CommandAlias("sunucudili", language: Language.Turkish, aliases: ["svdil"], description: "Sunucu dilini ayarla")]
+    [CommandAlias("мовасервера", language: Language.Ukrainian, aliases: ["мовасв"], description: "Встановити мову сервера")]
+    [CommandAlias("ngônngữmáychủ", language: Language.Vietnamese, aliases: ["ngônngữsv"], description: "Đặt ngôn ngữ máy chủ")]
+    public static void SetLanguage(CommandContext ctx, string language = "") {
+      var newLanguage = LocalizationService.GetLanguageFromString(language);
+
+      if (string.IsNullOrWhiteSpace(language)) {
+        var current = LocalizationService.CurrentServerLanguage;
+        ctx.ReplyInfo(LocalizationService.Get(ctx.Sender, LocalizationKey.ServerLanguageCurrent, current));
+        return;
+      }
+
+      if (!LocalizationService.IsLanguageAvailable(newLanguage)) {
+        ctx.ReplyError(LocalizationService.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, newLanguage));
+
+        var availableLanguages = string.Join(", ", LocalizationService.AvailableServerLanguages.Select(l => $"<mark=#a963ff25>{l}</mark>"));
+        ctx.ReplyInfo(LocalizationService.Get(ctx.Sender, LocalizationKey.AvailableLanguages, availableLanguages));
+        return;
+      }
+
+      if (LocalizationService.ChangeLanguage(newLanguage)) {
+        Plugin.Settings.Set("PrefabLocalizationLanguage", newLanguage);
+        ctx.Reply(LocalizationService.Get(ctx.Sender, LocalizationKey.ServerLanguageChanged, newLanguage).FormatSuccess());
+        Log.Info($"ScarletCore localization language changed to: {newLanguage} by admin {ctx.Sender?.Name}");
       } else {
-        result.Append($"<{paramName}>");
+        ctx.ReplyError(LocalizationService.Get(ctx.Sender, LocalizationKey.LanguageChangeFailed, newLanguage));
       }
     }
-
-    return result.ToString();
-  }
-
-  private static string FormatDefaultValue(object defaultValue) {
-    if (defaultValue == null) return "null";
-    if (defaultValue is string s) return string.IsNullOrEmpty(s) ? "null" : s;
-    if (defaultValue is bool b) return b ? "true" : "false";
-    if (defaultValue is int i && i == 0) return null;
-    if (defaultValue is float f && f == 0f) return null;
-    if (defaultValue is double d && d == 0.0) return null;
-
-    if (defaultValue.GetType().IsEnum) {
-      return defaultValue.ToString();
-    }
-
-    return defaultValue.ToString();
-  }
-
-  private static Dictionary<string, List<CommandInfo>> GetCommandsByAssembly(Language playerLanguage, bool isAdmin) {
-    var result = new Dictionary<string, List<CommandInfo>>();
-
-    var allCommands = CommandsByKey.Values
-      .SelectMany(list => list)
-      .Where(cmd => isAdmin || !cmd.AdminOnly)
-      .GroupBy(cmd => cmd.Assembly.GetName().Name)
-      .OrderBy(g => g.Key);
-
-    foreach (var assemblyGroup in allCommands) {
-      var assemblyName = assemblyGroup.Key;
-      var commandList = new List<CommandInfo>();
-
-      var uniqueCommands = assemblyGroup
-        .GroupBy(cmd => cmd.Method)
-        .Select(methodGroup => {
-          var playerLangCmd = methodGroup.FirstOrDefault(c => c.Language == playerLanguage);
-          var mainCmd = methodGroup.FirstOrDefault(c => c.Attribute != null);
-          return playerLangCmd ?? mainCmd ?? methodGroup.First();
-        })
-        .OrderBy(cmd => cmd.Group ?? "")
-        .ThenBy(cmd => cmd.Name);
-
-      foreach (var cmd in uniqueCommands) {
-        commandList.Add(cmd);
-      }
-
-      if (commandList.Count > 0) {
-        result[assemblyName] = commandList;
-      }
-    }
-
-    return result;
   }
 }

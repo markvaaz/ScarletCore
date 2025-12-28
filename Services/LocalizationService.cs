@@ -9,7 +9,6 @@ using ScarletCore.Utils;
 using ScarletCore.Data;
 using Stunlock.Core;
 using ScarletCore.Events;
-using ScarletCore.Systems;
 using ProjectM;
 using ScarletCore.Commanding;
 
@@ -810,64 +809,5 @@ public static class LocalizationService {
   /// <returns>True if the language is supported, false otherwise</returns>
   public static bool IsLanguageAvailable(Language language) {
     return _languageFileMapping.ContainsKey(language);
-  }
-}
-
-[CommandGroup("admin", language: Language.English, aliases: ["sc"], adminOnly: true)]
-internal static class ServerCommands {
-  [Command("serverlanguage", language: Language.English, aliases: ["svlang"], description: "Set server language")]
-  [CommandAlias("linguagemserver", language: Language.Portuguese, aliases: ["lingsv"], description: "Definir linguagem do servidor")]
-  public static void SetLanguage(CommandContext ctx, string language = "") {
-    var newLanguage = LocalizationService.GetLanguageFromString(language);
-
-    if (string.IsNullOrWhiteSpace(language)) {
-      var current = LocalizationService.CurrentServerLanguage;
-      ctx.ReplyInfo($"~ScarletCore~ current localization language: ~{current}~");
-      return;
-    }
-
-    if (!LocalizationService.IsLanguageAvailable(newLanguage)) {
-      ctx.ReplyError($"Language not supported: ~{newLanguage}~");
-      ctx.ReplyInfo($"Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages.Select(l => "<mark=#a963ff25>" + l + "</mark>"))}");
-      return;
-    }
-
-    if (LocalizationService.ChangeLanguage(newLanguage)) {
-      Plugin.Settings.Set("PrefabLocalizationLanguage", newLanguage);
-      ctx.Reply($"~ScarletCore~ localization language changed to: ~{newLanguage}~".FormatSuccess());
-      Log.Info($"ScarletCore localization language changed to: {newLanguage} by admin {ctx.Sender?.Name}");
-    } else {
-      ctx.ReplyError($"Failed to change language to: ~{newLanguage}~");
-    }
-  }
-}
-
-
-internal static class PlayerCommands {
-  [Command("language", language: Language.English, aliases: ["lang"], description: "Set your preferred language (e.g. .language portuguese)")]
-  [CommandAlias("linguagem", language: Language.Portuguese, aliases: ["ling"], description: "Set your preferred language (e.g. .linguagem portuguese)")]
-  public static void SetLanguage(CommandContext ctx, string language = "") {
-    var player = ctx.Sender;
-    if (player == null) {
-      ctx.ReplyError("This command must be run by a player.");
-      return;
-    }
-
-    if (string.IsNullOrWhiteSpace(language)) {
-      var current = LocalizationService.GetPlayerLanguage(player);
-      ctx.ReplyInfo($"Your current language: ~{current}~");
-      return;
-    }
-
-    var newLang = LocalizationService.GetLanguageFromString(language);
-
-    if (!LocalizationService.IsLanguageAvailable(newLang)) {
-      ctx.ReplyError($"Language not supported: ~{newLang}~");
-      ctx.ReplyInfo($"~Available languages~: {string.Join(", ", LocalizationService.AvailableServerLanguages)}");
-      return;
-    }
-
-    LocalizationService.SetPlayerLanguage(player, newLang);
-    ctx.Reply($"Your language has been set to: ~{newLang}~".FormatSuccess());
   }
 }
