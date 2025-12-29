@@ -11,6 +11,8 @@
     <AssemblyVersion>1.4.21.0</AssemblyVersion>
     <FileVersion>1.4.21.0</FileVersion>
     <Authors>markvaaz</Authors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- <NoWarn>$(NoWarn);1591</NoWarn> -->
   </PropertyGroup>
   <PropertyGroup> 
     <BepInExPluginGuid>markvaaz.ScarletCore</BepInExPluginGuid>
@@ -24,12 +26,10 @@
     <PackageReference Include="VRising.Unhollowed.Client" Version="1.1.*" />
   </ItemGroup>
 
-  <!-- ignore the Wiki folder -->
   <ItemGroup>
     <None Remove="Wiki\**" />
   </ItemGroup>
 
-  <!-- Include Localization files as embedded resources in DLL -->
   <ItemGroup>
     <EmbeddedResource Include="Localization\**\*.*" />
   </ItemGroup>
