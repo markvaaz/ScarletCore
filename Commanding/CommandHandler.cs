@@ -5,7 +5,6 @@ using System.Linq;
 using System.Reflection;
 using ProjectM.Network;
 using ScarletCore.Data;
-using ScarletCore.Events;
 using ScarletCore.Localization;
 using ScarletCore.Utils;
 using Stunlock.Core;
@@ -182,7 +181,6 @@ public static class CommandHandler {
     }
 
     try {
-      EventManager.Emit(PlayerEvents.CommandUsed, player);
       method.Invoke(null, paramValues);
       Log.Message($"[CommandHandler] {player.Name} executed command: {commandInfo.FullCommandName} with args: {string.Join(", ", args)}");
     } catch (Exception ex) {

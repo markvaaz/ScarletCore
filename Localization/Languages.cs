@@ -21,6 +21,10 @@ public enum Language {
   /// </summary>
   French,
   /// <summary>
+  /// Latin American Spanish language.
+  /// </summary>
+  Latam,
+  /// <summary>
   /// German language.
   /// </summary>
   German,
