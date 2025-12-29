@@ -97,7 +97,7 @@ public class JsonDatabase {
 
   // Instance handler used for auto-backups. Using `async void` because the
   // event system expects an `Action<string>` and this is fire-and-forget.
-  [EventPriority(-999)]
+  [EventPriority(EventPriority.Last)]
   private async void AutoBackupHandler(string saveName) {
     try {
       saveName = saveName.Replace(".save", ""); // Remove extension if present

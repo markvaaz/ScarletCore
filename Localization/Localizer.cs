@@ -531,7 +531,7 @@ public static class Localizer {
       var map = Plugin.Database.GetOrCreate("player_languages", () => new Dictionary<string, string>());
       var key = player.PlatformId.ToString();
       map[key] = language.ToString();
-      Plugin.Database.Save("player_languages", map);
+      Plugin.Database.Set("player_languages", map);
     } catch (Exception ex) {
       Log.Error($"Failed to set player language: {ex}");
     }

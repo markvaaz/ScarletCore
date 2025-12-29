@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using LiteDB;
 using ScarletCore.Utils;
@@ -11,22 +11,17 @@ using ScarletCore.Events;
 namespace ScarletCore.Data;
 
 /// <summary>
-/// Generic database service that provides LiteDB-based persistence for mods.
-/// Each instance gets its own database file based on the database name provided in the constructor.
+/// Generic database service using LiteDB for persistent storage.
+/// Provides simple key-value storage with strong typing.
 /// </summary>
 public class Database : IDisposable {
-  // LiteDB instance
-  private readonly LiteDatabase _db;
+  private LiteDatabase _db;
+  private readonly string _pluginGuid;
+  private ILiteCollection<DataEntry> _collection;
 
-  // Database name (used for file naming)
-  private readonly string _databaseName;
-
-  // Maximum number of backups to keep
-  private int _maxBackups = 50;
-
-  // Auto-backup per-instance
   private bool _autoBackupEnabled;
   private string _autoBackupLocation;
+  private int _maxBackups = 50;
 
   /// <summary>
   /// Gets or sets the maximum number of backups to keep (default: 50)
@@ -37,339 +32,467 @@ public class Database : IDisposable {
   }
 
   /// <summary>
-  /// Initializes a new instance of the Database class
+  /// Initializes a new database instance for the specified plugin
   /// </summary>
-  /// <param name="pluginGuid">The name of the database</param>
+  /// <param name="pluginGuid">Unique identifier for this plugin's database</param>
   public Database(string pluginGuid) {
     if (string.IsNullOrWhiteSpace(pluginGuid))
-      throw new ArgumentException("Database name cannot be null or empty", nameof(pluginGuid));
+      throw new ArgumentException("Plugin GUID cannot be null or empty", nameof(pluginGuid));
 
-    _databaseName = pluginGuid;
+    _pluginGuid = pluginGuid;
+    InitializeDatabase();
+  }
 
-    // Create database file path
-    var configPath = GetConfigPath();
-    Directory.CreateDirectory(configPath);
-    var dbPath = Path.Combine(configPath, $"{_databaseName}.db");
+  /// <summary>
+  /// Initializes or reinitializes the database connection
+  /// </summary>
+  private void InitializeDatabase() {
+    var dbPath = GetDatabasePath();
+    Directory.CreateDirectory(Path.GetDirectoryName(dbPath));
 
-    // Initialize LiteDB with connection string
     var connectionString = new ConnectionString {
       Filename = dbPath,
-      Connection = ConnectionType.Shared // Permite múltiplos acessos
+      Connection = ConnectionType.Shared
     };
 
     _db = new LiteDatabase(connectionString);
-    _autoBackupEnabled = false;
+    _collection = _db.GetCollection<DataEntry>("data");
+    // Id is automatically the primary key in LiteDB
   }
 
   /// <summary>
-  /// Enable automatic backups for this database instance. When enabled, each server save triggers a backup.
+  /// Internal class to store data entries
   /// </summary>
-  /// <param name="backupLocation">Optional backup folder (defaults to BepInEx config path)</param>
-  public void EnableAutoBackup(string backupLocation = null) {
-    if (_autoBackupEnabled) return;
-    _autoBackupLocation = backupLocation;
-    EventManager.On(ServerEvents.OnSave, AutoBackupHandler);
-    _autoBackupEnabled = true;
+  private class DataEntry {
+    public string Id { get; set; }  // This will be the _id in LiteDB
+    public BsonValue Data { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
   }
 
   /// <summary>
-  /// Disable automatic backups for this database instance.
+  /// Gets the full path to the database file
   /// </summary>
-  public void DisableAutoBackup() {
-    if (!_autoBackupEnabled) return;
+  private string GetDatabasePath() {
+    var configPath = Path.Combine(BepInEx.Paths.ConfigPath, _pluginGuid);
+    return Path.Combine(configPath, $"{_pluginGuid}.db");
+  }
+
+  /// <summary>
+  /// Detects circular references in an object graph
+  /// </summary>
+  private string DetectCircularReference<T>(T data) {
     try {
-      EventManager.Off(ServerEvents.OnSave, AutoBackupHandler);
-    } catch { }
-    _autoBackupEnabled = false;
-  }
+      var visited = new HashSet<object>(new ReferenceEqualityComparer());
+      var path = new List<string>();
 
-  /// <summary>
-  /// Performs cleanup for this database instance when its parent assembly is unloaded.
-  /// </summary>
-  public void UnregisterAssembly() {
-    DisableAutoBackup();
-    Dispose();
-  }
-
-  [EventPriority(-999)]
-  private async void AutoBackupHandler(string saveName) {
-    try {
-      saveName = saveName.Replace(".save", "");
-      await CreateBackup(_autoBackupLocation, saveName);
-    } catch (Exception ex) {
-      Log.Error($"Auto-backup failed for '{_databaseName}': {ex.Message}");
+      return DetectCircularReferenceRecursive(data, visited, path, typeof(T).Name);
+    } catch {
+      // If detection fails, assume no circular reference
+      return null;
     }
   }
 
-  /// <summary>
-  /// Gets the configuration path for this database instance
-  /// </summary>
-  private string GetConfigPath() {
-    return Path.Combine(BepInEx.Paths.ConfigPath, _databaseName);
-  }
+  private string DetectCircularReferenceRecursive(object obj, HashSet<object> visited, List<string> path, string currentPath) {
+    if (obj == null)
+      return null;
 
-  /// <summary>
-  /// Gets the full filesystem path for the database file
-  /// </summary>
-  public string GetFullPath() {
-    var configPath = GetConfigPath();
-    return Path.Combine(configPath, $"{_databaseName}.db");
-  }
+    var type = obj.GetType();
 
-  /// <summary>
-  /// Gets a LiteDB collection by path (collection name)
-  /// </summary>
-  private ILiteCollection<BsonDocument> GetCollection(string path) {
-    // Substituir caracteres inválidos para nome de collection
-    var collectionName = path.Replace("/", "_").Replace("\\", "_");
-    return _db.GetCollection(collectionName);
-  }
+    // Skip primitive types, strings, and value types
+    if (type.IsPrimitive || type == typeof(string) || type.IsValueType)
+      return null;
 
-  /// <summary>
-  /// Saves data to the database
-  /// </summary>
-  /// <typeparam name="T">Type of data to save</typeparam>
-  /// <param name="path">Collection/document identifier</param>
-  /// <param name="data">Data to serialize and save</param>
-  public void Save<T>(string path, T data) {
-    try {
-      var collection = GetCollection(path);
-      var bson = BsonMapper.Global.ToDocument(data);
+    // Skip collections (they're handled differently)
+    if (obj is System.Collections.IEnumerable && type != typeof(string))
+      return null;
 
-      // Usa o path como _id para permitir substituição
-      bson["_id"] = path;
-
-      collection.Upsert(bson);
-    } catch (Exception ex) {
-      Log.Error($"An error occurred while saving data: {ex.Message}");
+    // Check if we've seen this object before
+    if (!visited.Add(obj)) {
+      return currentPath;
     }
-  }
 
-  /// <summary>
-  /// Loads data from the database
-  /// </summary>
-  /// <typeparam name="T">Type of data to load</typeparam>
-  /// <param name="path">Collection/document identifier</param>
-  /// <returns>Deserialized data or default value if doesn't exist</returns>
-  public T Load<T>(string path) {
+    path.Add(currentPath);
+
     try {
-      var collection = GetCollection(path);
-      var doc = collection.FindById(path);
+      // Check all properties
+      var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-      if (doc == null) {
-        return default;
+      foreach (var prop in properties) {
+        // Skip properties that can't be read
+        if (!prop.CanRead)
+          continue;
+
+        try {
+          var value = prop.GetValue(obj);
+
+          if (value == null)
+            continue;
+
+          var propPath = $"{currentPath}.{prop.Name}";
+          var result = DetectCircularReferenceRecursive(value, visited, path, propPath);
+
+          if (result != null)
+            return result;
+
+        } catch {
+          // Skip properties that throw exceptions when accessed
+          continue;
+        }
       }
 
-      return BsonMapper.Global.ToObject<T>(doc);
+      // Check all fields
+      var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
+
+      foreach (var field in fields) {
+        try {
+          var value = field.GetValue(obj);
+
+          if (value == null)
+            continue;
+
+          var fieldPath = $"{currentPath}.{field.Name}";
+          var result = DetectCircularReferenceRecursive(value, visited, path, fieldPath);
+
+          if (result != null)
+            return result;
+
+        } catch {
+          // Skip fields that throw exceptions when accessed
+          continue;
+        }
+      }
+    } finally {
+      path.RemoveAt(path.Count - 1);
+    }
+
+    return null;
+  }
+
+  /// <summary>
+  /// Helper class for reference equality comparison
+  /// </summary>
+  private class ReferenceEqualityComparer : IEqualityComparer<object> {
+    public new bool Equals(object x, object y) {
+      return ReferenceEquals(x, y);
+    }
+
+    public int GetHashCode(object obj) {
+      return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
+  }
+
+  /// <summary>
+  /// Saves data to the database with the specified key
+  /// </summary>
+  /// <typeparam name="T">Type of data to save</typeparam>
+  /// <param name="key">Unique identifier for this data</param>
+  /// <param name="data">Data to save</param>
+  public void Set<T>(string key, T data) {
+    if (string.IsNullOrWhiteSpace(key))
+      throw new ArgumentException("Key cannot be null or empty", nameof(key));
+
+    // Check for circular references
+    var circularPath = DetectCircularReference(data);
+    if (circularPath != null) {
+      Log.Error($"Cannot save data with key '{key}': Circular reference detected at path '{circularPath}'");
+      throw new InvalidOperationException($"Circular reference detected at: {circularPath}");
+    }
+
+    try {
+      var bsonData = BsonMapper.Global.ToDocument(data);
+      var now = DateTime.UtcNow;
+
+      var existing = _collection.FindById(key);
+      var entry = new DataEntry {
+        Id = key,  // Use key as the document _id
+        Data = bsonData,
+        CreatedAt = existing?.CreatedAt ?? now,
+        UpdatedAt = now
+      };
+
+      _collection.Upsert(entry);
+    } catch (LiteException ex) when (ex.Message.Contains("circular") || ex.Message.Contains("reference")) {
+      Log.Error($"Cannot save data with key '{key}': Circular reference detected during serialization");
+      throw new InvalidOperationException("Circular reference detected during serialization", ex);
     } catch (Exception ex) {
-      Log.Error($"An error occurred while loading data: {ex.Message}");
+      Log.Error($"Failed to save data with key '{key}': {ex.Message}");
+      throw;
+    }
+  }
+
+  /// <summary>
+  /// Retrieves data from the database by key
+  /// </summary>
+  /// <typeparam name="T">Type of data to retrieve</typeparam>
+  /// <param name="key">Key of the data to retrieve</param>
+  /// <returns>The data if found, otherwise default(T)</returns>
+  public T Get<T>(string key) {
+    if (string.IsNullOrWhiteSpace(key))
+      throw new ArgumentException("Key cannot be null or empty", nameof(key));
+
+    try {
+      var entry = _collection.FindById(key);
+
+      if (entry == null)
+        return default;
+
+      return BsonMapper.Global.ToObject<T>(entry.Data.AsDocument);
+    } catch (Exception ex) {
+      Log.Error($"Failed to load data with key '{key}': {ex.Message}");
       return default;
     }
   }
 
   /// <summary>
-  /// Gets data from the database (alias for Load for compatibility)
+  /// Gets data or creates it using the factory if it doesn't exist
   /// </summary>
-  public T Get<T>(string path) {
-    return Load<T>(path);
-  }
+  /// <typeparam name="T">Type of data</typeparam>
+  /// <param name="key">Key of the data</param>
+  /// <param name="factory">Factory function to create default value</param>
+  /// <returns>Existing or newly created data</returns>
+  public T GetOrCreate<T>(string key, Func<T> factory) {
+    var data = Get<T>(key);
 
-  /// <summary>
-  /// Gets from database or creates and saves data if it doesn't exist
-  /// </summary>
-  /// <typeparam name="T">Type of data to get or create</typeparam>
-  /// <param name="path">Collection/document identifier</param>
-  /// <param name="factory">Factory function to create the data if it doesn't exist</param>
-  /// <returns>Existing data or newly created and saved data</returns>
-  public T GetOrCreate<T>(string path, Func<T> factory) {
-    var existingData = Get<T>(path);
-
-    if (existingData != null && !existingData.Equals(default(T))) {
-      return existingData;
-    }
+    if (data != null && !EqualityComparer<T>.Default.Equals(data, default(T)))
+      return data;
 
     var newData = factory();
-    Save(path, newData);
+    Set(key, newData);
     return newData;
   }
 
   /// <summary>
-  /// Gets from database or creates and saves data using default constructor if it doesn't exist
+  /// Gets data or creates it using the default constructor if it doesn't exist
   /// </summary>
-  public T GetOrCreate<T>(string path) where T : new() {
-    return GetOrCreate(path, () => new T());
+  public T GetOrCreate<T>(string key) where T : new() {
+    return GetOrCreate(key, () => new T());
   }
 
   /// <summary>
-  /// Checks if a document exists in the database
+  /// Checks if a key exists in the database
   /// </summary>
-  /// <param name="path">Collection/document identifier</param>
-  /// <returns>True if document exists</returns>
-  public bool Has(string path) {
+  /// <param name="key">Key to check</param>
+  /// <returns>True if the key exists</returns>
+  public bool Has(string key) {
+    if (string.IsNullOrWhiteSpace(key))
+      return false;
+
     try {
-      var collection = GetCollection(path);
-      return collection.Exists(Query.EQ("_id", path));
+      return _collection.Exists(x => x.Id == key);
     } catch {
       return false;
     }
   }
 
   /// <summary>
-  /// Deletes a document from the database
+  /// Deletes data with the specified key
   /// </summary>
-  /// <param name="path">Collection/document identifier</param>
+  /// <param name="key">Key of the data to delete</param>
   /// <returns>True if successfully deleted</returns>
-  public bool Delete(string path) {
+  public bool Delete(string key) {
+    if (string.IsNullOrWhiteSpace(key))
+      return false;
+
     try {
-      var collection = GetCollection(path);
-      return collection.Delete(path);
+      return _collection.Delete(key);
     } catch (Exception ex) {
-      Log.Error($"An error occurred while deleting data: {ex.Message}");
+      Log.Error($"Failed to delete data with key '{key}': {ex.Message}");
       return false;
     }
   }
 
   /// <summary>
-  /// Gets all document identifiers in a collection (simulates folder listing)
+  /// Gets all keys in the database
   /// </summary>
-  /// <param name="folderPath">Collection prefix to filter by</param>
-  /// <param name="includeSubdirectories">Whether to include nested paths</param>
-  /// <returns>Array of document identifiers</returns>
-  public string[] GetFilesInFolder(string folderPath = "", bool includeSubdirectories = false) {
+  /// <returns>Array of all keys</returns>
+  public string[] GetAllKeys() {
     try {
-      var collections = _db.GetCollectionNames().ToList();
-      var results = new List<string>();
+      return _collection.FindAll()
+        .Select(e => e.Id)
+        .ToArray();
+    } catch (Exception ex) {
+      Log.Error($"Failed to get all keys: {ex.Message}");
+      return Array.Empty<string>();
+    }
+  }
 
-      foreach (var collectionName in collections) {
-        var collection = _db.GetCollection(collectionName);
-        var docs = collection.FindAll();
+  /// <summary>
+  /// Gets all keys that start with the specified prefix
+  /// </summary>
+  /// <param name="prefix">Prefix to filter keys</param>
+  /// <returns>Array of matching keys</returns>
+  public string[] GetKeysByPrefix(string prefix) {
+    if (string.IsNullOrEmpty(prefix))
+      return GetAllKeys();
 
-        foreach (var doc in docs) {
-          if (doc.TryGetValue("_id", out var idValue)) {
-            var id = idValue.AsString;
+    try {
+      return _collection.Find(x => x.Id.StartsWith(prefix))
+        .Select(e => e.Id)
+        .ToArray();
+    } catch (Exception ex) {
+      Log.Error($"Failed to get keys by prefix '{prefix}': {ex.Message}");
+      return Array.Empty<string>();
+    }
+  }
 
-            if (string.IsNullOrEmpty(folderPath)) {
-              results.Add(id);
-            } else if (id.StartsWith(folderPath)) {
-              if (includeSubdirectories) {
-                results.Add(id);
-              } else {
-                // Apenas itens diretos (sem sub-paths)
-                var relativePath = id.Substring(folderPath.Length).TrimStart('/', '\\');
-                if (!relativePath.Contains("/") && !relativePath.Contains("\\")) {
-                  results.Add(id);
-                }
-              }
-            }
-          }
+  /// <summary>
+  /// Gets all data entries that match the specified prefix
+  /// </summary>
+  /// <typeparam name="T">Type of data to retrieve</typeparam>
+  /// <param name="prefix">Prefix to filter keys</param>
+  /// <returns>Dictionary of key-value pairs</returns>
+  public Dictionary<string, T> GetAllByPrefix<T>(string prefix) {
+    try {
+      var entries = string.IsNullOrEmpty(prefix)
+        ? _collection.FindAll()
+        : _collection.Find(x => x.Id.StartsWith(prefix));
+
+      var result = new Dictionary<string, T>();
+
+      foreach (var entry in entries) {
+        try {
+          var data = BsonMapper.Global.ToObject<T>(entry.Data.AsDocument);
+          result[entry.Id] = data;
+        } catch (Exception ex) {
+          Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
         }
       }
 
-      return results.ToArray();
+      return result;
     } catch (Exception ex) {
-      Log.Error($"An error occurred while getting files in folder: {ex.Message}");
-      return Array.Empty<string>();
+      Log.Error($"Failed to get all data by prefix '{prefix}': {ex.Message}");
+      return new Dictionary<string, T>();
     }
   }
 
   /// <summary>
-  /// Gets all collection names (simulates directory listing)
+  /// Clears all data from the database
   /// </summary>
-  public string[] GetDirectoriesInFolder(string folderPath = "", bool includeSubdirectories = false) {
+  public void Clear() {
     try {
-      var collections = _db.GetCollectionNames().ToArray();
-
-      if (string.IsNullOrEmpty(folderPath)) {
-        return collections;
-      }
-
-      return collections.Where(c => c.StartsWith(folderPath)).ToArray();
+      _collection.DeleteAll();
+      Log.Info($"Database '{_pluginGuid}' cleared successfully");
     } catch (Exception ex) {
-      Log.Error($"An error occurred while getting directories in folder: {ex.Message}");
-      return Array.Empty<string>();
+      Log.Error($"Failed to clear database: {ex.Message}");
     }
   }
 
   /// <summary>
-  /// Clears cache/optimizes database (checkpoint operation)
+  /// Gets the count of entries in the database
   /// </summary>
-  public void ClearCache(string path = null) {
+  public int Count() {
     try {
-      // LiteDB não tem cache externo como JSON, mas podemos fazer checkpoint
-      _db.Checkpoint();
-    } catch (Exception ex) {
-      Log.Error($"An error occurred during cache clear: {ex.Message}");
+      return _collection.Count();
+    } catch {
+      return 0;
     }
   }
 
   /// <summary>
-  /// Saves all pending operations (forces checkpoint)
+  /// Performs a checkpoint to ensure all data is written to disk
   /// </summary>
-  public void SaveAll() {
+  public void Checkpoint() {
     try {
       _db.Checkpoint();
     } catch (Exception ex) {
-      Log.Error($"An error occurred while saving all data: {ex.Message}");
+      Log.Error($"Failed to perform checkpoint: {ex.Message}");
     }
   }
 
+  #region Auto-Backup
+
   /// <summary>
-  /// Creates a backup of the database file
+  /// Enables automatic backups on server save events
   /// </summary>
   /// <param name="backupLocation">Optional custom backup location</param>
-  /// <param name="saveName">Optional save name to include in the backup filename</param>
-  /// <returns>Path to the created backup file, or null if backup failed</returns>
+  public void EnableAutoBackup(string backupLocation = null) {
+    if (_autoBackupEnabled) return;
+
+    _autoBackupLocation = backupLocation;
+    EventManager.On(ServerEvents.OnSave, AutoBackupHandler);
+    _autoBackupEnabled = true;
+
+    Log.Info($"Auto-backup enabled for database '{_pluginGuid}'");
+  }
+
+  /// <summary>
+  /// Disables automatic backups
+  /// </summary>
+  public void DisableAutoBackup() {
+    if (!_autoBackupEnabled) return;
+
+    try {
+      EventManager.Off(ServerEvents.OnSave, AutoBackupHandler);
+    } catch { }
+
+    _autoBackupEnabled = false;
+    Log.Info($"Auto-backup disabled for database '{_pluginGuid}'");
+  }
+
+  [EventPriority(-999)]
+  private async void AutoBackupHandler(string saveName) {
+    try {
+      saveName = saveName?.Replace(".save", "") ?? "auto";
+      await CreateBackup(_autoBackupLocation, saveName);
+    } catch (Exception ex) {
+      Log.Error($"Auto-backup failed for '{_pluginGuid}': {ex.Message}");
+    }
+  }
+
+  /// <summary>
+  /// Creates a backup of the database
+  /// </summary>
+  /// <param name="backupLocation">Optional custom backup location</param>
+  /// <param name="saveName">Optional save name to include in filename</param>
+  /// <returns>Path to the backup file, or null if failed</returns>
   public async Task<string> CreateBackup(string backupLocation = null, string saveName = null) {
     return await Task.Run(() => {
       try {
-        var dbPath = GetFullPath();
+        Checkpoint(); // Ensure all data is written
 
+        var dbPath = GetDatabasePath();
         if (!File.Exists(dbPath)) {
-          Log.Warning($"Database file '{dbPath}' does not exist. No backup created.");
+          Log.Warning($"Database file does not exist: {dbPath}");
           return null;
         }
 
-        // Force checkpoint before backup
-        SaveAll();
-
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-        string safeSaveName = null;
-
-        if (!string.IsNullOrWhiteSpace(saveName)) {
-          var parts = saveName.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries);
-          safeSaveName = string.Join("_", parts);
-        }
+        var safeSaveName = string.IsNullOrWhiteSpace(saveName)
+          ? null
+          : string.Join("_", saveName.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
 
         var backupFileName = safeSaveName == null
-          ? $"{_databaseName}_backup_{timestamp}.db"
-          : $"{_databaseName}_backup_{safeSaveName}_{timestamp}.db";
+          ? $"{_pluginGuid}_{timestamp}.db"
+          : $"{_pluginGuid}_{saveName}_{timestamp}.db";
 
-        var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath;
-        var backupFolderPath = Path.Combine(backupPath, $"{_databaseName} Backups");
-        var fullBackupPath = Path.Combine(backupFolderPath, backupFileName);
+        var backupDir = Path.Combine(
+          backupLocation ?? BepInEx.Paths.ConfigPath,
+          $"{_pluginGuid}_Backups"
+        );
 
-        Directory.CreateDirectory(backupFolderPath);
-        CleanupOldBackups(backupFolderPath, _maxBackups);
+        Directory.CreateDirectory(backupDir);
 
-        // Copia o arquivo do banco
-        File.Copy(dbPath, fullBackupPath, true);
+        var backupPath = Path.Combine(backupDir, backupFileName);
+        File.Copy(dbPath, backupPath, true);
 
-        Log.Info($"Database backup created successfully for '{_databaseName}'");
-        return fullBackupPath;
+        CleanupOldBackups(backupDir);
+
+        Log.Info($"Backup created: {backupFileName}");
+        return backupPath;
       } catch (Exception ex) {
-        Log.Error($"Failed to create database backup: {ex.Message}");
+        Log.Error($"Failed to create backup: {ex.Message}");
         return null;
       }
     });
   }
 
   /// <summary>
-  /// Restores database from a backup file
+  /// Restores the database from a backup file
   /// </summary>
   /// <param name="backupFilePath">Path to the backup file</param>
-  /// <param name="clearExisting">If true, clears existing data before restoring</param>
-  /// <returns>True if restoration was successful</returns>
-  public async Task<bool> RestoreFromBackup(string backupFilePath, bool clearExisting = false) {
+  /// <returns>True if successful</returns>
+  public async Task<bool> RestoreFromBackup(string backupFilePath) {
     return await Task.Run(() => {
       try {
         if (!File.Exists(backupFilePath)) {
@@ -377,74 +500,73 @@ public class Database : IDisposable {
           return false;
         }
 
-        var dbPath = GetFullPath();
+        var dbPath = GetDatabasePath();
 
-        // Fecha o banco antes de restaurar
+        // Close database connection
         _db.Dispose();
 
-        if (clearExisting && File.Exists(dbPath)) {
-          File.Delete(dbPath);
-        }
-
-        // Copia o backup
+        // Replace database file
         File.Copy(backupFilePath, dbPath, true);
 
-        // Reabre o banco (precisaria reinicializar a instância, mas isso é complicado)
-        // Aqui apenas logamos sucesso, o usuário precisaria recriar a instância
-        Log.Info($"Database restored successfully from: {backupFilePath}");
-        Log.Warning("Please restart the application or recreate the Database instance for changes to take effect.");
+        Log.Info($"Database restored from: {backupFilePath}");
+        Log.Warning("Application restart required for changes to take effect");
 
         return true;
       } catch (Exception ex) {
-        Log.Error($"Failed to restore database from backup: {ex.Message}");
+        Log.Error($"Failed to restore backup: {ex.Message}");
         return false;
       }
     });
   }
 
-  /// <summary>
-  /// Cleans up old backup files
-  /// </summary>
-  private void CleanupOldBackups(string backupPath, int maxBackups = 10) {
+  private void CleanupOldBackups(string backupDir) {
     try {
-      if (!Directory.Exists(backupPath)) {
+      var pattern = $"{_pluginGuid}_*.db";
+      var files = Directory.GetFiles(backupDir, pattern)
+        .Select(f => new FileInfo(f))
+        .OrderByDescending(f => f.CreationTime)
+        .ToList();
+
+      if (files.Count <= _maxBackups)
         return;
-      }
 
-      var backupPattern = $"{_databaseName}_backup_*.db";
-      var backupFiles = Directory.GetFiles(backupPath, backupPattern, SearchOption.TopDirectoryOnly);
-
-      if (backupFiles.Length <= maxBackups) {
-        return;
-      }
-
-      var sortedFiles = backupFiles
-        .Select(file => new FileInfo(file))
-        .OrderBy(fileInfo => fileInfo.CreationTime)
-        .ToArray();
-
-      int filesToDelete = sortedFiles.Length - maxBackups;
-
-      for (int i = 0; i < filesToDelete && i < sortedFiles.Length; i++) {
+      foreach (var file in files.Skip(_maxBackups)) {
         try {
-          File.Delete(sortedFiles[i].FullName);
-          Log.Info($"Deleted old backup: {sortedFiles[i].Name}");
+          file.Delete();
+          Log.Info($"Deleted old backup: {file.Name}");
         } catch (Exception ex) {
-          Log.Warning($"Failed to delete old backup {sortedFiles[i].Name}: {ex.Message}");
+          Log.Warning($"Failed to delete old backup: {ex.Message}");
         }
       }
-
-      Log.Info($"Cleanup completed. Kept {Math.Min(maxBackups, sortedFiles.Length - filesToDelete)} backup(s).");
     } catch (Exception ex) {
-      Log.Warning($"Error during backup cleanup: {ex.Message}");
+      Log.Warning($"Backup cleanup failed: {ex.Message}");
     }
   }
 
+  #endregion
+
   /// <summary>
-  /// Disposes the database connection
+  /// Cleanup method for when the plugin is unloaded
+  /// </summary>
+  public void UnregisterAssembly() {
+    DisableAutoBackup();
+    Dispose();
+  }
+
+  /// <summary>
+  /// Releases database resources and performs cleanup.
+  /// This will disable auto-backups, perform a final checkpoint to flush data to disk and dispose the underlying LiteDB instance.
+  /// Safe to call multiple times.
   /// </summary>
   public void Dispose() {
-    DisableAutoBackup();
-    _db?.Dispose();
+    try {
+      DisableAutoBackup();
+      Checkpoint(); // Ensure all pending operations are written to disk
+      _db?.Dispose();
+    } catch (Exception ex) {
+      Log.Warning($"Error during database disposal: {ex.Message}");
+    } finally {
+      GC.SuppressFinalize(this);
+    }
   }
 }

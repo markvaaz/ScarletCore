@@ -63,6 +63,7 @@ public class Plugin : BasePlugin {
   /// <returns>True if the plugin was unloaded successfully.</returns>
   public override bool Unload() {
     _harmony?.UnpatchSelf();
+    SharedDatabase.Shutdown();
     return true;
   }
 }
