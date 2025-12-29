@@ -17,6 +17,13 @@ public static class TeleportService {
 
   #region Basic Teleportation
 
+
+  /// <summary>
+  /// Teleports the specified entity to the given world position using a teleport buff.
+  /// </summary>
+  /// <param name="entity">The entity to teleport.</param>
+  /// <param name="position">The target world position to teleport to.</param>
+  /// <returns>True if teleportation was successful; otherwise, false.</returns>
   public static bool Teleport(Entity entity, float3 position) {
     if (!BuffService.TryApplyBuff(entity, new(150521246), 0, out var buffEntity)) return false;
 

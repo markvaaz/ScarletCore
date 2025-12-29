@@ -11,28 +11,56 @@ using Unity.Mathematics;
 
 namespace ScarletCore.Services;
 
+/// <summary>
+/// Provides utility methods for sending system, chat, and combat messages to players, admins, and all users in the game.
+/// Supports formatted, colored, localized, and conditional messaging, as well as broadcast and announcement features.
+/// </summary>
 public static class MessageService {
+  /// <summary>
+  /// Sends a formatted system message to a specific user.
+  /// </summary>
+  /// <param name="user">The user to send the message to.</param>
+  /// <param name="message">The message text to send.</param>
   public static void Send(User user, string message) {
     var messageBytes = new FixedString512Bytes(message.Format());
     ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
   }
 
+  /// <summary>
+  /// Sends a formatted system message to a specific player.
+  /// </summary>
+  /// <param name="player">The player to send the message to.</param>
+  /// <param name="message">The message text to send.</param>
   public static void Send(PlayerData player, string message) {
     var user = player.UserEntity.Read<User>();
     var messageBytes = new FixedString512Bytes(message.Format());
     ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
   }
 
+  /// <summary>
+  /// Sends a raw (unformatted) system message to a specific player.
+  /// </summary>
+  /// <param name="player">The player to send the message to.</param>
+  /// <param name="message">The raw message text to send.</param>
   public static void SendRaw(PlayerData player, string message) {
     var user = player.UserEntity.Read<User>();
     var messageBytes = new FixedString512Bytes(message);
     ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
   }
 
+  /// <summary>
+  /// Sends a formatted system message to all connected players.
+  /// </summary>
+  /// <param name="message">The message text to send to all players.</param>
   public static void SendAll(string message) {
     var messageBytes = new FixedString512Bytes(message.Format());
     ServerChatUtils.SendSystemMessageToAllClients(GameSystems.EntityManager, ref messageBytes);
   }
+
+  /// <summary>
+  /// Sends a formatted system message to all administrators.
+  /// </summary>
+  /// <param name="message">The message text to send to all admins.</param>
   public static void SendAdmins(string message) {
     var messageBytes = new FixedString512Bytes(message.Format());
     var admins = PlayerService.GetAdmins();
@@ -42,6 +70,15 @@ public static class MessageService {
       ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
     }
   }
+
+  /// <summary>
+  /// Sends a scrolling combat text (SCT) message to a player.
+  /// </summary>
+  /// <param name="player">The player to display the SCT message to.</param>
+  /// <param name="prefab">The prefab GUID for the SCT icon or effect.</param>
+  /// <param name="assetGuid">The asset GUID string for the SCT.</param>
+  /// <param name="color">The color of the SCT message.</param>
+  /// <param name="value">The value to display in the SCT message.</param>
   public static void SendSCT(PlayerData player, PrefabGUID prefab, string assetGuid, float3 color, int value) {
     ScrollingCombatTextMessage.Create(
       GameSystems.EntityManager,
@@ -56,32 +93,6 @@ public static class MessageService {
     );
   }
   #region Enhanced Send Methods
-
-  /// <summary>
-  /// Sends a colored message to a user
-  /// </summary>
-  public static void SendColored(User user, string message, string color) {
-    var coloredMessage = message.WithColor(color);
-    var messageBytes = new FixedString512Bytes(coloredMessage.Format());
-    ServerChatUtils.SendSystemMessageToClient(GameSystems.EntityManager, user, ref messageBytes);
-  }
-
-  /// <summary>
-  /// Sends a colored message to a player
-  /// </summary>
-  public static void SendColored(PlayerData player, string message, string color) {
-    var user = player.UserEntity.Read<User>();
-    SendColored(user, message, color);
-  }
-
-  /// <summary>
-  /// Sends a colored message to all players
-  /// </summary>
-  public static void SendAllColored(string message, string color) {
-    var coloredMessage = message.WithColor(color);
-    var messageBytes = new FixedString512Bytes(coloredMessage.Format());
-    ServerChatUtils.SendSystemMessageToAllClients(GameSystems.EntityManager, ref messageBytes);
-  }
 
   /// <summary>
   /// Sends an error message (red color)

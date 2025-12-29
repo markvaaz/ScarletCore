@@ -12,7 +12,6 @@
     <FileVersion>1.4.21.0</FileVersion>
     <Authors>markvaaz</Authors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- <NoWarn>$(NoWarn);1591</NoWarn> -->
   </PropertyGroup>
   <PropertyGroup> 
     <BepInExPluginGuid>markvaaz.ScarletCore</BepInExPluginGuid>

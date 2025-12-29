@@ -87,6 +87,10 @@ public class Database {
     _autoBackupEnabled = false;
   }
 
+  /// <summary>
+  /// Performs cleanup for this database instance when its parent assembly is unloaded.
+  /// Disables automatic backups and unregisters any event handlers or resources associated with this instance.
+  /// </summary>
   public void UnregisterAssembly() {
     DisableAutoBackup();
   }
@@ -111,6 +115,11 @@ public class Database {
     return Path.Combine(BepInEx.Paths.ConfigPath, _databaseName);
   }
 
+  /// <summary>
+  /// Gets the full filesystem path for the specified database-relative path, appending the <c>.json</c> extension.
+  /// </summary>
+  /// <param name="path">File name or relative path within the database (without the <c>.json</c> extension).</param>
+  /// <returns>The full path to the JSON file inside this database's configuration folder.</returns>
   public string GetFullPath(string path) {
     var configPath = GetConfigPath();
     return Path.Combine(configPath, $"{path}.json");
@@ -571,6 +580,4 @@ public class Database {
       Log.Warning($"Error during backup cleanup: {ex.Message}");
     }
   }
-
-  // TempStorage moved to Services/SharedData.cs
 }

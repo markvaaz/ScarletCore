@@ -5,7 +5,7 @@ using ScarletCore.Events;
 namespace ScarletCore.Patches;
 
 [HarmonyPatch]
-public static class SavePatch {
+internal static class SavePatch {
   [HarmonyPatch(typeof(TriggerPersistenceSaveSystem), nameof(TriggerPersistenceSaveSystem.TriggerSave))]
   [HarmonyPrefix]
   public static void Prefix(TriggerPersistenceSaveSystem __instance, SaveReason reason, Unity.Collections.FixedString128Bytes saveName, ServerRuntimeSettings saveConfig) {

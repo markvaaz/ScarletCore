@@ -51,6 +51,7 @@ public static class AbilityService {
   /// <param name="entity">The entity whose ability slot will be modified</param>
   /// <param name="newAbilityGuid">The GUID of the new ability to assign</param>
   /// <param name="abilitySlotIndex">The slot index where the ability will be placed (default: 0)</param>
+  /// <param name="priority">The priority of the ability in the slot (default: 99)</param>
   /// <remarks>
   /// This method modifies the ability group slot buffer of the entity to replace
   /// </remarks>

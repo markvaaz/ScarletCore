@@ -8,6 +8,7 @@ using System;
 using ScarletCore.Utils;
 using ScarletCore.Systems;
 using ProjectM;
+using ScarletCore.Events;
 
 namespace ScarletCore.Services;
 
@@ -254,6 +255,11 @@ public static class PlayerService {
     return false;
   }
 
+  /// <summary>
+  /// Renames the specified player to a new character name.
+  /// </summary>
+  /// <param name="player">The player whose character name will be changed.</param>
+  /// <param name="newName">The new name to assign to the player (as FixedString64Bytes).</param>
   public static void RenamePlayer(PlayerData player, FixedString64Bytes newName) {
     var des = GameSystems.DebugEventsSystem;
 
@@ -270,6 +276,8 @@ public static class PlayerService {
     des.RenameUser(fromCharacter, renameEvent);
 
     SetPlayerCache(player.UserEntity);
+
+    EventManager.Emit(PlayerEvents.CharacterRenamed, player);
 
     if (!player.CharacterEntity.Has<AttachedBuffer>()) return;
 
@@ -295,6 +303,14 @@ public static class PlayerService {
     return SetTagAtIndex(player, tag, 0);
   }
 
+
+  /// <summary>
+  /// Sets a tag at a specific index in the player's name, allowing for multiple tags or custom tag placement.
+  /// </summary>
+  /// <param name="player">The player whose name tag will be set.</param>
+  /// <param name="tag">The tag text to insert into the player's name.</param>
+  /// <param name="tagIndex">The index at which to insert the tag (0-based).</param>
+  /// <returns>True if the tag was successfully set; otherwise, false.</returns>
   public static bool SetNameTag(PlayerData player, string tag, int tagIndex) {
     return SetTagAtIndex(player, tag, tagIndex);
   }

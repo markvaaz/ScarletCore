@@ -11,7 +11,7 @@ using ScarletCore.Commanding;
 namespace ScarletCore.Patches;
 
 [HarmonyPatch]
-public static class ChatMessageSystemPatch {
+internal static class ChatMessageSystemPatch {
   [HarmonyPatch(typeof(ChatMessageSystem), nameof(ChatMessageSystem.OnUpdate))]
   [HarmonyPriority(Priority.First)]
   [HarmonyPrefix]

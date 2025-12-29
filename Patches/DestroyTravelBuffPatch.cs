@@ -10,7 +10,7 @@ using Unity.Collections;
 namespace ScarletCore.Patches;
 
 [HarmonyPatch]
-public class Destroy_TravelBuffSystem_Patch {
+internal class Destroy_TravelBuffSystem_Patch {
   [HarmonyPatch(typeof(Destroy_TravelBuffSystem), nameof(Destroy_TravelBuffSystem.OnUpdate))]
   [HarmonyPrefix]
   private static void Prefix(Destroy_TravelBuffSystem __instance) {

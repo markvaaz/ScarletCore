@@ -28,7 +28,7 @@ public static class ClanService {
 
     foreach (var clan in clans) {
       // Skip clans that don't match the specified name (case-insensitive comparison)
-      if (clan.Read<ClanTeam>().Name.ToString().ToLower() != clanName.ToLower()) continue;
+      if (!clan.Read<ClanTeam>().Name.ToString().Equals(clanName, System.StringComparison.CurrentCultureIgnoreCase)) continue;
 
       // Get clan member status and user buffer for this clan
       var clanMembers = clan.ReadBuffer<ClanMemberStatus>();
@@ -189,7 +189,7 @@ public static class ClanService {
 
     foreach (var clan in clans) {
       // Skip clans that don't match the specified name
-      if (clan.Read<ClanTeam>().Name.ToString().ToLower() != clanName.ToLower()) continue;
+      if (!clan.Read<ClanTeam>().Name.ToString().Equals(clanName, System.StringComparison.CurrentCultureIgnoreCase)) continue;
 
       // Get clan members
       var members = clan.ReadBuffer<ClanMemberStatus>();
@@ -415,6 +415,11 @@ public static class ClanService {
     return clans;
   }
 
+  /// <summary>
+  /// Retrieves the name of the clan that the specified player belongs to.
+  /// </summary>
+  /// <param name="playerData">The player whose clan name is to be retrieved.</param>
+  /// <returns>The name of the player's clan, or an empty string if the player is not in a clan.</returns>
   public static string GetClanName(PlayerData playerData) {
     // Check if the player is in a clan
     if (playerData.User.ClanEntity.Equals(NetworkedEntity.Empty)) {

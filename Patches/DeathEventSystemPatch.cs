@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using HarmonyLib;
 using ProjectM;
 using ScarletCore.Events;
@@ -10,7 +9,7 @@ using Unity.Collections;
 namespace ScarletCore.Patches;
 
 [HarmonyPatch]
-public static class DeathEventListenerSystemPatch {
+internal static class DeathEventListenerSystemPatch {
   [HarmonyPatch(typeof(DeathEventListenerSystem), nameof(DeathEventListenerSystem.OnUpdate))]
   [HarmonyPrefix]
   public static void Prefix(DeathEventListenerSystem __instance) {

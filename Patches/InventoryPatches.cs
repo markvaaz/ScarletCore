@@ -1,6 +1,5 @@
 using HarmonyLib;
 using ProjectM;
-using ProjectM.Network;
 using ScarletCore.Events;
 using ScarletCore.Systems;
 using ScarletCore.Utils;

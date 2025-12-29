@@ -6,7 +6,17 @@ using System.Globalization;
 
 namespace ScarletCore.Commanding;
 
+/// <summary>
+/// Helper that converts string tokens into CLR/game types used by commands.
+/// </summary>
 public static class TypeConverter {
+  /// <summary>
+  /// Converts a string input into a value of <paramref name="targetType"/>.
+  /// Returns a default value for the type when conversion fails.
+  /// </summary>
+  /// <param name="input">Input string.</param>
+  /// <param name="targetType">Target <see cref="Type"/> to convert to.</param>
+  /// <returns>Converted value or default for the target type.</returns>
   public static object ConvertToType(string input, Type targetType) {
     if (string.IsNullOrWhiteSpace(input)) {
       return GetDefaultValue(targetType);
@@ -88,16 +98,25 @@ public static class TypeConverter {
     return type.IsValueType ? Activator.CreateInstance(type) : null;
   }
 
+  /// <summary>Attempts to convert the given input into a <see cref="PlayerData"/>.</summary>
+  /// <param name="input">Player identifier or name.</param>
+  /// <returns>Found <see cref="PlayerData"/> or null.</returns>
   public static PlayerData ConvertToPlayerData(string input) {
     var player = input.GetPlayerData();
     return player;
   }
 
+  /// <summary>Converts numeric id into <see cref="PlayerData"/>.</summary>
+  /// <param name="input">Player ID.</param>
+  /// <returns>Found <see cref="PlayerData"/> or null.</returns>
   public static PlayerData ConvertToPlayerData(ulong input) {
     var player = input.GetPlayerData();
     return player;
   }
 
+  /// <summary>Parses a prefab GUID from string.</summary>
+  /// <param name="input">GUID text.</param>
+  /// <returns>Parsed <see cref="PrefabGUID"/> or <see cref="PrefabGUID.Empty"/>.</returns>
   public static PrefabGUID ConvertToPrefabGUID(string input) {
     if (PrefabGUID.TryParse(input, out var guid)) {
       return guid;
@@ -106,6 +125,7 @@ public static class TypeConverter {
     return PrefabGUID.Empty;
   }
 
+  /// <summary>Parses a float2 from a comma separated string ("x,y").</summary>
   public static float2 ConvertToFloat2(string input) {
     var parts = input.Split(',');
     if (parts.Length != 2) {
@@ -120,6 +140,7 @@ public static class TypeConverter {
     return float2.zero;
   }
 
+  /// <summary>Parses a float3 from a comma separated string ("x,y,z").</summary>
   public static float3 ConvertToFloat3(string input) {
     var parts = input.Split(',');
     if (parts.Length != 3) {
@@ -135,6 +156,7 @@ public static class TypeConverter {
     return float3.zero;
   }
 
+  /// <summary>Parses a float4 from a comma separated string ("x,y,z,w").</summary>
   public static float4 ConvertToFloat4(string input) {
     var parts = input.Split(',');
     if (parts.Length != 4) {
@@ -151,6 +173,7 @@ public static class TypeConverter {
     return float4.zero;
   }
 
+  /// <summary>Parses a quaternion from a comma separated string ("x,y,z,w").</summary>
   public static quaternion ConvertToQuaternion(string input) {
     var parts = input.Split(',');
     if (parts.Length != 4) {
@@ -167,6 +190,7 @@ public static class TypeConverter {
     return quaternion.identity;
   }
 
+  /// <summary>Returns a friendly short name used in help / usage messages for a given type.</summary>
   public static string GetFriendlyTypeName(Type type) {
     return type.Name switch {
       "String" => "text",

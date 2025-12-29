@@ -150,6 +150,10 @@ public static class Log {
     MLS?.LogInfo(DebugMode ? $"{callerInfo} {coloredMessage}" : coloredMessage);
   }
 
+  /// <summary>
+  /// Logs a message to the message log with optional formatting and caller information.
+  /// </summary>
+  /// <param name="messages">The objects to log as a message.</param>
   public static void Message(params object[] messages) {
     var callerInfo = DebugMode ? GetCallerInfo() : "";
     var message = string.Join(" ", messages);
@@ -197,6 +201,10 @@ public static class Log {
     MLS?.Log(level, DebugMode ? $"{callerInfo} {message}" : message.ToString());
   }
 
+  /// <summary>
+  /// Logs all component types attached to the specified entity.
+  /// </summary>
+  /// <param name="entity">The entity whose components will be logged.</param>
   public static void Components(Entity entity) {
     if (!entity.Exists()) {
       Warning("Cannot log components for non-existing entity.");

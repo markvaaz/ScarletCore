@@ -5,6 +5,9 @@ using ScarletCore.Localization;
 
 namespace ScarletCore;
 
+/// <summary>
+/// Provides extension methods for localizing strings using the server or player language context.
+/// </summary>
 public static class LocalizationExtensions {
   /// <summary>
   /// Localize a key using the server language (fallbacks as implemented in LocalizationService.GetText).

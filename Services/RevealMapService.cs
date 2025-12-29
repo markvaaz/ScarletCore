@@ -8,6 +8,9 @@ using Unity.Mathematics;
 
 namespace ScarletCore.Services;
 
+/// <summary>
+/// Provides utility methods for revealing and hiding the in-game map for players, including full map reveal and custom region control.
+/// </summary>
 public static class RevealMapService {
   private const int MAP_CANVAS_SIZE = 256; // The client map canvas size
   private const int BYTES_PER_ROW = 32; // 256 pixels per row, 8 pixels per byte, so 256 / 8 = 32 bytes per row
@@ -23,7 +26,7 @@ public static class RevealMapService {
   /// <summary>
   /// Reveals the entire map for a player by name
   /// </summary>
-  /// <param name="playerName">The name of the player</param>
+  /// <param name="playerData">The name of the player</param>
   public static void RevealFullMap(PlayerData playerData) {
     ProcessMapZones(playerData, (revealBuffer) => {
       for (int i = 0; i < revealBuffer.Length; ++i) {

@@ -8,7 +8,7 @@ using Unity.Collections;
 namespace ScarletCore.Patches;
 
 [HarmonyPatch]
-public static class VampireDownedServerEventSystemPatch {
+internal static class VampireDownedServerEventSystemPatch {
   [HarmonyPatch(typeof(VampireDownedServerEventSystem), nameof(VampireDownedServerEventSystem.OnUpdate))]
   [HarmonyPrefix]
   public static void Prefix(VampireDownedServerEventSystem __instance) {

@@ -11,9 +11,24 @@ using System.Linq.Expressions;
 
 namespace ScarletCore.Events;
 
+/// <summary>
+/// Provides a comprehensive event management system for handling game events with support for priorities, custom events, and dynamic subscription.
+/// Supports prefix, postfix, player, server, and custom events, allowing for flexible and efficient event-driven programming.
+/// </summary>
 public static class EventManager {
+
+  /// <summary>
+  /// Represents a delegate handler with an associated priority for event invocation ordering.
+  /// </summary>
+  /// <typeparam name="T">The delegate type.</typeparam>
   private sealed class PrioritizedHandler<T>(T handler) where T : Delegate {
+    /// <summary>
+    /// The delegate handler to invoke.
+    /// </summary>
     public T Handler = handler;
+    /// <summary>
+    /// The priority of the handler. Higher values are invoked first.
+    /// </summary>
     public int Priority = GetPriority(handler);
 
     private static int GetPriority(T handler) {
@@ -27,10 +42,26 @@ public static class EventManager {
   private static readonly Dictionary<PlayerEvents, List<PrioritizedHandler<Action<PlayerData>>>> _playerHandlers = [];
   private static readonly Dictionary<ServerEvents, List<PrioritizedHandler<Delegate>>> _serverHandlers = [];
 
+
+  /// <summary>
+  /// Stores information about a custom event handler, including the original delegate, a fast invoker, and type information.
+  /// </summary>
   private sealed class EventHandlerInfo {
+    /// <summary>
+    /// The original delegate provided by the subscriber.
+    /// </summary>
     public Delegate Original;
+    /// <summary>
+    /// A compiled fast invoker for efficient dynamic invocation.
+    /// </summary>
     public Action<object> FastInvoker;
+    /// <summary>
+    /// The expected parameter type for the handler, or null for parameterless handlers.
+    /// </summary>
     public Type ExpectedType;
+    /// <summary>
+    /// Indicates whether the handler parameter is nullable.
+    /// </summary>
     public bool IsNullable;
   }
 
@@ -38,6 +69,13 @@ public static class EventManager {
   private static readonly object _customLock = new();
 
   // Helper method to compare delegates by method and target instead of reference
+
+  /// <summary>
+  /// Compares two delegates for equality based on their method and target.
+  /// </summary>
+  /// <param name="a">The first delegate.</param>
+  /// <param name="b">The second delegate.</param>
+  /// <returns>True if both delegates have the same method and target; otherwise, false.</returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool AreDelegatesEqual(Delegate a, Delegate b) {
     if (ReferenceEquals(a, b)) return true;
@@ -46,6 +84,11 @@ public static class EventManager {
   }
 
   // --- Built-in methods (optimized with priority) ---
+  /// <summary>
+  /// Subscribes a callback to a prefix event. Handlers are invoked before the main event logic.
+  /// </summary>
+  /// <param name="eventType">The prefix event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void On(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return;
@@ -59,6 +102,12 @@ public static class EventManager {
     else list.Add(ph);
   }
 
+  /// <summary>
+  /// Unsubscribes a callback from a prefix event.
+  /// </summary>
+  /// <param name="eventType">The prefix event type to unsubscribe from.</param>
+  /// <param name="callback">The callback to remove.</param>
+  /// <returns>True if the callback was removed; otherwise, false.</returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool Off(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return false;
@@ -73,6 +122,11 @@ public static class EventManager {
     return false;
   }
 
+  /// <summary>
+  /// Subscribes a callback to a postfix event. Handlers are invoked after the main event logic.
+  /// </summary>
+  /// <param name="eventType">The postfix event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void On(PostfixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return;
@@ -86,6 +140,12 @@ public static class EventManager {
     else list.Add(ph);
   }
 
+  /// <summary>
+  /// Unsubscribes a callback from a postfix event.
+  /// </summary>
+  /// <param name="eventType">The postfix event type to unsubscribe from.</param>
+  /// <param name="callback">The callback to remove.</param>
+  /// <returns>True if the callback was removed; otherwise, false.</returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool Off(PostfixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return false;
@@ -100,6 +160,11 @@ public static class EventManager {
     return false;
   }
 
+  /// <summary>
+  /// Subscribes a callback to a player event. Handlers are invoked for player-related events.
+  /// </summary>
+  /// <param name="eventType">The player event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void On(PlayerEvents eventType, Action<PlayerData> callback) {
     if (callback == null) return;
@@ -113,6 +178,12 @@ public static class EventManager {
     else list.Add(ph);
   }
 
+  /// <summary>
+  /// Unsubscribes a callback from a player event.
+  /// </summary>
+  /// <param name="eventType">The player event type to unsubscribe from.</param>
+  /// <param name="callback">The callback to remove.</param>
+  /// <returns>True if the callback was removed; otherwise, false.</returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool Off(PlayerEvents eventType, Action<PlayerData> callback) {
     if (callback == null) return false;
@@ -127,6 +198,11 @@ public static class EventManager {
     return false;
   }
 
+  /// <summary>
+  /// Subscribes a callback to a server event. Handlers are invoked for server-wide events.
+  /// </summary>
+  /// <param name="eventType">The server event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void On(ServerEvents eventType, Action callback) {
     if (callback == null) return;
@@ -140,6 +216,11 @@ public static class EventManager {
     else list.Add(ph);
   }
 
+  /// <summary>
+  /// Subscribes a callback with a string parameter to a server event.
+  /// </summary>
+  /// <param name="eventType">The server event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void On(ServerEvents eventType, Action<string> callback) {
     if (callback == null) return;
@@ -153,6 +234,12 @@ public static class EventManager {
     else list.Add(ph);
   }
 
+  /// <summary>
+  /// Unsubscribes a callback from a server event.
+  /// </summary>
+  /// <param name="eventType">The server event type to unsubscribe from.</param>
+  /// <param name="callback">The callback to remove.</param>
+  /// <returns>True if the callback was removed; otherwise, false.</returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool Off(ServerEvents eventType, Action callback) {
     if (callback == null) return false;
@@ -167,6 +254,12 @@ public static class EventManager {
     return false;
   }
 
+  /// <summary>
+  /// Unsubscribes a callback with a string parameter from a server event.
+  /// </summary>
+  /// <param name="eventType">The server event type to unsubscribe from.</param>
+  /// <param name="callback">The callback to remove.</param>
+  /// <returns>True if the callback was removed; otherwise, false.</returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool Off(ServerEvents eventType, Action<string> callback) {
     if (callback == null) return false;
@@ -181,6 +274,11 @@ public static class EventManager {
     return false;
   }
 
+  /// <summary>
+  /// Subscribes a callback to a prefix event for a single invocation. The handler is automatically removed after being called once.
+  /// </summary>
+  /// <param name="eventType">The prefix event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke once when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Once(PrefixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return;
@@ -195,6 +293,11 @@ public static class EventManager {
     On(eventType, wrapped);
   }
 
+  /// <summary>
+  /// Subscribes a callback to a postfix event for a single invocation. The handler is automatically removed after being called once.
+  /// </summary>
+  /// <param name="eventType">The postfix event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke once when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Once(PostfixEvents eventType, Action<NativeArray<Entity>> callback) {
     if (callback == null) return;
@@ -209,6 +312,11 @@ public static class EventManager {
     On(eventType, wrapped);
   }
 
+  /// <summary>
+  /// Subscribes a callback to a player event for a single invocation. The handler is automatically removed after being called once.
+  /// </summary>
+  /// <param name="eventType">The player event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke once when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Once(PlayerEvents eventType, Action<PlayerData> callback) {
     if (callback == null) return;
@@ -223,6 +331,11 @@ public static class EventManager {
     On(eventType, wrapped);
   }
 
+  /// <summary>
+  /// Subscribes a callback to a server event for a single invocation. The handler is automatically removed after being called once.
+  /// </summary>
+  /// <param name="eventType">The server event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke once when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Once(ServerEvents eventType, Action callback) {
     if (callback == null) return;
@@ -237,6 +350,11 @@ public static class EventManager {
     On(eventType, wrapped);
   }
 
+  /// <summary>
+  /// Subscribes a callback with a string parameter to a server event for a single invocation. The handler is automatically removed after being called once.
+  /// </summary>
+  /// <param name="eventType">The server event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke once when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Once(ServerEvents eventType, Action<string> callback) {
     if (callback == null) return;
@@ -251,6 +369,11 @@ public static class EventManager {
     On(eventType, wrapped);
   }
 
+  /// <summary>
+  /// Emits a prefix event, invoking all registered handlers for the specified event type.
+  /// </summary>
+  /// <param name="eventType">The prefix event type to emit.</param>
+  /// <param name="entityArray">The array of entities associated with the event.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(PrefixEvents eventType, NativeArray<Entity> entityArray) {
     if (!_prefixHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
@@ -259,6 +382,11 @@ public static class EventManager {
     }
   }
 
+  /// <summary>
+  /// Emits a postfix event, invoking all registered handlers for the specified event type.
+  /// </summary>
+  /// <param name="eventType">The postfix event type to emit.</param>
+  /// <param name="entityArray">The array of entities associated with the event.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(PostfixEvents eventType, NativeArray<Entity> entityArray) {
     if (!_postfixHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
@@ -267,6 +395,11 @@ public static class EventManager {
     }
   }
 
+  /// <summary>
+  /// Emits a player event, invoking all registered handlers for the specified event type.
+  /// </summary>
+  /// <param name="eventType">The player event type to emit.</param>
+  /// <param name="playerData">The player data associated with the event.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(PlayerEvents eventType, PlayerData playerData) {
     if (!_playerHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
@@ -275,6 +408,10 @@ public static class EventManager {
     }
   }
 
+  /// <summary>
+  /// Emits a server event, invoking all registered handlers for the specified event type.
+  /// </summary>
+  /// <param name="eventType">The server event type to emit.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(ServerEvents eventType) {
     if (!_serverHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
@@ -289,6 +426,11 @@ public static class EventManager {
     }
   }
 
+  /// <summary>
+  /// Emits a server event with a string parameter, invoking all registered handlers for the specified event type.
+  /// </summary>
+  /// <param name="eventType">The server event type to emit.</param>
+  /// <param name="data">The string data to pass to handlers.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(ServerEvents eventType, string data) {
     if (!_serverHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
@@ -304,6 +446,11 @@ public static class EventManager {
   }
 
   // --- Custom event methods (optimized) ---
+  /// <summary>
+  /// Creates an <see cref="EventHandlerInfo"/> for a custom event handler, compiling a fast invoker and extracting type information.
+  /// </summary>
+  /// <param name="callback">The delegate to wrap.</param>
+  /// <returns>The created <see cref="EventHandlerInfo"/>.</returns>
   private static EventHandlerInfo CreateHandlerInfo(Delegate callback) {
     var invokeMethod = callback.GetType().GetMethod("Invoke");
     var parameters = invokeMethod.GetParameters();
@@ -343,6 +490,11 @@ public static class EventManager {
     };
   }
 
+  /// <summary>
+  /// Subscribes a delegate to a custom event by name.
+  /// </summary>
+  /// <param name="eventName">The name of the custom event.</param>
+  /// <param name="callback">The delegate to invoke when the event is emitted.</param>
   public static void On(string eventName, Delegate callback) {
     if (string.IsNullOrWhiteSpace(eventName)) {
       Log.Warning("EventManager: Event name cannot be null or empty");
@@ -364,6 +516,12 @@ public static class EventManager {
     }
   }
 
+  /// <summary>
+  /// Unsubscribes a delegate from a custom event by name.
+  /// </summary>
+  /// <param name="eventName">The name of the custom event.</param>
+  /// <param name="callback">The delegate to remove.</param>
+  /// <returns>True if the delegate was removed; otherwise, false.</returns>
   public static bool Off(string eventName, Delegate callback) {
     if (string.IsNullOrWhiteSpace(eventName) || callback == null) return false;
 
@@ -380,6 +538,11 @@ public static class EventManager {
     return false;
   }
 
+  /// <summary>
+  /// Subscribes a delegate to a custom event for a single invocation. The handler is automatically removed after being called once.
+  /// </summary>
+  /// <param name="eventName">The name of the custom event.</param>
+  /// <param name="callback">The delegate to invoke once when the event is emitted.</param>
   public static void Once(string eventName, Delegate callback) {
     if (string.IsNullOrWhiteSpace(eventName) || callback == null) return;
 
@@ -402,6 +565,11 @@ public static class EventManager {
     On(eventName, wrapped);
   }
 
+  /// <summary>
+  /// Emits a custom event by name, invoking all registered handlers with the provided data.
+  /// </summary>
+  /// <param name="eventName">The name of the custom event to emit.</param>
+  /// <param name="data">The data to pass to handlers (optional).</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(string eventName, object data = null) {
     if (string.IsNullOrWhiteSpace(eventName)) {
@@ -439,6 +607,11 @@ public static class EventManager {
 
   // --- Utility Methods ---
 
+  /// <summary>
+  /// Gets the number of subscribers for a custom event by name.
+  /// </summary>
+  /// <param name="eventName">The name of the custom event.</param>
+  /// <returns>The number of subscribers.</returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GetSubscriberCount(string eventName) {
     if (string.IsNullOrWhiteSpace(eventName)) return 0;
@@ -447,28 +620,57 @@ public static class EventManager {
     }
   }
 
+  /// <summary>
+  /// Gets the number of subscribers for a prefix event.
+  /// </summary>
+  /// <param name="eventType">The prefix event type.</param>
+  /// <returns>The number of subscribers.</returns>
   public static int GetSubscriberCount(PrefixEvents eventType) {
     return _prefixHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
   }
 
+  /// <summary>
+  /// Gets the number of subscribers for a postfix event.
+  /// </summary>
+  /// <param name="eventType">The postfix event type.</param>
+  /// <returns>The number of subscribers.</returns>
   public static int GetSubscriberCount(PostfixEvents eventType) {
     return _postfixHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
   }
 
+  /// <summary>
+  /// Gets the number of subscribers for a player event.
+  /// </summary>
+  /// <param name="eventType">The player event type.</param>
+  /// <returns>The number of subscribers.</returns>
   public static int GetSubscriberCount(PlayerEvents eventType) {
     return _playerHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
   }
 
+  /// <summary>
+  /// Gets the number of subscribers for a server event.
+  /// </summary>
+  /// <param name="eventType">The server event type.</param>
+  /// <returns>The number of subscribers.</returns>
   public static int GetSubscriberCount(ServerEvents eventType) {
     return _serverHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
   }
 
+  /// <summary>
+  /// Gets a collection of all registered custom event names.
+  /// </summary>
+  /// <returns>An enumerable of registered event names.</returns>
   public static IEnumerable<string> GetRegisteredEvents() {
     lock (_customLock) {
       return [.. _customHandlers.Keys];
     }
   }
 
+  /// <summary>
+  /// Removes all handlers for a specific custom event by name.
+  /// </summary>
+  /// <param name="eventName">The name of the custom event to clear.</param>
+  /// <returns>True if the event was cleared; otherwise, false.</returns>
   public static bool ClearEvent(string eventName) {
     if (string.IsNullOrWhiteSpace(eventName)) return false;
     lock (_customLock) {
@@ -476,6 +678,9 @@ public static class EventManager {
     }
   }
 
+  /// <summary>
+  /// Removes all custom events and their handlers from the event manager.
+  /// </summary>
   public static void ClearAllEvents() {
     lock (_customLock) {
       int count = _customHandlers.Count;
@@ -484,6 +689,10 @@ public static class EventManager {
     }
   }
 
+  /// <summary>
+  /// Gets statistics for all custom events, including the number of handlers for each event.
+  /// </summary>
+  /// <returns>A dictionary mapping event names to their handler counts.</returns>
   public static Dictionary<string, int> GetEventStatistics() {
     var stats = new Dictionary<string, int>();
     lock (_customLock) {
@@ -492,6 +701,11 @@ public static class EventManager {
     return stats;
   }
 
+  /// <summary>
+  /// Unregisters all event handlers associated with a specific assembly from all event types.
+  /// </summary>
+  /// <param name="assembly">The assembly to unregister. If null, uses the calling assembly.</param>
+  /// <returns>The number of handlers removed.</returns>
   public static int UnregisterAssembly(Assembly assembly = null) {
     Assembly asm;
     if (assembly == null) {

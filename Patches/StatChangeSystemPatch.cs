@@ -1,10 +1,7 @@
 using ProjectM.Gameplay.Systems;
-using ProjectM;
-using Unity.Entities;
 using Unity.Collections;
 using HarmonyLib;
 using System;
-using System.Collections.Generic;
 using ScarletCore.Events;
 using ScarletCore.Utils;
 using ScarletCore.Systems;

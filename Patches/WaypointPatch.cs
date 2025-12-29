@@ -1,19 +1,14 @@
 using System;
 using HarmonyLib;
 using ProjectM;
-using ProjectM.Network;
 using ScarletCore.Events;
-using ScarletCore.Services;
 using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Unity.Collections;
-using Unity.Entities;
-using Unity.Mathematics;
-
 namespace ScarletCore.Patches;
 
 [HarmonyPatch]
-public static class WaypointPatch {
+internal static class WaypointPatch {
   [HarmonyPatch(typeof(TeleportToWaypointEventSystem), nameof(TeleportToWaypointEventSystem.OnUpdate))]
   [HarmonyPrefix]
   public static void Prefix(TeleportToWaypointEventSystem __instance) {

@@ -104,11 +104,23 @@ public class InventoryService {
     RemoveItemAtSlot(entity, slot, 0); // Default to removing all items at the slot
   }
 
+
+  /// <summary>
+  /// Removes a specified amount of items from a given inventory slot of the specified entity.
+  /// </summary>
+  /// <param name="entity">The entity whose inventory will be modified.</param>
+  /// <param name="slot">The inventory slot index to remove items from.</param>
+  /// <param name="amount">The number of items to remove. If zero or less, removes all items at the slot.</param>
   public static void RemoveItemAtSlot(Entity entity, int slot, int amount) {
     if (!TryGetItemAtSlot(entity, slot, out var item)) return;
     InventoryUtilitiesServer.TryRemoveItemAtIndex(EntityManager, entity, item.ItemType, amount <= 0 ? item.Amount : amount, slot, true);
   }
 
+  /// <summary>
+  /// Removes all items from the specified inventory slot of the given entity.
+  /// </summary>
+  /// <param name="entity">The entity whose inventory slot will be cleared.</param>
+  /// <param name="slot">The inventory slot index to clear.</param>
   public static void ClearSlot(Entity entity, int slot) {
     InventoryUtilitiesServer.ClearSlot(EntityManager, entity, slot);
   }

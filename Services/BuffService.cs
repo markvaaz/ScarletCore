@@ -20,6 +20,7 @@ public static class BuffService {
   /// <param name="entity">Target entity to receive the buff</param>
   /// <param name="prefabGUID">GUID of the buff prefab to apply</param>
   /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <param name="buffEntity">Output parameter that will contain the buff entity if applied</param>
   /// <returns>True if buff was successfully applied, false otherwise</returns>
   public static bool TryApplyBuff(Entity entity, PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
     buffEntity = Entity.Null; // Initialize output parameter
@@ -122,8 +123,6 @@ public static class BuffService {
   /// <param name="buffEntity">Output parameter that will contain the buff entity if applied</param>
   /// <returns>True if the buff was successfully applied and cleaned, false otherwise</returns>
   public static bool TryApplyCleanBuff(Entity entity, PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
-    var entityManager = GameSystems.EntityManager;
-
     if (!TryApplyBuff(entity, prefabGUID, duration, out buffEntity) || !buffEntity.Exists()) {
       return false;
     }
@@ -176,6 +175,14 @@ public static class BuffService {
     return true;
   }
 
+
+  /// <summary>
+  /// Attempts to apply a 'clean' buff to the specified entity with an optional duration, removing extra gameplay components.
+  /// </summary>
+  /// <param name="entity">The entity to which the buff will be applied.</param>
+  /// <param name="prefabGUID">The GUID of the buff to apply.</param>
+  /// <param name="duration">The duration of the buff in seconds (default is 0 for instant or indefinite).</param>
+  /// <returns>True if the clean buff was successfully applied; otherwise, false.</returns>
   public static bool TryApplyCleanBuff(Entity entity, PrefabGUID prefabGUID, float duration = 0) {
     return TryApplyCleanBuff(entity, prefabGUID, duration, out _);
   }

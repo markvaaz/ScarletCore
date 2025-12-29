@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using HarmonyLib;
 using ProjectM.Gameplay.WarEvents;
-using ProjectM.Shared.WarEvents;
 using ScarletCore.Events;
 using ScarletCore.Systems;
 using ScarletCore.Utils;
@@ -11,7 +9,7 @@ using Unity.Collections;
 namespace ScarletCore.Patches;
 
 [HarmonyPatch]
-public static class WarEventSystemPatch {
+internal static class WarEventSystemPatch {
   [HarmonyPatch(typeof(WarEventSystem), nameof(WarEventSystem.OnUpdate))]
   [HarmonyPrefix]
   public static void Prefix(WarEventSystem __instance) {

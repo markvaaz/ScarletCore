@@ -9,7 +9,7 @@ using Unity.Collections;
 namespace ScarletCore.Patches;
 
 [HarmonyPatch]
-public static class InteractPatch {
+internal static class InteractPatch {
   [HarmonyPatch(typeof(InteractValidateAndStopSystemServer), nameof(InteractValidateAndStopSystemServer.OnUpdate))]
   [HarmonyPrefix]
   public static void Prefix(InteractValidateAndStopSystemServer __instance) {

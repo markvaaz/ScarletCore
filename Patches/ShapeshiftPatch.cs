@@ -1,13 +1,9 @@
 using System;
 using HarmonyLib;
 using ProjectM;
-using ProjectM.Network;
-using ProjectM.Shared.Systems;
 using ScarletCore.Events;
-using ScarletCore.Services;
 using ScarletCore.Systems;
 using ScarletCore.Utils;
-using Stunlock.Core;
 using Unity.Collections;
 using Unity.Entities;
 

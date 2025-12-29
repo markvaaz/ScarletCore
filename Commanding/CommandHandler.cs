@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using ProjectM.Network;
 using ScarletCore.Data;
+using ScarletCore.Events;
 using ScarletCore.Localization;
 using ScarletCore.Utils;
 using Stunlock.Core;
@@ -14,26 +15,42 @@ using Unity.Mathematics;
 
 namespace ScarletCore.Commanding;
 
+/// <summary>
+/// Lookup key for stored commands used by <see cref="CommandHandler"/>.
+/// </summary>
+/// <param name="Language">The language the command is registered for.</param>
+/// <param name="TokenCount">Number of tokens in the command name.</param>
+/// <param name="CommandName">Lower-cased full command name (including group when present).</param>
 internal readonly record struct CommandLookupKey(Language Language, int TokenCount, string CommandName);
 
+/// <summary>
+/// Static command system responsible for registering, finding and executing chat commands.
+/// </summary>
 public static class CommandHandler {
+  /// <summary>The prefix used to identify chat commands (e.g. '.')</summary>
   public const char CommandPrefix = '.';
+
   private static readonly Dictionary<CommandLookupKey, List<CommandInfo>> CommandsByKey = [];
   private static readonly Dictionary<(int TokenCount, string CommandName), List<CommandInfo>> FallbackCommandsByKey = [];
   private static readonly Dictionary<Assembly, List<CommandLookupKey>> CommandKeysByAssembly = [];
   private static readonly Dictionary<Assembly, List<(int, string)>> FallbackKeysByAssembly = [];
 
+  /// <summary>Initializes the command system by registering localization keys and discovering commands.</summary>
   internal static void Initialize() {
     RegisterLocalizationKeys();
     RegisterAll();
   }
 
+  /// <summary>Handles multiple chat message entities (batch entry for the messaging system).</summary>
+  /// <param name="messageEntities">Array of chat message entities to process.</param>
   internal static void HandleMessageEvents(NativeArray<Entity> messageEntities) {
     foreach (var messageEntity in messageEntities) {
       HandleChat(messageEntity);
     }
   }
 
+  /// <summary>Processes a single chat message entity and invokes commands when detected.</summary>
+  /// <param name="messageEntity">The chat message entity to inspect.</param>
   private static void HandleChat(Entity messageEntity) {
     try {
       if (!messageEntity.Exists() || !messageEntity.Has<ChatMessageEvent>()) return;
@@ -66,6 +83,12 @@ public static class CommandHandler {
     }
   }
 
+  /// <summary>
+  /// Processes a command string from a <see cref="PlayerData"/> sender and invokes the matching method if found.
+  /// </summary>
+  /// <param name="player">The player who sent the command.</param>
+  /// <param name="fullMessageText">The full raw message text, including the prefix.</param>
+  /// <param name="messageEntity">The chat message entity (used to destroy the message when consumed).</param>
   internal static void HandleCommand(PlayerData player, string fullMessageText, Entity messageEntity) {
     var text = fullMessageText.Trim();
     if (string.IsNullOrEmpty(text) || !text.StartsWith(CommandPrefix)) return;
@@ -159,6 +182,7 @@ public static class CommandHandler {
     }
 
     try {
+      EventManager.Emit(PlayerEvents.CommandUsed, player);
       method.Invoke(null, paramValues);
       Log.Message($"[CommandHandler] {player.Name} executed command: {commandInfo.FullCommandName} with args: {string.Join(", ", args)}");
     } catch (Exception ex) {
@@ -180,6 +204,10 @@ public static class CommandHandler {
     }
   }
 
+  /// <summary>
+  /// Scans an assembly for command definitions and registers them with the command system.
+  /// </summary>
+  /// <param name="assembly">Assembly to scan; defaults to the calling assembly.</param>
   public static void RegisterAll(Assembly assembly = null) {
     assembly ??= Assembly.GetCallingAssembly();
 
@@ -240,6 +268,10 @@ public static class CommandHandler {
     Log.Message($"[CommandHandler] Registered {commandKeys.Count} commands from assembly '{assembly.GetName().Name}'.");
   }
 
+  /// <summary>
+  /// Unregisters all commands that were registered from the given assembly.
+  /// </summary>
+  /// <param name="assembly">Assembly to remove; defaults to the calling assembly.</param>
   public static void UnregisterAssembly(Assembly assembly = null) {
     assembly ??= Assembly.GetCallingAssembly();
     UnregisterAssemblyInternal(assembly);
@@ -420,6 +452,10 @@ public static class CommandHandler {
     return text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
   }
 
+  /// <summary>
+  /// Finds the best matching <see cref="CommandInfo"/> for the provided tokens and player language.
+  /// Returns null when no match is found.
+  /// </summary>
   internal static CommandInfo FindCommand(Language playerLanguage, ReadOnlySpan<string> tokens) {
     if (tokens.Length == 0) return null;
 
@@ -595,6 +631,13 @@ public static class CommandHandler {
     return score;
   }
 
+  /// <summary>
+  /// Attempts to convert a string token to the target parameter type using <see cref="TypeConverter"/>.
+  /// </summary>
+  /// <param name="input">Input token.</param>
+  /// <param name="targetType">Target type.</param>
+  /// <param name="result">Converted value on success.</param>
+  /// <returns>True if conversion succeeded, otherwise false.</returns>
   private static bool TryConvertParameter(string input, Type targetType, out object result) {
     result = null;
 
@@ -606,6 +649,9 @@ public static class CommandHandler {
     }
   }
 
+  /// <summary>
+  /// Splits an input string into tokens, honoring quoted segments as single tokens.
+  /// </summary>
   private static string[] Tokenize(string input) {
     var tokens = new List<string>();
     bool inQuotes = false;
@@ -629,6 +675,9 @@ public static class CommandHandler {
     return [.. tokens];
   }
 
+  /// <summary>
+  /// Builds a colored usage string for a command used by help/error messages.
+  /// </summary>
   private static string GetCommandUsages(CommandInfo info) {
     var usage = new System.Text.StringBuilder();
     usage.Append("<mark=#ff3d3d15>");
@@ -658,6 +707,9 @@ public static class CommandHandler {
     return usage.ToString();
   }
 
+  /// <summary>
+  /// Formats a command name with its parameters for display (showing optional/default values where applicable).
+  /// </summary>
   private static string FormatCommandWithParameters(CommandInfo command) {
     var result = new System.Text.StringBuilder();
     result.Append(command.FullCommandName);
@@ -1320,7 +1372,7 @@ public static class CommandHandler {
   [CommandAlias("dil", language: Language.Turkish, aliases: ["dl"], description: "Tercih ettiğiniz dili ayarlayın (örn: .dil portuguese)")]
   [CommandAlias("мова", language: Language.Ukrainian, aliases: ["мв"], description: "Встановіть бажану мову (напр: .мова portuguese)")]
   [CommandAlias("ngônngữ", language: Language.Vietnamese, aliases: ["nn"], description: "Đặt ngôn ngữ ưa thích của bạn (ví dụ: .ngônngữ portuguese)")]
-  public static void SetLanguage(CommandContext ctx, string language = "") {
+  private static void SetLanguage(CommandContext ctx, string language = "") {
     var player = ctx.Sender;
     if (player == null) {
       ctx.ReplyError(Localizer.Get(ctx.Sender, LocalizationKey.MustBePlayer));

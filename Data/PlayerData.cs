@@ -16,10 +16,7 @@ namespace ScarletCore.Data;
 /// Represents comprehensive player data and provides convenient access to player-related information.
 /// This class serves as a wrapper around Unity ECS entities to simplify player data management.
 /// </summary>
-/// <summary>
-/// Creates a new instance of PlayerData.
-/// </summary>
-public class PlayerData() {
+public class PlayerData {
   /// <summary>
   /// The underlying Unity ECS entity representing the user.
   /// This is the primary entity that contains all player-related components.
@@ -122,6 +119,11 @@ public class PlayerData() {
   /// </summary>
   public DateTime LastConnected => new DateTime(User.TimeLastConnected, DateTimeKind.Utc).ToLocalTime();
 
+  /// <summary>
+  /// Gets the player's preferred localization language.
+  /// Attempts to retrieve the player's explicit language setting and, if it is not set (<see cref="Language.None"/>), falls back to the current server language.
+  /// </summary>
+  /// <returns>The player's language preference, or the server's current language if the player has not chosen one.</returns>
   public Language Language {
     get {
       var lang = Localizer.GetPlayerLanguage(this);
@@ -153,6 +155,17 @@ public class PlayerData() {
   /// Provides access to the EntityInput component which contains all player input data.
   /// </summary>
   public EntityInput Input => CharacterEntity.Read<EntityInput>();
+
+
+  /// <summary>
+  /// Sets a tag at a specific index in the player's name, allowing for multiple tags or custom tag placement.
+  /// </summary>
+  /// <param name="tag">The tag text to insert into the player's name.</param>
+  /// <param name="tagIndex">The index at which to insert the tag (0-based).</param>
+  /// <returns>True if the tag was successfully set; otherwise, false.</returns>
+  public bool SetNameTag(string tag, int tagIndex) {
+    return PlayerService.SetTagAtIndex(this, tag, tagIndex);
+  }
 
   /// <summary>
   /// Gets the player's inventory items as a dynamic buffer.
@@ -352,42 +365,84 @@ public class PlayerData() {
     MessageService.Send(this, message);
   }
 
+  /// <summary>
+  /// Sends an error-styled message to the player using <see cref="MessageService.SendError(PlayerData, string)"/>.
+  /// </summary>
+  /// <param name="message">The message text to send.</param>
   public void SendErrorMessage(string message) {
     MessageService.SendError(this, message);
   }
 
+  /// <summary>
+  /// Sends an informational-styled message to the player using <see cref="MessageService.SendInfo(PlayerData, string)"/>.
+  /// Ignores empty or whitespace-only messages.
+  /// </summary>
+  /// <param name="message">The message text to send.</param>
   public void SendInfoMessage(string message) {
     MessageService.SendInfo(this, message);
   }
 
+  /// <summary>
+  /// Sends a success-styled message to the player using <see cref="MessageService.SendSuccess(PlayerData, string)"/>.
+  /// </summary>
+  /// <param name="message">The message text to send.</param>
   public void SendSuccessMessage(string message) {
     MessageService.SendSuccess(this, message);
   }
 
+  /// <summary>
+  /// Sends a warning-styled message to the player using <see cref="MessageService.SendWarning(PlayerData, string)"/>.
+  /// </summary>
+  /// <param name="message">The message text to send.</param>
   public void SendWarningMessage(string message) {
     MessageService.SendWarning(this, message);
   }
 
+  /// <summary>
+  /// Sends a localized message to the player by looking up the given localization key and formatting with arguments.
+  /// </summary>
+  /// <param name="key">The localization key to look up.</param>
+  /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedMessage(string key, params object[] args) {
     var localized = Localizer.Get(this, key, args);
     SendMessage(localized);
   }
 
+  /// <summary>
+  /// Sends a localized error message to the player by looking up the given key and formatting with arguments.
+  /// </summary>
+  /// <param name="key">The localization key to look up.</param>
+  /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedErrorMessage(string key, params object[] args) {
     var localized = Localizer.Get(this, key, args);
     SendErrorMessage(localized);
   }
 
+  /// <summary>
+  /// Sends a localized informational message to the player by looking up the given key and formatting with arguments.
+  /// </summary>
+  /// <param name="key">The localization key to look up.</param>
+  /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedInfoMessage(string key, params object[] args) {
     var localized = Localizer.Get(this, key, args);
     SendInfoMessage(localized);
   }
 
+  /// <summary>
+  /// Sends a localized success message to the player by looking up the given key and formatting with arguments.
+  /// </summary>
+  /// <param name="key">The localization key to look up.</param>
+  /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedSuccessMessage(string key, params object[] args) {
     var localized = Localizer.Get(this, key, args);
     SendSuccessMessage(localized);
   }
 
+  /// <summary>
+  /// Sends a localized warning message to the player by looking up the given key and formatting with arguments.
+  /// </summary>
+  /// <param name="key">The localization key to look up.</param>
+  /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedWarningMessage(string key, params object[] args) {
     var localized = Localizer.Get(this, key, args);
     SendWarningMessage(localized);
@@ -397,15 +452,15 @@ public class PlayerData() {
   /// Dictionary to store custom data from different mods.
   /// Uses the calling assembly name as the key to prevent conflicts between mods.
   /// </summary>
-  private Dictionary<string, object> CustomData { get; set; } = [];
+  private Dictionary<string, object> CustomData { get; set; } = new Dictionary<string, object>();
 
   /// <summary>
   /// Sets or updates custom data for the calling mod.
   /// Each mod gets its own namespace based on the assembly name to prevent conflicts.
   /// </summary>
-  /// <typeparam name="T">The type of data to store</typeparam>
-  /// <param name="value">The data value to store</param>
-  /// <returns>The stored value for method chaining</returns>
+  /// <typeparam name="T">The type of data to store.</typeparam>
+  /// <param name="value">The data value to store.</param>
+  /// <returns>The stored value for method chaining.</returns>
   /// <example>
   /// // Store custom mod data
   /// var playerLevel = playerData.SetData(25);
@@ -428,8 +483,8 @@ public class PlayerData() {
   /// Retrieves custom data for the calling mod.
   /// Returns the default value for the type if no data is found or type mismatch occurs.
   /// </summary>
-  /// <typeparam name="T">The expected type of the stored data</typeparam>
-  /// <returns>The stored data or default(T) if not found</returns>
+  /// <typeparam name="T">The expected type of the stored data.</typeparam>
+  /// <returns>The stored data or default(T) if not found.</returns>
   /// <example>
   /// // Retrieve custom mod data
   /// var playerLevel = playerData.GetData&lt;int&gt;();
@@ -453,9 +508,9 @@ public class PlayerData() {
   /// Allows mods to access data stored by other mods if they know the assembly name.
   /// Returns the default value for the type if no data is found or type mismatch occurs.
   /// </summary>
-  /// <typeparam name="T">The expected type of the stored data</typeparam>
-  /// <param name="assemblyName">The name of the assembly/mod to retrieve data from</param>
-  /// <returns>The stored data or default(T) if not found</returns>
+  /// <typeparam name="T">The expected type of the stored data.</typeparam>
+  /// <param name="assemblyName">The name of the assembly/mod to retrieve data from.</param>
+  /// <returns>The stored data or default(T) if not found.</returns>
   /// <example>
   /// // Retrieve data from another mod
   /// var otherModConfig = playerData.GetDataFrom&lt;SomeConfig&gt;("OtherModName");

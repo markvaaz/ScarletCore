@@ -165,19 +165,19 @@ public class ScheduledAction {
 /// </summary>
 public static class ActionScheduler {
   // Collections to manage scheduled actions and cleanup
-  private static readonly List<ScheduledAction> _scheduledActions = new();
-  private static readonly List<ScheduledAction> _actionsToRemove = new();
+  private static readonly List<ScheduledAction> _scheduledActions = [];
+  private static readonly List<ScheduledAction> _actionsToRemove = [];
 
   // Cache for fast O(1) lookups by ActionId - PERFORMANCE OPTIMIZATION
-  private static readonly Dictionary<ActionId, ScheduledAction> _actionLookup = new();
+  private static readonly Dictionary<ActionId, ScheduledAction> _actionLookup = [];
 
   // Reusable list to avoid allocations in Execute() - PERFORMANCE OPTIMIZATION  
-  private static readonly List<ScheduledAction> _activeActions = new();
+  private static readonly List<ScheduledAction> _activeActions = [];
 
   /// <summary>
   /// Removes all scheduled actions associated with a specific assembly.
   /// </summary>
-  /// <param name="asm">Assembly whose actions should be removed</param>
+  /// <param name="assembly">Assembly whose actions should be removed</param>
   public static void UnregisterAssembly(Assembly assembly = null) {
     Assembly asm;
     if (assembly == null) {
@@ -642,9 +642,10 @@ public static class ActionScheduler {
   /// <param name="maxExecutions">Maximum number of executions (-1 for infinite)</param>
   /// <returns>ActionId for controlling the scheduled action</returns>
   public static ActionId RepeatingRandom(Action<Action> action, float minIntervalSeconds, float maxIntervalSeconds, int maxExecutions = -1) {
-    var scheduledAction = new ScheduledAction(action, ActionType.RepeatingSeconds, GetRandomInterval(minIntervalSeconds, maxIntervalSeconds), maxExecutions: maxExecutions);
-    scheduledAction.MinInterval = minIntervalSeconds;
-    scheduledAction.MaxInterval = maxIntervalSeconds;
+    var scheduledAction = new ScheduledAction(action, ActionType.RepeatingSeconds, GetRandomInterval(minIntervalSeconds, maxIntervalSeconds), maxExecutions: maxExecutions) {
+      MinInterval = minIntervalSeconds,
+      MaxInterval = maxIntervalSeconds
+    };
     AddActionInternal(scheduledAction);
     return scheduledAction.Id;
   }
@@ -658,9 +659,10 @@ public static class ActionScheduler {
   /// <param name="maxExecutions">Maximum number of executions (-1 for infinite)</param>
   /// <returns>ActionId for controlling the scheduled action</returns>
   public static ActionId RepeatingRandom(Action action, float minIntervalSeconds, float maxIntervalSeconds, int maxExecutions = -1) {
-    var scheduledAction = new ScheduledAction(action, ActionType.RepeatingSeconds, GetRandomInterval(minIntervalSeconds, maxIntervalSeconds), maxExecutions: maxExecutions);
-    scheduledAction.MinInterval = minIntervalSeconds;
-    scheduledAction.MaxInterval = maxIntervalSeconds;
+    var scheduledAction = new ScheduledAction(action, ActionType.RepeatingSeconds, GetRandomInterval(minIntervalSeconds, maxIntervalSeconds), maxExecutions: maxExecutions) {
+      MinInterval = minIntervalSeconds,
+      MaxInterval = maxIntervalSeconds
+    };
     AddActionInternal(scheduledAction);
     return scheduledAction.Id;
   }
@@ -682,20 +684,65 @@ public static class ActionScheduler {
 /// Represents a step in an action sequence with its type and parameters.
 /// </summary>
 public class SequenceStep {
+  /// <summary>
+  /// Defines the types of steps that can be used in an action sequence.
+  /// </summary>
   public enum StepType {
+    /// <summary>
+    /// Executes a simple action without cancellation support.
+    /// </summary>
     Action,
+    /// <summary>
+    /// Executes an action that supports cancellation via a callback.
+    /// </summary>
     ActionWithCancel,
+    /// <summary>
+    /// Waits for a specified number of seconds before proceeding to the next step.
+    /// </summary>
     WaitSeconds,
+    /// <summary>
+    /// Waits for a specified number of frames before proceeding to the next step.
+    /// </summary>
     WaitFrames,
+    /// <summary>
+    /// Waits for a random number of seconds (between a minimum and maximum) before proceeding to the next step.
+    /// </summary>
     WaitRandomSeconds
   }
 
+  /// <summary>
+  /// The type of step to execute in the sequence (e.g., action, wait, etc.).
+  /// </summary>
   public StepType Type { get; set; }
+
+  /// <summary>
+  /// The action to execute for this step (if applicable).
+  /// </summary>
   public Action Action { get; set; }
+
+  /// <summary>
+  /// The action with cancel support to execute for this step (if applicable).
+  /// </summary>
   public Action<Action> ActionWithCancel { get; set; }
+
+  /// <summary>
+  /// The number of seconds to wait for this step (used for WaitSeconds).
+  /// </summary>
   public float WaitSeconds { get; set; }
+
+  /// <summary>
+  /// The number of frames to wait for this step (used for WaitFrames).
+  /// </summary>
   public int WaitFrames { get; set; }
+
+  /// <summary>
+  /// The minimum number of seconds to wait for this step (used for WaitRandomSeconds).
+  /// </summary>
   public float MinWaitSeconds { get; set; }
+
+  /// <summary>
+  /// The maximum number of seconds to wait for this step (used for WaitRandomSeconds).
+  /// </summary>
   public float MaxWaitSeconds { get; set; }
 }
 
@@ -704,7 +751,7 @@ public class SequenceStep {
 /// Provides a fluent interface for building complex action sequences.
 /// </summary>
 public class ActionSequence {
-  private readonly List<SequenceStep> _steps = new();
+  private readonly List<SequenceStep> _steps = [];
   private int _currentStepIndex = 0;
   private float _waitUntilTime;
   private int _waitUntilFrame;

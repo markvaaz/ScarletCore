@@ -43,36 +43,50 @@ public static class Localizer {
   /// <summary>
   /// Mapping of language enum values to their corresponding names in JSON
   /// </summary>
-  private static readonly Dictionary<Language, string> _languageFileMapping = new() {
-    { Language.Portuguese, "Portuguese" },
-    { Language.English, "English" },
-    { Language.French, "French" },
-    { Language.German, "German" },
-    { Language.Hungarian, "Hungarian" },
-    { Language.Italian, "Italian" },
-    { Language.Japanese, "Japanese" },
-    { Language.Korean, "Korean" },
-    { Language.Latam, "Latam" },
-    { Language.Polish, "Polish" },
-    { Language.Russian, "Russian" },
-    { Language.Spanish, "Spanish" },
-    { Language.ChineseSimplified, "ChineseSimplified" },
-    { Language.ChineseTraditional, "ChineseTraditional" },
-    { Language.Thai, "Thai" },
-    { Language.Turkish, "Turkish" },
-    { Language.Ukrainian, "Ukrainian" },
-    { Language.Vietnamese, "Vietnamese" }
-  };
+  private static readonly Language[] _languages = [
+    Language.Portuguese,
+    Language.English,
+    Language.French,
+    Language.German,
+    Language.Hungarian,
+    Language.Italian,
+    Language.Japanese,
+    Language.Korean,
+    Language.Polish,
+    Language.Russian,
+    Language.Spanish,
+    Language.ChineseSimplified,
+    Language.ChineseTraditional,
+    Language.Thai,
+    Language.Turkish,
+    Language.Ukrainian,
+    Language.Vietnamese,
+  ];
+
+  /// <summary>
+  /// Read-only view of prefab mappings
+  /// </summary>
+  public static IReadOnlyDictionary<int, string> PrefabMappings => _prefabToGuid;
 
   /// <summary>
   /// Get all available languages
   /// </summary>
-  public static Language[] AvailableServerLanguages => [.. _languageFileMapping.Keys];
+  public static Language[] AvailableServerLanguages => _languages;
 
   /// <summary>
   /// Get the current loaded language
   /// </summary>
   public static Language CurrentServerLanguage => _currentServerLanguage;
+
+
+  /// <summary>
+  /// Determines whether the specified language is available for localization.
+  /// </summary>
+  /// <param name="language">The language to check for availability.</param>
+  /// <returns>True if the language is available; otherwise, false.</returns>
+  public static bool IsLanguageAvailable(Language language) {
+    return _languages.Contains(language);
+  }
 
   /// <summary>
   /// Converts a string representation to GameLanguage enum.
@@ -102,7 +116,6 @@ public static class Localizer {
       "ja" or "jp" or "japanese" or "nihongo" => Language.Japanese,
       "ko" or "kr" or "korean" or "hangul" => Language.Korean,
       "es" or "eses" or "spanish" or "espanol" or "español" => Language.Spanish,
-      "esmx" or "latam" or "latinamerican" or "latinamericanspanish" => Language.Latam,
       "pl" or "polish" or "polski" => Language.Polish,
       "ru" or "russian" or "russkiy" or "русский" => Language.Russian,
       "zh" or "zhcn" or "chs" or "chinesesimplified" or "simplifiedchinese" => Language.ChineseSimplified,
@@ -601,7 +614,7 @@ public static class Localizer {
   /// Change the current language at runtime.
   /// </summary>
   public static bool ChangeLanguage(Language language) {
-    if (!_languageFileMapping.ContainsKey(language)) {
+    if (!_languages.Contains(language)) {
       Log.Warning($"Language not supported: {language}");
       return false;
     }
@@ -610,33 +623,4 @@ public static class Localizer {
     Log.Info($"Changed server language to: {language}");
     return true;
   }
-
-  /// <summary>
-  /// Check if a language is available.
-  /// </summary>
-  public static bool IsLanguageAvailable(Language language) {
-    return _languageFileMapping.ContainsKey(language);
-  }
-
-  /// <summary>
-  /// Read-only view of translations (deprecated - for compatibility)
-  /// Returns translations for current server language only
-  /// </summary>
-  [Obsolete("Use GetText methods instead")]
-  public static IReadOnlyDictionary<string, string> Translations {
-    get {
-      var dict = new Dictionary<string, string>();
-      foreach (var kvp in _allTranslations) {
-        if (kvp.Value.TryGetValue(_currentServerLanguage, out var text)) {
-          dict[kvp.Key] = text;
-        }
-      }
-      return dict;
-    }
-  }
-
-  /// <summary>
-  /// Read-only view of prefab mappings
-  /// </summary>
-  public static IReadOnlyDictionary<int, string> PrefabMappings => _prefabToGuid;
 }
