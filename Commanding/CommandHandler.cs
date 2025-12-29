@@ -1248,7 +1248,10 @@ public static class CommandHandler {
   [CommandAlias("trợgiúp", Language.Vietnamese, description: "Hiển thị các lệnh có sẵn")]
   internal static void HelpCommand(CommandContext ctx, string language, int page = 1) {
     var targetLanguage = Localizer.GetLanguageFromString(language);
-    if (targetLanguage == Language.None) targetLanguage = ctx.Sender.Language;
+    if (targetLanguage == Language.None) {
+      ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, language).FormatError());
+      return;
+    }
     HelpCommandInternal(ctx, targetLanguage, page);
   }
 
@@ -1275,7 +1278,7 @@ public static class CommandHandler {
   }
 
   private static void HelpCommandInternal(CommandContext ctx, Language targetLanguage, int page) {
-    const int commandsPerMessage = 5;
+    const int commandsPerMessage = 4;
     const int messagesPerPage = 8;
     const int commandsPerPage = commandsPerMessage * messagesPerPage;
 
@@ -1349,8 +1352,6 @@ public static class CommandHandler {
       ctx.Reply(messageBuilder.ToString());
     }
   }
-
-
 
   [Command("language", language: Language.English, aliases: ["lang"], description: "Set your preferred language (e.g. .language portuguese)")]
   [CommandAlias("linguagem", language: Language.Portuguese, aliases: ["ling"], description: "Defina seu idioma preferido (ex: .linguagem portuguese)")]
