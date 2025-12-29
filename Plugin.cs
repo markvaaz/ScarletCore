@@ -1,12 +1,10 @@
-﻿using System;
-using BepInEx;
+﻿using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
 using ScarletCore.Commanding;
 using ScarletCore.Data;
-using ScarletCore.Events;
-using ScarletCore.Services;
+using ScarletCore.Localization;
 
 namespace ScarletCore;
 
@@ -31,10 +29,10 @@ public class Plugin : BasePlugin {
     Database = new Database(MyPluginInfo.PLUGIN_GUID);
 
     Settings.Section("Language")
-      .Add("PrefabLocalizationLanguage", Language.English, $"Language code for localization. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}")
-      .Add("DefaultPlayerLanguage", Language.English, $"Default language code for new players. Available languages: {string.Join(", ", LocalizationService.AvailableServerLanguages)}")
+      .Add("PrefabLocalizationLanguage", Language.English, $"Language code for localization. Available languages: {string.Join(", ", Localizer.AvailableServerLanguages)}")
+      .Add("DefaultPlayerLanguage", Language.English, $"Default language code for new players. Available languages: {string.Join(", ", Localizer.AvailableServerLanguages)}")
       .Add("WelcomeMessage", "~Welcome to {ServerName}!~\n\nThis server uses ~ScarletMods~ to enhance your experience.\n\nTo get started, please set ~your preferred language~:\n\n{AvailableLanguages}\nUse: ~.language <language>~", "Welcome message shown to players who haven't set their language. Placeholders: {ServerName}, {AvailableLanguages}, {PlayerName}");
-    LocalizationService.Initialize();
+    Localizer.Initialize();
     CommandHandler.Initialize();
   }
 

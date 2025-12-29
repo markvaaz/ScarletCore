@@ -1,7 +1,7 @@
 using System;
 using System.Reflection;
 using ScarletCore.Data;
-using ScarletCore.Services;
+using ScarletCore.Localization;
 
 namespace ScarletCore;
 
@@ -16,10 +16,10 @@ public static class LocalizationExtensions {
     var assembly = GetOriginatingAssembly();
     if (assembly != null) {
       var composite = assembly.GetName().Name + ":" + key.Trim();
-      return LocalizationService.GetByCompositeKey(null, composite, parameters);
+      return Localizer.GetByCompositeKey(null, composite, parameters);
     }
 
-    return LocalizationService.GetText(key, parameters);
+    return Localizer.GetText(key, parameters);
   }
 
   /// <summary>
@@ -28,11 +28,11 @@ public static class LocalizationExtensions {
   /// </summary>
   public static string Localize(this string key, PlayerData player, params object[] parameters) {
     if (string.IsNullOrWhiteSpace(key)) return string.Empty;
-    if (player == null) return LocalizationService.GetText(key, parameters);
+    if (player == null) return Localizer.GetText(key, parameters);
 
     // Try to determine the originating assembly (the caller outside of ScarletCore)
     var assembly = GetOriginatingAssembly();
-    return LocalizationService.Get(player, key, assembly, parameters);
+    return Localizer.Get(player, key, assembly, parameters);
   }
 
   // Find the first stack frame assembly that is not ScarletCore

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Reflection;
 using ProjectM.Network;
 using ScarletCore.Data;
-using ScarletCore.Services;
+using ScarletCore.Localization;
 using ScarletCore.Utils;
 using Stunlock.Core;
 using Unity.Collections;
@@ -798,7 +798,7 @@ public static class CommandHandler {
   }
 
   private static void RegisterLocalizationKeys() {
-    LocalizationService.NewKey(LocalizationKey.CmdRequiresAdmin, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.CmdRequiresAdmin, new Dictionary<Language, string> {
       { Language.English, "This command requires ~administrator privileges~." },
       { Language.Portuguese, "Este comando requer ~privilégios de administrador~." },
       { Language.French, "Cette commande nécessite des ~privilèges d'administrateur~." },
@@ -819,7 +819,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Lệnh này yêu cầu ~quyền quản trị viên~." }
     });
 
-    LocalizationService.NewKey(LocalizationKey.CmdExecutionError, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.CmdExecutionError, new Dictionary<Language, string> {
       { Language.English, "An ~error~ occurred while executing the command." },
       { Language.Portuguese, "Ocorreu um ~erro~ ao executar o comando." },
       { Language.French, "Une ~erreur~ est survenue lors de l'exécution de la commande." },
@@ -840,7 +840,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Đã xảy ra ~lỗi~ khi thực hiện lệnh." }
     });
 
-    LocalizationService.NewKey(LocalizationKey.CmdAvailableUsages, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.CmdAvailableUsages, new Dictionary<Language, string> {
       { Language.English, "~Available usages:~\n{0}" },
       { Language.Portuguese, "~Formas de uso disponíveis:~\n{0}" },
       { Language.French, "~Utilisations disponibles :~\n{0}" },
@@ -861,7 +861,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "~Cách sử dụng có sẵn:~\n{0}" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.CmdInvalidParameter, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.CmdInvalidParameter, new Dictionary<Language, string> {
       { Language.English, "Invalid parameter ~'{0}'~ for type ~{1}~: {2}" },
       { Language.Portuguese, "Parâmetro inválido ~'{0}'~ para o tipo ~{1}~: {2}" },
       { Language.French, "Paramètre invalide ~'{0}'~ pour le type ~{1}~: {2}" },
@@ -882,7 +882,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Tham số không hợp lệ ~'{0}'~ cho kiểu ~{1}~: {2}" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.CmdAmbiguousOverload, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.CmdAmbiguousOverload, new Dictionary<Language, string> {
       { Language.English, "~Ambiguous command overload~; multiple matches found." },
       { Language.Portuguese, "~Sobrecarga ambígua do comando~; múltiplas correspondências encontradas." },
       { Language.French, "~Surcharge de commande ambiguë~ ; plusieurs correspondances trouvées." },
@@ -903,7 +903,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "~Overload lệnh không rõ ràng~; tìm thấy nhiều kết quả khớp." }
     });
 
-    LocalizationService.NewKey(LocalizationKey.CmdGroupNoSubcommand, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.CmdGroupNoSubcommand, new Dictionary<Language, string> {
       { Language.English, "This command group requires a ~subcommand~." },
       { Language.Portuguese, "Este grupo de comandos requer um ~subcomando~." },
       { Language.French, "Ce groupe de commandes nécessite une ~sous-commande~." },
@@ -924,7 +924,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Nhóm lệnh này yêu cầu một ~lệnh phụ~." }
     });
 
-    LocalizationService.NewKey(LocalizationKey.CmdUnknownGroupCommand, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.CmdUnknownGroupCommand, new Dictionary<Language, string> {
       { Language.English, "Unknown command in group ~'{0}'~: ~{1}~" },
       { Language.Portuguese, "Comando desconhecido no grupo ~'{0}'~: ~{1}~" },
       { Language.French, "Commande inconnue dans le groupe ~'{0}'~ : ~{1}~" },
@@ -945,7 +945,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Lệnh không xác định trong nhóm ~'{0}'~: ~{1}~" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.HelpNoCommands, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.HelpNoCommands, new Dictionary<Language, string> {
       { Language.English, "~No commands available.~" },
       { Language.Portuguese, "~Nenhum comando disponível.~" },
       { Language.French, "~Aucune commande disponible.~" },
@@ -966,7 +966,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "~Không có lệnh nào khả dụng.~" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.HelpAvailableCommands, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.HelpAvailableCommands, new Dictionary<Language, string> {
       { Language.English, "~Available Commands~ (Page ~{0}/{1}~):" },
       { Language.Portuguese, "~Comandos Disponíveis~ (Página ~{0}/{1}~):" },
       { Language.French, "~Commandes Disponibles~ (Page ~{0}/{1}~) :" },
@@ -987,7 +987,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "~Lệnh Khả Dụng~ (Trang ~{0}/{1}~):" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.HelpNextPage, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.HelpNextPage, new Dictionary<Language, string> {
       { Language.English, "Type ~{0}help {1}~ for next page" },
       { Language.Portuguese, "Digite ~{0}ajuda {1}~ para a próxima página" },
       { Language.French, "Tapez ~{0}aide {1}~ pour la page suivante" },
@@ -1008,7 +1008,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Gõ ~{0}trợgiúp {1}~ để xem trang tiếp theo" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.ServerLanguageCurrent, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.ServerLanguageCurrent, new Dictionary<Language, string> {
       { Language.English, "~ScarletCore~ current localization language: ~{0}~" },
       { Language.Portuguese, "Linguagem de localização atual do ~ScarletCore~: ~{0}~" },
       { Language.French, "Langue de localisation actuelle de ~ScarletCore~: ~{0}~" },
@@ -1029,7 +1029,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Ngôn ngữ bản địa hóa hiện tại của ~ScarletCore~: ~{0}~" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.LanguageNotSupported, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.LanguageNotSupported, new Dictionary<Language, string> {
       { Language.English, "Language not supported: ~{0}~" },
       { Language.Portuguese, "Idioma não suportado: ~{0}~" },
       { Language.French, "Langue non prise en charge: ~{0}~" },
@@ -1050,7 +1050,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Ngôn ngữ không được hỗ trợ: ~{0}~" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.AvailableLanguages, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.AvailableLanguages, new Dictionary<Language, string> {
       { Language.English, "~Available languages:~ {0}" },
       { Language.Portuguese, "~Idiomas disponíveis:~ {0}" },
       { Language.French, "~Langues disponibles:~ {0}" },
@@ -1071,7 +1071,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "~Ngôn ngữ khả dụng:~ {0}" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.ServerLanguageChanged, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.ServerLanguageChanged, new Dictionary<Language, string> {
       { Language.English, "~ScarletCore~ localization language changed to: ~{0}~" },
       { Language.Portuguese, "Linguagem de localização do ~ScarletCore~ alterada para: ~{0}~" },
       { Language.French, "Langue de localisation de ~ScarletCore~ changée en: ~{0}~" },
@@ -1092,7 +1092,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Ngôn ngữ bản địa hóa ~ScarletCore~ đã được thay đổi thành: ~{0}~" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.LanguageChangeFailed, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.LanguageChangeFailed, new Dictionary<Language, string> {
       { Language.English, "~Failed~ to change language to: ~{0}~" },
       { Language.Portuguese, "~Falha~ ao alterar idioma para: ~{0}~" },
       { Language.French, "~Échec~ du changement de langue vers: ~{0}~" },
@@ -1113,7 +1113,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "~Không thể~ thay đổi ngôn ngữ thành: ~{0}~" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.PlayerLanguageCurrent, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.PlayerLanguageCurrent, new Dictionary<Language, string> {
       { Language.English, "Your current language: ~{0}~" },
       { Language.Portuguese, "Seu idioma atual: ~{0}~" },
       { Language.French, "Votre langue actuelle: ~{0}~" },
@@ -1134,7 +1134,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Ngôn ngữ hiện tại của bạn: ~{0}~" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.PlayerLanguageChanged, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.PlayerLanguageChanged, new Dictionary<Language, string> {
       { Language.English, "Your language has been set to: ~{0}~" },
       { Language.Portuguese, "Seu idioma foi definido para: ~{0}~" },
       { Language.French, "Votre langue a été définie sur: ~{0}~" },
@@ -1155,7 +1155,7 @@ public static class CommandHandler {
       { Language.Vietnamese, "Ngôn ngữ của bạn đã được đặt thành: ~{0}~" }
     });
 
-    LocalizationService.NewKey(LocalizationKey.MustBePlayer, new Dictionary<Language, string> {
+    Localizer.NewKey(LocalizationKey.MustBePlayer, new Dictionary<Language, string> {
       { Language.English, "This command must be run by a ~player~." },
       { Language.Portuguese, "Este comando deve ser executado por um ~jogador~." },
       { Language.French, "Cette commande doit être exécutée par un ~joueur~." },
@@ -1197,7 +1197,7 @@ public static class CommandHandler {
   [CommandAlias("допомога", Language.Ukrainian, description: "Показує доступні команди")]
   [CommandAlias("trợgiúp", Language.Vietnamese, description: "Hiển thị các lệnh có sẵn")]
   internal static void HelpCommand(CommandContext ctx, string language, int page = 1) {
-    var targetLanguage = LocalizationService.GetLanguageFromString(language);
+    var targetLanguage = Localizer.GetLanguageFromString(language);
     if (targetLanguage == Language.None) targetLanguage = ctx.Sender.Language;
     HelpCommandInternal(ctx, targetLanguage, page);
   }
@@ -1236,7 +1236,7 @@ public static class CommandHandler {
     var commandsByAssembly = GetCommandsByAssembly(targetLanguage, ctx.Sender.IsAdmin);
 
     if (commandsByAssembly.Count == 0) {
-      ctx.Reply(LocalizationService.Get(ctx.Sender, LocalizationKey.HelpNoCommands).FormatError());
+      ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.HelpNoCommands).FormatError());
       return;
     }
 
@@ -1260,7 +1260,7 @@ public static class CommandHandler {
       var messageBuilder = new System.Text.StringBuilder();
 
       if (i == 0) {
-        string headerText = LocalizationService.Get(ctx.Sender, LocalizationKey.HelpAvailableCommands, page, totalPages);
+        string headerText = Localizer.Get(ctx.Sender, LocalizationKey.HelpAvailableCommands, page, totalPages);
         messageBuilder.AppendLine(headerText.Bold());
 
         if (isCustomLanguage) {
@@ -1292,7 +1292,7 @@ public static class CommandHandler {
       if (i + commandsPerMessage >= pageCommands.Count && page < totalPages) {
         messageBuilder.AppendLine();
 
-        string nextPageText = LocalizationService.Get(ctx.Sender, LocalizationKey.HelpNextPage, CommandPrefix, page + 1);
+        string nextPageText = Localizer.Get(ctx.Sender, LocalizationKey.HelpNextPage, CommandPrefix, page + 1);
         messageBuilder.AppendLine(nextPageText.WithColor("white"));
       }
 
@@ -1323,28 +1323,28 @@ public static class CommandHandler {
   public static void SetLanguage(CommandContext ctx, string language = "") {
     var player = ctx.Sender;
     if (player == null) {
-      ctx.ReplyError(LocalizationService.Get(ctx.Sender, LocalizationKey.MustBePlayer));
+      ctx.ReplyError(Localizer.Get(ctx.Sender, LocalizationKey.MustBePlayer));
       return;
     }
 
     if (string.IsNullOrWhiteSpace(language)) {
-      var current = LocalizationService.GetPlayerLanguage(player);
-      ctx.ReplyInfo(LocalizationService.Get(ctx.Sender, LocalizationKey.PlayerLanguageCurrent, current));
+      var current = Localizer.GetPlayerLanguage(player);
+      ctx.ReplyInfo(Localizer.Get(ctx.Sender, LocalizationKey.PlayerLanguageCurrent, current));
       return;
     }
 
-    var newLang = LocalizationService.GetLanguageFromString(language);
+    var newLang = Localizer.GetLanguageFromString(language);
 
-    if (!LocalizationService.IsLanguageAvailable(newLang)) {
-      ctx.ReplyError(LocalizationService.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, newLang));
+    if (!Localizer.IsLanguageAvailable(newLang)) {
+      ctx.ReplyError(Localizer.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, newLang));
 
-      var availableLanguages = string.Join(", ", LocalizationService.AvailableServerLanguages);
-      ctx.ReplyInfo(LocalizationService.Get(ctx.Sender, LocalizationKey.AvailableLanguages, availableLanguages));
+      var availableLanguages = string.Join(", ", Localizer.AvailableServerLanguages);
+      ctx.ReplyInfo(Localizer.Get(ctx.Sender, LocalizationKey.AvailableLanguages, availableLanguages));
       return;
     }
 
-    LocalizationService.SetPlayerLanguage(player, newLang);
-    ctx.Reply(LocalizationService.Get(ctx.Sender, LocalizationKey.PlayerLanguageChanged, newLang).FormatSuccess());
+    Localizer.SetPlayerLanguage(player, newLang);
+    ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.PlayerLanguageChanged, newLang).FormatSuccess());
   }
 
   [CommandGroup("admin", language: Language.English, aliases: ["sc"], adminOnly: true)]
@@ -1369,28 +1369,28 @@ public static class CommandHandler {
     [CommandAlias("мовасервера", language: Language.Ukrainian, aliases: ["мовасв"], description: "Встановити мову сервера")]
     [CommandAlias("ngônngữmáychủ", language: Language.Vietnamese, aliases: ["ngônngữsv"], description: "Đặt ngôn ngữ máy chủ")]
     public static void SetLanguage(CommandContext ctx, string language = "") {
-      var newLanguage = LocalizationService.GetLanguageFromString(language);
+      var newLanguage = Localizer.GetLanguageFromString(language);
 
       if (string.IsNullOrWhiteSpace(language)) {
-        var current = LocalizationService.CurrentServerLanguage;
-        ctx.ReplyInfo(LocalizationService.Get(ctx.Sender, LocalizationKey.ServerLanguageCurrent, current));
+        var current = Localizer.CurrentServerLanguage;
+        ctx.ReplyInfo(Localizer.Get(ctx.Sender, LocalizationKey.ServerLanguageCurrent, current));
         return;
       }
 
-      if (!LocalizationService.IsLanguageAvailable(newLanguage)) {
-        ctx.ReplyError(LocalizationService.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, newLanguage));
+      if (!Localizer.IsLanguageAvailable(newLanguage)) {
+        ctx.ReplyError(Localizer.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, newLanguage));
 
-        var availableLanguages = string.Join(", ", LocalizationService.AvailableServerLanguages.Select(l => $"<mark=#a963ff25>{l}</mark>"));
-        ctx.ReplyInfo(LocalizationService.Get(ctx.Sender, LocalizationKey.AvailableLanguages, availableLanguages));
+        var availableLanguages = string.Join(", ", Localizer.AvailableServerLanguages.Select(l => $"<mark=#a963ff25>{l}</mark>"));
+        ctx.ReplyInfo(Localizer.Get(ctx.Sender, LocalizationKey.AvailableLanguages, availableLanguages));
         return;
       }
 
-      if (LocalizationService.ChangeLanguage(newLanguage)) {
+      if (Localizer.ChangeLanguage(newLanguage)) {
         Plugin.Settings.Set("PrefabLocalizationLanguage", newLanguage);
-        ctx.Reply(LocalizationService.Get(ctx.Sender, LocalizationKey.ServerLanguageChanged, newLanguage).FormatSuccess());
+        ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.ServerLanguageChanged, newLanguage).FormatSuccess());
         Log.Info($"ScarletCore localization language changed to: {newLanguage} by admin {ctx.Sender?.Name}");
       } else {
-        ctx.ReplyError(LocalizationService.Get(ctx.Sender, LocalizationKey.LanguageChangeFailed, newLanguage));
+        ctx.ReplyError(Localizer.Get(ctx.Sender, LocalizationKey.LanguageChangeFailed, newLanguage));
       }
     }
   }

@@ -8,6 +8,7 @@ using Unity.Mathematics;
 using ScarletCore.Services;
 using Stunlock.Core;
 using ScarletCore.Utils;
+using ScarletCore.Localization;
 
 namespace ScarletCore.Data;
 
@@ -123,9 +124,9 @@ public class PlayerData() {
 
   public Language Language {
     get {
-      var lang = LocalizationService.GetPlayerLanguage(this);
+      var lang = Localizer.GetPlayerLanguage(this);
       if (lang == Language.None) {
-        lang = LocalizationService.CurrentServerLanguage;
+        lang = Localizer.CurrentServerLanguage;
       }
       return lang;
     }
@@ -368,27 +369,27 @@ public class PlayerData() {
   }
 
   public void SendLocalizedMessage(string key, params object[] args) {
-    var localized = LocalizationService.Get(this, key, args);
+    var localized = Localizer.Get(this, key, args);
     SendMessage(localized);
   }
 
   public void SendLocalizedErrorMessage(string key, params object[] args) {
-    var localized = LocalizationService.Get(this, key, args);
+    var localized = Localizer.Get(this, key, args);
     SendErrorMessage(localized);
   }
 
   public void SendLocalizedInfoMessage(string key, params object[] args) {
-    var localized = LocalizationService.Get(this, key, args);
+    var localized = Localizer.Get(this, key, args);
     SendInfoMessage(localized);
   }
 
   public void SendLocalizedSuccessMessage(string key, params object[] args) {
-    var localized = LocalizationService.Get(this, key, args);
+    var localized = Localizer.Get(this, key, args);
     SendSuccessMessage(localized);
   }
 
   public void SendLocalizedWarningMessage(string key, params object[] args) {
-    var localized = LocalizationService.Get(this, key, args);
+    var localized = Localizer.Get(this, key, args);
     SendWarningMessage(localized);
   }
 

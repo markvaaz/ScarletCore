@@ -9,6 +9,7 @@ using Unity.Mathematics;
 using Unity.Transforms;
 using ScarletCore.Systems;
 using ScarletCore.Services;
+using ScarletCore.Localization;
 
 namespace ScarletCore;
 
@@ -239,6 +240,6 @@ public static class ECSExtensions {
   /// Get the localized name for a PrefabGUID
   /// </summary>
   public static string LocalizedName(this PrefabGUID prefabGuid) {
-    return LocalizationService.GetText(prefabGuid);
+    return Localizer.GetText(prefabGuid);
   }
 }

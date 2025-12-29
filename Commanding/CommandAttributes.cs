@@ -1,5 +1,5 @@
 using System;
-using ScarletCore.Services;
+using ScarletCore.Localization;
 
 namespace ScarletCore.Commanding;
 

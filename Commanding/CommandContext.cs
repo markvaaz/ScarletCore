@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using ScarletCore.Data;
+using ScarletCore.Localization;
 using ScarletCore.Services;
 using ScarletCore.Utils;
 using Unity.Entities;
@@ -50,36 +51,36 @@ public sealed class CommandContext {
 
   public void ReplyLocalized(string key, params string[] parameters) {
     string localized;
-    if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
-    else localized = LocalizationService.Get(Sender, key, parameters);
+    if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
+    else localized = Localizer.Get(Sender, key, parameters);
     MessageService.SendRaw(Sender, localized.Format());
   }
 
   public void ReplyLocalizedError(string key, params string[] parameters) {
     string localized;
-    if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
-    else localized = LocalizationService.Get(Sender, key, parameters);
+    if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
+    else localized = Localizer.Get(Sender, key, parameters);
     MessageService.SendRaw(Sender, localized.FormatError());
   }
 
   public void ReplyLocalizedWarning(string key, params string[] parameters) {
     string localized;
-    if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
-    else localized = LocalizationService.Get(Sender, key, parameters);
+    if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
+    else localized = Localizer.Get(Sender, key, parameters);
     MessageService.SendRaw(Sender, localized.FormatWarning());
   }
 
   public void ReplyLocalizedInfo(string key, params string[] parameters) {
     string localized;
-    if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
-    else localized = LocalizationService.Get(Sender, key, parameters);
+    if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
+    else localized = Localizer.Get(Sender, key, parameters);
     MessageService.SendRaw(Sender, localized.FormatInfo());
   }
 
   public void ReplyLocalizedSuccess(string key, params string[] parameters) {
     string localized;
-    if (CallingAssembly != null) localized = LocalizationService.Get(Sender, key, CallingAssembly, parameters);
-    else localized = LocalizationService.Get(Sender, key, parameters);
+    if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
+    else localized = Localizer.Get(Sender, key, parameters);
     MessageService.SendRaw(Sender, localized.FormatSuccess());
   }
 }
