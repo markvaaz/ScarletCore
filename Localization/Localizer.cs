@@ -176,56 +176,98 @@ public static class Localizer {
   }
 
   /// <summary>
-  /// Load game translations from the unified JSON file containing all languages
+  /// Loads additional translations from an embedded JSON resource.
+  /// The JSON must be in the format: { key: { languageEnum: text } }.
   /// </summary>
-  private static void LoadGameTranslations() {
+  /// <param name="resourceName">The manifest resource name to load (e.g. "Namespace.FileName.json").</param>
+  public static void LoadFromResource(string resourceName) {
     try {
-      var assembly = typeof(Localizer).Assembly;
-      var resourceName = "ScarletCore.Localization.GameTranslations.json";
+      var jsonContent = LoadResource(resourceName);
 
-      using var stream = assembly.GetManifestResourceStream(resourceName);
-      if (stream == null) {
-        Log.Warning($"Game translations file not found: {resourceName}");
+      if (string.IsNullOrEmpty(jsonContent)) {
+        Log.Warning($"No content found in resource: {resourceName}");
         return;
       }
 
-      using var reader = new StreamReader(stream);
-      var json = reader.ReadToEnd();
+      var deserialized = JsonSerializer.Deserialize<IDictionary<string, IDictionary<Language, string>>>(jsonContent);
 
-      var doc = JsonDocument.Parse(json);
-      var root = doc.RootElement;
+      LoadKeys(deserialized);
+
+      Log.Message($"Loaded additional translations from resource: {resourceName}");
+    } catch (Exception ex) {
+      Log.Error($"Error loading translations from resource '{resourceName}': {ex}");
+    }
+  }
+
+  /// <summary>
+  /// Loads additional translations from a JSON file.
+  /// The JSON must be in the format: { key: { languageEnum: text } }.
+  /// </summary>
+  /// <param name="path">The file path to load (e.g. "C:\Translations\custom.json").</param>
+  public static void LoadFromFile(string path) {
+    try {
+      if (string.IsNullOrWhiteSpace(path)) {
+        Log.Warning("File path cannot be null or empty");
+        return;
+      }
+
+      if (!File.Exists(path)) {
+        Log.Warning($"Translation file not found: {path}");
+        return;
+      }
+
+      var jsonContent = File.ReadAllText(path);
+
+      if (string.IsNullOrEmpty(jsonContent)) {
+        Log.Warning($"No content found in file: {path}");
+        return;
+      }
+
+      var deserialized = JsonSerializer.Deserialize<IDictionary<string, IDictionary<Language, string>>>(jsonContent);
+
+      LoadKeys(deserialized);
+
+      Log.Message($"Loaded additional translations from file: {path}");
+    } catch (Exception ex) {
+      Log.Error($"Error loading translations from file '{path}': {ex}");
+    }
+  }
+
+  private static void LoadGameTranslations() {
+    try {
+      var resourceName = "ScarletCore.Localization.GameTranslations.json";
+      var jsonContent = LoadResource(resourceName);
+
+      if (string.IsNullOrEmpty(jsonContent)) {
+        Log.Warning($"No content found in resource: {resourceName}");
+        return;
+      }
+
+      var deserialized = JsonSerializer.Deserialize<IDictionary<string, IDictionary<Language, string>>>(jsonContent);
 
       _allTranslations.Clear();
 
-      // Iterate through each GUID key in the root object
-      foreach (var guidProperty in root.EnumerateObject()) {
-        var guid = guidProperty.Name;
-        var languageObject = guidProperty.Value;
-
-        var translationMap = new ConcurrentDictionary<Language, string>();
-
-        // Iterate through each language in the GUID object
-        foreach (var languageProperty in languageObject.EnumerateObject()) {
-          var languageKey = languageProperty.Name;
-          var text = languageProperty.Value.GetString();
-
-          // Try to parse the language key to Language enum
-          if (Enum.TryParse<Language>(languageKey, true, out var lang)) {
-            if (!string.IsNullOrEmpty(text)) {
-              translationMap[lang] = text;
-            }
-          }
-        }
-
-        if (!translationMap.IsEmpty) {
-          _allTranslations[guid] = translationMap;
-        }
-      }
+      LoadKeys(deserialized);
 
       Log.Message($"Loaded {_allTranslations.Count} game translation keys");
     } catch (Exception ex) {
       Log.Error($"Error loading game translations: {ex}");
     }
+  }
+
+  private static string LoadResource(string resourceName) {
+    var assembly = Assembly.GetExecutingAssembly();
+    var stream = assembly.GetManifestResourceStream(resourceName);
+    string jsonContent = null;
+    if (stream != null) {
+      using var reader = new StreamReader(stream);
+      jsonContent = reader.ReadToEnd();
+
+    } else {
+      Log.Error($"Resource '{resourceName}' not found in assembly '{assembly.FullName}'");
+    }
+
+    return jsonContent;
   }
 
   /// <summary>

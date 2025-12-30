@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using ProjectM.Network;
 using ScarletCore.Data;
 using ScarletCore.Localization;
@@ -831,9 +834,6 @@ public static class CommandHandler {
     public const string CmdExecutionError = "cmd_execution_error";
     public const string CmdAvailableUsages = "cmd_available_usages";
     public const string CmdInvalidParameter = "cmd_invalid_parameter";
-    public const string CmdAmbiguousOverload = "cmd_ambiguous_overload";
-    public const string CmdGroupNoSubcommand = "cmd_group_no_subcommand";
-    public const string CmdUnknownGroupCommand = "cmd_unknown_group_command";
     public const string HelpNoCommands = "help_no_commands";
     public const string HelpAvailableCommands = "help_available_commands";
     public const string HelpNextPage = "help_next_page";
@@ -845,388 +845,16 @@ public static class CommandHandler {
     public const string PlayerLanguageCurrent = "player_language_current";
     public const string PlayerLanguageChanged = "player_language_changed";
     public const string MustBePlayer = "must_be_player";
+    public const string HelpModNotFound = "help_mod_not_found";
+    public const string HelpModAvailable = "help_mod_available";
+    public const string HelpModHeader = "help_mod_header";
+    public const string HelpModNextPage = "help_mod_next_page";
   }
 
   private static void RegisterLocalizationKeys() {
-    Localizer.NewKey(LocalizationKey.CmdRequiresAdmin, new Dictionary<Language, string> {
-      { Language.English, "This command requires ~administrator privileges~." },
-      { Language.Portuguese, "Este comando requer ~privilégios de administrador~." },
-      { Language.French, "Cette commande nécessite des ~privilèges d'administrateur~." },
-      { Language.German, "Dieser Befehl erfordert ~Administratorrechte~." },
-      { Language.Hungarian, "Ehhez a parancshoz ~rendszergazdai jogosultság~ szükséges." },
-      { Language.Italian, "Questo comando richiede ~privilegi di amministratore~." },
-      { Language.Japanese, "このコマンドは~管理者権限~が必要です。" },
-      { Language.Korean, "이 명령은 ~관리자 권한~이 필요합니다." },
-      { Language.Latam, "Este comando requiere ~privilegios de administrador~." },
-      { Language.Polish, "Ta komenda wymaga ~uprawnień administratora~." },
-      { Language.Russian, "Для этой команды требуются ~права администратора~." },
-      { Language.Spanish, "Este comando requiere ~privilegios de administrador~." },
-      { Language.ChineseSimplified, "此命令需要~管理员权限~。" },
-      { Language.ChineseTraditional, "此指令需要~管理員權限~。" },
-      { Language.Thai, "คำสั่งนี้ต้องการ~สิทธิ์ผู้ดูแลระบบ~" },
-      { Language.Turkish, "Bu komut için ~yönetici ayrıcalıkları~ gerekir." },
-      { Language.Ukrainian, "Ця команда вимагає ~прав адміністратора~." },
-      { Language.Vietnamese, "Lệnh này yêu cầu ~quyền quản trị viên~." }
-    });
-
-    Localizer.NewKey(LocalizationKey.CmdExecutionError, new Dictionary<Language, string> {
-      { Language.English, "An ~error~ occurred while executing the command." },
-      { Language.Portuguese, "Ocorreu um ~erro~ ao executar o comando." },
-      { Language.French, "Une ~erreur~ est survenue lors de l'exécution de la commande." },
-      { Language.German, "Beim Ausführen des Befehls ist ein ~Fehler~ aufgetreten." },
-      { Language.Hungarian, "~Hiba~ történt a parancs végrehajtása közben." },
-      { Language.Italian, "Si è verificato un ~errore~ durante l'esecuzione del comando." },
-      { Language.Japanese, "コマンドの実行中に~エラー~が発生しました。" },
-      { Language.Korean, "명령을 실행하는 중에 ~오류~가 발생했습니다." },
-      { Language.Latam, "Ocurrió un ~error~ al ejecutar el comando." },
-      { Language.Polish, "Wystąpił ~błąd~ podczas wykonywania polecenia." },
-      { Language.Russian, "Произошла ~ошибка~ при выполнении команды." },
-      { Language.Spanish, "Ocurrió un ~error~ al ejecutar el comando." },
-      { Language.ChineseSimplified, "执行命令时发生~错误~。" },
-      { Language.ChineseTraditional, "執行指令時發生~錯誤~。" },
-      { Language.Thai, "เกิด~ข้อผิดพลาด~ขณะเรียกใช้คำสั่ง" },
-      { Language.Turkish, "Komut yürütülürken bir ~hata~ oluştu." },
-      { Language.Ukrainian, "Під час виконання команди сталася ~помилка~." },
-      { Language.Vietnamese, "Đã xảy ra ~lỗi~ khi thực hiện lệnh." }
-    });
-
-    Localizer.NewKey(LocalizationKey.CmdAvailableUsages, new Dictionary<Language, string> {
-      { Language.English, "~Available usages:~\n{0}" },
-      { Language.Portuguese, "~Formas de uso disponíveis:~\n{0}" },
-      { Language.French, "~Utilisations disponibles :~\n{0}" },
-      { Language.German, "~Verfügbare Aufrufe:~\n{0}" },
-      { Language.Hungarian, "~Elérhető használatok:~\n{0}" },
-      { Language.Italian, "~Utilizzi disponibili:~\n{0}" },
-      { Language.Japanese, "~利用可能な使い方:~\n{0}" },
-      { Language.Korean, "~사용 가능한 명령 형식:~\n{0}" },
-      { Language.Latam, "~Usos disponibles:~\n{0}" },
-      { Language.Polish, "~Dostępne użycia:~\n{0}" },
-      { Language.Russian, "~Доступные варианты использования:~\n{0}" },
-      { Language.Spanish, "~Usos disponibles:~\n{0}" },
-      { Language.ChineseSimplified, "~可用用法：~\n{0}" },
-      { Language.ChineseTraditional, "~可用用法：~\n{0}" },
-      { Language.Thai, "~รูปแบบที่ใช้ได้: ~\n{0}" },
-      { Language.Turkish, "~Kullanılabilir kullanımlar:~\n{0}" },
-      { Language.Ukrainian, "~Доступні варіанти використання:~\n{0}" },
-      { Language.Vietnamese, "~Cách sử dụng có sẵn:~\n{0}" }
-    });
-
-    Localizer.NewKey(LocalizationKey.CmdInvalidParameter, new Dictionary<Language, string> {
-      { Language.English, "Invalid parameter ~'{0}'~ for type ~{1}~: {2}" },
-      { Language.Portuguese, "Parâmetro inválido ~'{0}'~ para o tipo ~{1}~: {2}" },
-      { Language.French, "Paramètre invalide ~'{0}'~ pour le type ~{1}~: {2}" },
-      { Language.German, "Ungültiger Parameter ~'{0}'~ für Typ ~{1}~: {2}" },
-      { Language.Hungarian, "Érvénytelen paraméter ~'{0}'~ a(z) ~{1}~ típushoz: {2}" },
-      { Language.Italian, "Parametro non valido ~'{0}'~ per il tipo ~{1}~: {2}" },
-      { Language.Japanese, "型 ~{1}~ の無効なパラメータ ~'{0}'~: {2}" },
-      { Language.Korean, "유효하지 않은 매개변수 ~'{0}'~ (형식 ~{1}~): {2}" },
-      { Language.Latam, "Parámetro inválido ~'{0}'~ para el tipo ~{1}~: {2}" },
-      { Language.Polish, "Nieprawidłowy parametr ~'{0}'~ dla typu ~{1}~: {2}" },
-      { Language.Russian, "Неверный параметр ~'{0}'~ для типа ~{1}~: {2}" },
-      { Language.Spanish, "Parámetro inválido ~'{0}'~ para el tipo ~{1}~: {2}" },
-      { Language.ChineseSimplified, "无效参数 ~'{0}'~，类型 ~{1}~：{2}" },
-      { Language.ChineseTraditional, "無效參數 ~'{0}'~，類型 ~{1}~：{2}" },
-      { Language.Thai, "พารามิเตอร์ไม่ถูกต้อง ~'{0}'~ สำหรับประเภท ~{1}~: {2}" },
-      { Language.Turkish, "Geçersiz parametre ~'{0}'~ türü ~{1}~: {2}" },
-      { Language.Ukrainian, "Неприпустимий параметр ~'{0}'~ для типу ~{1}~: {2}" },
-      { Language.Vietnamese, "Tham số không hợp lệ ~'{0}'~ cho kiểu ~{1}~: {2}" }
-    });
-
-    Localizer.NewKey(LocalizationKey.CmdAmbiguousOverload, new Dictionary<Language, string> {
-      { Language.English, "~Ambiguous command overload~; multiple matches found." },
-      { Language.Portuguese, "~Sobrecarga ambígua do comando~; múltiplas correspondências encontradas." },
-      { Language.French, "~Surcharge de commande ambiguë~ ; plusieurs correspondances trouvées." },
-      { Language.German, "~Mehrdeutige Befehlsüberladung~; mehrere Treffer gefunden." },
-      { Language.Hungarian, "~Többértelmű parancs overload~; több egyezés található." },
-      { Language.Italian, "~Sovraccarico di comando ambiguo~; trovate più corrispondenze." },
-      { Language.Japanese, "~あいまいなコマンドのオーバーロード~です。複数の一致が見つかりました。" },
-      { Language.Korean, "~모호한 명령 오버로드~; 여러 일치 항목이 발견되었습니다." },
-      { Language.Latam, "~Sobrecarga de comando ambigua~; se encontraron múltiples coincidencias." },
-      { Language.Polish, "~Niejednoznaczne przeciążenie polecenia~; znaleziono wiele dopasowań." },
-      { Language.Russian, "~Неоднозначная перегрузка команды~; найдено несколько совпадений." },
-      { Language.Spanish, "~Sobrecarga de comando ambigua~; se encontraron múltiples coincidencias." },
-      { Language.ChineseSimplified, "~命令重载不明确~；找到多个匹配项。" },
-      { Language.ChineseTraditional, "~指令重載不明確~；找到多個匹配項。" },
-      { Language.Thai, "~การโอเวอร์โหลดคำสั่งไม่ชัดเจน~; พบการจับคู่หลายรายการ" },
-      { Language.Turkish, "~Belirsiz komut aşırı yüklemesi~; birden çok eşleşme bulundu." },
-      { Language.Ukrainian, "~Двоозначне перевантаження команди~; знайдено кілька збігів." },
-      { Language.Vietnamese, "~Overload lệnh không rõ ràng~; tìm thấy nhiều kết quả khớp." }
-    });
-
-    Localizer.NewKey(LocalizationKey.CmdGroupNoSubcommand, new Dictionary<Language, string> {
-      { Language.English, "This command group requires a ~subcommand~." },
-      { Language.Portuguese, "Este grupo de comandos requer um ~subcomando~." },
-      { Language.French, "Ce groupe de commandes nécessite une ~sous-commande~." },
-      { Language.German, "Diese Befehlsgruppe erfordert einen ~Unterbefehl~." },
-      { Language.Hungarian, "Ehhez a parancscsoporthoz ~alparancs~ szükséges." },
-      { Language.Italian, "Questo gruppo di comandi richiede un ~sottocomando~." },
-      { Language.Japanese, "このコマンドグループは~サブコマンド~が必要です。" },
-      { Language.Korean, "이 명령 그룹은 ~하위 명령~이 필요합니다." },
-      { Language.Latam, "Este grupo de comandos requiere un ~subcomando~." },
-      { Language.Polish, "Ta grupa poleceń wymaga ~podpolecenia~." },
-      { Language.Russian, "Эта группа команд требует ~подкоманды~." },
-      { Language.Spanish, "Este grupo de comandos requiere un ~subcomando~." },
-      { Language.ChineseSimplified, "此命令组需要~子命令~。" },
-      { Language.ChineseTraditional, "此指令群組需要~子指令~。" },
-      { Language.Thai, "กลุ่มคำสั่งนี้ต้องการ~คำสั่งย่อย~" },
-      { Language.Turkish, "Bu komut grubu bir ~alt komut~ gerektirir." },
-      { Language.Ukrainian, "Ця група команд вимагає ~підкоманди~." },
-      { Language.Vietnamese, "Nhóm lệnh này yêu cầu một ~lệnh phụ~." }
-    });
-
-    Localizer.NewKey(LocalizationKey.CmdUnknownGroupCommand, new Dictionary<Language, string> {
-      { Language.English, "Unknown command in group ~'{0}'~: ~{1}~" },
-      { Language.Portuguese, "Comando desconhecido no grupo ~'{0}'~: ~{1}~" },
-      { Language.French, "Commande inconnue dans le groupe ~'{0}'~ : ~{1}~" },
-      { Language.German, "Unbekannter Befehl in Gruppe ~'{0}'~: ~{1}~" },
-      { Language.Hungarian, "Ismeretlen parancs a(z) ~'{0}'~ csoportban: ~{1}~" },
-      { Language.Italian, "Comando sconosciuto nel gruppo ~'{0}'~: ~{1}~" },
-      { Language.Japanese, "グループ ~'{0}'~ の不明なコマンド: ~{1}~" },
-      { Language.Korean, "그룹 ~'{0}'~에서 알 수 없는 명령: ~{1}~" },
-      { Language.Latam, "Comando desconocido en el grupo ~'{0}'~: ~{1}~" },
-      { Language.Polish, "Nieznane polecenie w grupie ~'{0}'~: ~{1}~" },
-      { Language.Russian, "Неизвестная команда в группе ~'{0}'~: ~{1}~" },
-      { Language.Spanish, "Comando desconocido en el grupo ~'{0}'~: ~{1}~" },
-      { Language.ChineseSimplified, "组 ~'{0}'~ 中的未知命令：~{1}~" },
-      { Language.ChineseTraditional, "群組 ~'{0}'~ 中的未知指令：~{1}~" },
-      { Language.Thai, "คำสั่งไม่รู้จักในกลุ่ม ~'{0}'~: ~{1}~" },
-      { Language.Turkish, "~'{0}'~ grubunda bilinmeyen komut: ~{1}~" },
-      { Language.Ukrainian, "Невідома команда в групі ~'{0}'~: ~{1}~" },
-      { Language.Vietnamese, "Lệnh không xác định trong nhóm ~'{0}'~: ~{1}~" }
-    });
-
-    Localizer.NewKey(LocalizationKey.HelpNoCommands, new Dictionary<Language, string> {
-      { Language.English, "~No commands available.~" },
-      { Language.Portuguese, "~Nenhum comando disponível.~" },
-      { Language.French, "~Aucune commande disponible.~" },
-      { Language.German, "~Keine Befehle verfügbar.~" },
-      { Language.Hungarian, "~Nincsenek elérhető parancsok.~" },
-      { Language.Italian, "~Nessun comando disponibile.~" },
-      { Language.Japanese, "~利用可能なコマンドがありません。~" },
-      { Language.Korean, "~사용 가능한 명령이 없습니다.~" },
-      { Language.Latam, "~No hay comandos disponibles.~" },
-      { Language.Polish, "~Brak dostępnych poleceń.~" },
-      { Language.Russian, "~Команды недоступны.~" },
-      { Language.Spanish, "~No hay comandos disponibles.~" },
-      { Language.ChineseSimplified, "~没有可用的命令。~" },
-      { Language.ChineseTraditional, "~沒有可用的指令。~" },
-      { Language.Thai, "~ไม่มีคำสั่งที่ใช้ได้~" },
-      { Language.Turkish, "~Kullanılabilir komut yok.~" },
-      { Language.Ukrainian, "~Немає доступних команд.~" },
-      { Language.Vietnamese, "~Không có lệnh nào khả dụng.~" }
-    });
-
-    Localizer.NewKey(LocalizationKey.HelpAvailableCommands, new Dictionary<Language, string> {
-      { Language.English, "~Available Commands~ (Page ~{0}/{1}~):" },
-      { Language.Portuguese, "~Comandos Disponíveis~ (Página ~{0}/{1}~):" },
-      { Language.French, "~Commandes Disponibles~ (Page ~{0}/{1}~) :" },
-      { Language.German, "~Verfügbare Befehle~ (Seite ~{0}/{1}~):" },
-      { Language.Hungarian, "~Elérhető Parancsok~ (Oldal ~{0}/{1}~):" },
-      { Language.Italian, "~Comandi Disponibili~ (Pagina ~{0}/{1}~):" },
-      { Language.Japanese, "~利用可能なコマンド~ (ページ ~{0}/{1}~):" },
-      { Language.Korean, "~사용 가능한 명령~ (페이지 ~{0}/{1}~):" },
-      { Language.Latam, "~Comandos Disponibles~ (Página ~{0}/{1}~):" },
-      { Language.Polish, "~Dostępne Polecenia~ (Strona ~{0}/{1}~):" },
-      { Language.Russian, "~Доступные Команды~ (Страница ~{0}/{1}~):" },
-      { Language.Spanish, "~Comandos Disponibles~ (Página ~{0}/{1}~):" },
-      { Language.ChineseSimplified, "~可用命令~（第 ~{0}/{1}~ 页）：" },
-      { Language.ChineseTraditional, "~可用指令~（第 ~{0}/{1}~ 頁）：" },
-      { Language.Thai, "~คำสั่งที่ใช้ได้~ (หน้า ~{0}/{1}~):" },
-      { Language.Turkish, "~Kullanılabilir Komutlar~ (Sayfa ~{0}/{1}~):" },
-      { Language.Ukrainian, "~Доступні Команди~ (Сторінка ~{0}/{1}~):" },
-      { Language.Vietnamese, "~Lệnh Khả Dụng~ (Trang ~{0}/{1}~):" }
-    });
-
-    Localizer.NewKey(LocalizationKey.HelpNextPage, new Dictionary<Language, string> {
-      { Language.English, "Type ~{0}help {1}~ for next page" },
-      { Language.Portuguese, "Digite ~{0}ajuda {1}~ para a próxima página" },
-      { Language.French, "Tapez ~{0}aide {1}~ pour la page suivante" },
-      { Language.German, "Geben Sie ~{0}hilfe {1}~ für die nächste Seite ein" },
-      { Language.Hungarian, "Írja be: ~{0}segítség {1}~ a következő oldalhoz" },
-      { Language.Italian, "Digita ~{0}aiuto {1}~ per la pagina successiva" },
-      { Language.Japanese, "次のページには ~{0}ヘルプ {1}~ と入力してください" },
-      { Language.Korean, "다음 페이지를 보려면 ~{0}도움말 {1}~을 입력하세요" },
-      { Language.Latam, "Escribe ~{0}ayuda {1}~ para la siguiente página" },
-      { Language.Polish, "Wpisz ~{0}pomoc {1}~ aby przejść do następnej strony" },
-      { Language.Russian, "Введите ~{0}помощь {1}~ для следующей страницы" },
-      { Language.Spanish, "Escribe ~{0}ayuda {1}~ para la siguiente página" },
-      { Language.ChineseSimplified, "输入 ~{0}帮助 {1}~ 查看下一页" },
-      { Language.ChineseTraditional, "輸入 ~{0}幫助 {1}~ 查看下一頁" },
-      { Language.Thai, "พิมพ์ ~{0}ช่วยเหลือ {1}~ สำหรับหน้าถัดไป" },
-      { Language.Turkish, "Sonraki sayfa için ~{0}yardım {1}~ yazın" },
-      { Language.Ukrainian, "Введіть ~{0}допомога {1}~ для наступної сторінки" },
-      { Language.Vietnamese, "Gõ ~{0}trợgiúp {1}~ để xem trang tiếp theo" }
-    });
-
-    Localizer.NewKey(LocalizationKey.ServerLanguageCurrent, new Dictionary<Language, string> {
-      { Language.English, "~ScarletCore~ current localization language: ~{0}~" },
-      { Language.Portuguese, "Linguagem de localização atual do ~ScarletCore~: ~{0}~" },
-      { Language.French, "Langue de localisation actuelle de ~ScarletCore~: ~{0}~" },
-      { Language.German, "Aktuelle Lokalisierungssprache von ~ScarletCore~: ~{0}~" },
-      { Language.Hungarian, "~ScarletCore~ jelenlegi lokalizációs nyelve: ~{0}~" },
-      { Language.Italian, "Lingua di localizzazione attuale di ~ScarletCore~: ~{0}~" },
-      { Language.Japanese, "~ScarletCore~の現在のローカライゼーション言語: ~{0}~" },
-      { Language.Korean, "~ScarletCore~ 현재 로컬라이제이션 언어: ~{0}~" },
-      { Language.Latam, "Idioma de localización actual de ~ScarletCore~: ~{0}~" },
-      { Language.Polish, "Bieżący język lokalizacji ~ScarletCore~: ~{0}~" },
-      { Language.Russian, "Текущий язык локализации ~ScarletCore~: ~{0}~" },
-      { Language.Spanish, "Idioma de localización actual de ~ScarletCore~: ~{0}~" },
-      { Language.ChineseSimplified, "~ScarletCore~当前本地化语言: ~{0}~" },
-      { Language.ChineseTraditional, "~ScarletCore~目前本地化語言: ~{0}~" },
-      { Language.Thai, "ภาษาโลคัลไลเซชันปัจจุบันของ ~ScarletCore~: ~{0}~" },
-      { Language.Turkish, "~ScarletCore~ mevcut yerelleştirme dili: ~{0}~" },
-      { Language.Ukrainian, "Поточна мова локалізації ~ScarletCore~: ~{0}~" },
-      { Language.Vietnamese, "Ngôn ngữ bản địa hóa hiện tại của ~ScarletCore~: ~{0}~" }
-    });
-
-    Localizer.NewKey(LocalizationKey.LanguageNotSupported, new Dictionary<Language, string> {
-      { Language.English, "Language not supported: ~{0}~" },
-      { Language.Portuguese, "Idioma não suportado: ~{0}~" },
-      { Language.French, "Langue non prise en charge: ~{0}~" },
-      { Language.German, "Sprache nicht unterstützt: ~{0}~" },
-      { Language.Hungarian, "A nyelv nem támogatott: ~{0}~" },
-      { Language.Italian, "Lingua non supportata: ~{0}~" },
-      { Language.Japanese, "サポートされていない言語: ~{0}~" },
-      { Language.Korean, "지원되지 않는 언어: ~{0}~" },
-      { Language.Latam, "Idioma no compatible: ~{0}~" },
-      { Language.Polish, "Język nie jest obsługiwany: ~{0}~" },
-      { Language.Russian, "Язык не поддерживается: ~{0}~" },
-      { Language.Spanish, "Idioma no compatible: ~{0}~" },
-      { Language.ChineseSimplified, "不支持的语言: ~{0}~" },
-      { Language.ChineseTraditional, "不支援的語言: ~{0}~" },
-      { Language.Thai, "ไม่รองรับภาษา: ~{0}~" },
-      { Language.Turkish, "Desteklenmeyen dil: ~{0}~" },
-      { Language.Ukrainian, "Мова не підтримується: ~{0}~" },
-      { Language.Vietnamese, "Ngôn ngữ không được hỗ trợ: ~{0}~" }
-    });
-
-    Localizer.NewKey(LocalizationKey.AvailableLanguages, new Dictionary<Language, string> {
-      { Language.English, "~Available languages:~ {0}" },
-      { Language.Portuguese, "~Idiomas disponíveis:~ {0}" },
-      { Language.French, "~Langues disponibles:~ {0}" },
-      { Language.German, "~Verfügbare Sprachen:~ {0}" },
-      { Language.Hungarian, "~Elérhető nyelvek:~ {0}" },
-      { Language.Italian, "~Lingue disponibili:~ {0}" },
-      { Language.Japanese, "~利用可能な言語:~ {0}" },
-      { Language.Korean, "~사용 가능한 언어:~ {0}" },
-      { Language.Latam, "~Idiomas disponibles:~ {0}" },
-      { Language.Polish, "~Dostępne języki:~ {0}" },
-      { Language.Russian, "~Доступные языки:~ {0}" },
-      { Language.Spanish, "~Idiomas disponibles:~ {0}" },
-      { Language.ChineseSimplified, "~可用语言:~ {0}" },
-      { Language.ChineseTraditional, "~可用語言:~ {0}" },
-      { Language.Thai, "~ภาษาที่มี:~ {0}" },
-      { Language.Turkish, "~Mevcut diller:~ {0}" },
-      { Language.Ukrainian, "~Доступні мови:~ {0}" },
-      { Language.Vietnamese, "~Ngôn ngữ khả dụng:~ {0}" }
-    });
-
-    Localizer.NewKey(LocalizationKey.ServerLanguageChanged, new Dictionary<Language, string> {
-      { Language.English, "~ScarletCore~ localization language changed to: ~{0}~" },
-      { Language.Portuguese, "Linguagem de localização do ~ScarletCore~ alterada para: ~{0}~" },
-      { Language.French, "Langue de localisation de ~ScarletCore~ changée en: ~{0}~" },
-      { Language.German, "~ScarletCore~-Lokalisierungssprache geändert zu: ~{0}~" },
-      { Language.Hungarian, "~ScarletCore~ lokalizációs nyelve megváltoztatva: ~{0}~" },
-      { Language.Italian, "Lingua di localizzazione di ~ScarletCore~ cambiata in: ~{0}~" },
-      { Language.Japanese, "~ScarletCore~のローカライゼーション言語が次に変更されました: ~{0}~" },
-      { Language.Korean, "~ScarletCore~ 로컬라이제이션 언어가 다음으로 변경되었습니다: ~{0}~" },
-      { Language.Latam, "Idioma de localización de ~ScarletCore~ cambiado a: ~{0}~" },
-      { Language.Polish, "Język lokalizacji ~ScarletCore~ zmieniony na: ~{0}~" },
-      { Language.Russian, "Язык локализации ~ScarletCore~ изменен на: ~{0}~" },
-      { Language.Spanish, "Idioma de localización de ~ScarletCore~ cambiado a: ~{0}~" },
-      { Language.ChineseSimplified, "~ScarletCore~本地化语言已更改为: ~{0}~" },
-      { Language.ChineseTraditional, "~ScarletCore~本地化語言已更改為: ~{0}~" },
-      { Language.Thai, "เปลี่ยนภาษาโลคัลไลเซชันของ ~ScarletCore~ เป็น: ~{0}~" },
-      { Language.Turkish, "~ScarletCore~ yerelleştirme dili şu şekilde değiştirildi: ~{0}~" },
-      { Language.Ukrainian, "Мову локалізації ~ScarletCore~ змінено на: ~{0}~" },
-      { Language.Vietnamese, "Ngôn ngữ bản địa hóa ~ScarletCore~ đã được thay đổi thành: ~{0}~" }
-    });
-
-    Localizer.NewKey(LocalizationKey.LanguageChangeFailed, new Dictionary<Language, string> {
-      { Language.English, "~Failed~ to change language to: ~{0}~" },
-      { Language.Portuguese, "~Falha~ ao alterar idioma para: ~{0}~" },
-      { Language.French, "~Échec~ du changement de langue vers: ~{0}~" },
-      { Language.German, "~Fehler~ beim Ändern der Sprache zu: ~{0}~" },
-      { Language.Hungarian, "~Nem sikerült~ megváltoztatni a nyelvet erre: ~{0}~" },
-      { Language.Italian, "~Impossibile~ cambiare lingua in: ~{0}~" },
-      { Language.Japanese, "言語の変更に~失敗~しました: ~{0}~" },
-      { Language.Korean, "언어 변경 ~실패~: ~{0}~" },
-      { Language.Latam, "~Error~ al cambiar el idioma a: ~{0}~" },
-      { Language.Polish, "~Nie udało się~ zmienić języka na: ~{0}~" },
-      { Language.Russian, "~Не удалось~ изменить язык на: ~{0}~" },
-      { Language.Spanish, "~Error~ al cambiar el idioma a: ~{0}~" },
-      { Language.ChineseSimplified, "更改语言~失败~: ~{0}~" },
-      { Language.ChineseTraditional, "更改語言~失敗~: ~{0}~" },
-      { Language.Thai, "~ไม่สามารถ~เปลี่ยนภาษาเป็น: ~{0}~" },
-      { Language.Turkish, "Dil ~değiştirilemedi~: ~{0}~" },
-      { Language.Ukrainian, "~Не вдалося~ змінити мову на: ~{0}~" },
-      { Language.Vietnamese, "~Không thể~ thay đổi ngôn ngữ thành: ~{0}~" }
-    });
-
-    Localizer.NewKey(LocalizationKey.PlayerLanguageCurrent, new Dictionary<Language, string> {
-      { Language.English, "Your current language: ~{0}~" },
-      { Language.Portuguese, "Seu idioma atual: ~{0}~" },
-      { Language.French, "Votre langue actuelle: ~{0}~" },
-      { Language.German, "Ihre aktuelle Sprache: ~{0}~" },
-      { Language.Hungarian, "Az Ön jelenlegi nyelve: ~{0}~" },
-      { Language.Italian, "La tua lingua attuale: ~{0}~" },
-      { Language.Japanese, "あなたの現在の言語: ~{0}~" },
-      { Language.Korean, "현재 언어: ~{0}~" },
-      { Language.Latam, "Tu idioma actual: ~{0}~" },
-      { Language.Polish, "Twój obecny język: ~{0}~" },
-      { Language.Russian, "Ваш текущий язык: ~{0}~" },
-      { Language.Spanish, "Tu idioma actual: ~{0}~" },
-      { Language.ChineseSimplified, "您当前的语言: ~{0}~" },
-      { Language.ChineseTraditional, "您目前的語言: ~{0}~" },
-      { Language.Thai, "ภาษาปัจจุบันของคุณ: ~{0}~" },
-      { Language.Turkish, "Mevcut diliniz: ~{0}~" },
-      { Language.Ukrainian, "Ваша поточна мова: ~{0}~" },
-      { Language.Vietnamese, "Ngôn ngữ hiện tại của bạn: ~{0}~" }
-    });
-
-    Localizer.NewKey(LocalizationKey.PlayerLanguageChanged, new Dictionary<Language, string> {
-      { Language.English, "Your language has been set to: ~{0}~" },
-      { Language.Portuguese, "Seu idioma foi definido para: ~{0}~" },
-      { Language.French, "Votre langue a été définie sur: ~{0}~" },
-      { Language.German, "Ihre Sprache wurde eingestellt auf: ~{0}~" },
-      { Language.Hungarian, "Az Ön nyelve beállítva: ~{0}~" },
-      { Language.Italian, "La tua lingua è stata impostata su: ~{0}~" },
-      { Language.Japanese, "あなたの言語が次に設定されました: ~{0}~" },
-      { Language.Korean, "언어가 다음으로 설정되었습니다: ~{0}~" },
-      { Language.Latam, "Tu idioma ha sido configurado a: ~{0}~" },
-      { Language.Polish, "Twój język został ustawiony na: ~{0}~" },
-      { Language.Russian, "Ваш язык установлен на: ~{0}~" },
-      { Language.Spanish, "Tu idioma ha sido configurado a: ~{0}~" },
-      { Language.ChineseSimplified, "您的语言已设置为: ~{0}~" },
-      { Language.ChineseTraditional, "您的語言已設定為: ~{0}~" },
-      { Language.Thai, "ภาษาของคุณถูกตั้งค่าเป็น: ~{0}~" },
-      { Language.Turkish, "Diliniz şu şekilde ayarlandı: ~{0}~" },
-      { Language.Ukrainian, "Вашу мову встановлено на: ~{0}~" },
-      { Language.Vietnamese, "Ngôn ngữ của bạn đã được đặt thành: ~{0}~" }
-    });
-
-    Localizer.NewKey(LocalizationKey.MustBePlayer, new Dictionary<Language, string> {
-      { Language.English, "This command must be run by a ~player~." },
-      { Language.Portuguese, "Este comando deve ser executado por um ~jogador~." },
-      { Language.French, "Cette commande doit être exécutée par un ~joueur~." },
-      { Language.German, "Dieser Befehl muss von einem ~Spieler~ ausgeführt werden." },
-      { Language.Hungarian, "Ezt a parancsot egy ~játékosnak~ kell futtatnia." },
-      { Language.Italian, "Questo comando deve essere eseguito da un ~giocatore~." },
-      { Language.Japanese, "このコマンドは~プレイヤー~が実行する必要があります。" },
-      { Language.Korean, "이 명령은 ~플레이어~가 실행해야 합니다." },
-      { Language.Latam, "Este comando debe ser ejecutado por un ~jugador~." },
-      { Language.Polish, "To polecenie musi być uruchomione przez ~gracza~." },
-      { Language.Russian, "Эта команда должна быть выполнена ~игроком~." },
-      { Language.Spanish, "Este comando debe ser ejecutado por un ~jugador~." },
-      { Language.ChineseSimplified, "此命令必须由~玩家~运行。" },
-      { Language.ChineseTraditional, "此指令必須由~玩家~執行。" },
-      { Language.Thai, "คำสั่งนี้ต้องรันโดย~ผู้เล่น~" },
-      { Language.Turkish, "Bu komut bir ~oyuncu~ tarafından çalıştırılmalıdır." },
-      { Language.Ukrainian, "Ця команда повинна бути виконана ~гравцем~." },
-      { Language.Vietnamese, "Lệnh này phải được thực thi bởi ~người chơi~." }
-    });
+    var resourceName = "ScarletCore.Localization.CommandTranslations.json";
+    Localizer.LoadFromResource(resourceName);
   }
-
 
   [Command("help", Language.English, description: "Shows available commands")]
   [CommandAlias("ajuda", Language.Portuguese, description: "Mostra os comandos disponíveis")]
@@ -1346,6 +974,126 @@ public static class CommandHandler {
         messageBuilder.AppendLine();
 
         string nextPageText = Localizer.Get(ctx.Sender, LocalizationKey.HelpNextPage, CommandPrefix, page + 1);
+        messageBuilder.AppendLine(nextPageText.WithColor("white"));
+      }
+
+      ctx.Reply(messageBuilder.ToString());
+    }
+  }
+  [Command("helpmod", Language.English, description: "Shows commands from a specific mod")]
+  [CommandAlias("ajudamod", Language.Portuguese, description: "Mostra comandos de um mod específico")]
+  [CommandAlias("aidemod", Language.French, description: "Affiche les commandes d'un mod spécifique")]
+  [CommandAlias("hilfemod", Language.German, description: "Zeigt Befehle eines bestimmten Mods an")]
+  [CommandAlias("segítségmod", Language.Hungarian, description: "Megjeleníti egy adott mod parancsait")]
+  [CommandAlias("aiutomod", Language.Italian, description: "Mostra i comandi di un mod specifico")]
+  [CommandAlias("ヘルプモッド", Language.Japanese, description: "特定のModのコマンドを表示します")]
+  [CommandAlias("도움말모드", Language.Korean, description: "특정 모드의 명령을 표시합니다")]
+  [CommandAlias("ayudamod", Language.Latam, description: "Muestra comandos de un mod específico")]
+  [CommandAlias("pomocmod", Language.Polish, description: "Pokazuje polecenia z określonego moda")]
+  [CommandAlias("помощьмод", Language.Russian, description: "Показывает команды определенного мода")]
+  [CommandAlias("ayudamod", Language.Spanish, description: "Muestra comandos de un mod específico")]
+  [CommandAlias("帮助模组", Language.ChineseSimplified, description: "显示特定模组的命令")]
+  [CommandAlias("幫助模組", Language.ChineseTraditional, description: "顯示特定模組的指令")]
+  [CommandAlias("ช่วยเหลือม็อด", Language.Thai, description: "แสดงคำสั่งจากม็อดเฉพาะ")]
+  [CommandAlias("yardımmod", Language.Turkish, description: "Belirli bir moddan komutları gösterir")]
+  [CommandAlias("допомогамод", Language.Ukrainian, description: "Показує команди певного мода")]
+  [CommandAlias("trợgiúpmod", Language.Vietnamese, description: "Hiển thị lệnh từ mod cụ thể")]
+  internal static void HelpModCommand(CommandContext ctx, string assemblyName, int page = 1) {
+    HelpModCommandInternal(ctx, assemblyName, ctx.Sender.Language, page);
+  }
+
+  [Command("helpmod", Language.English, description: "Shows commands from a specific mod")]
+  [CommandAlias("ajudamod", Language.Portuguese, description: "Mostra comandos de um mod específico")]
+  [CommandAlias("aidemod", Language.French, description: "Affiche les commandes d'un mod spécifique")]
+  [CommandAlias("hilfemod", Language.German, description: "Zeigt Befehle eines bestimmten Mods an")]
+  [CommandAlias("segítségmod", Language.Hungarian, description: "Megjeleníti egy adott mod parancsait")]
+  [CommandAlias("aiutomod", Language.Italian, description: "Mostra i comandi di un mod specifico")]
+  [CommandAlias("ヘルプモッド", Language.Japanese, description: "特定のModのコマンドを表示します")]
+  [CommandAlias("도움말모드", Language.Korean, description: "특정 모드의 명령을 표시합니다")]
+  [CommandAlias("ayudamod", Language.Latam, description: "Muestra comandos de un mod específico")]
+  [CommandAlias("pomocmod", Language.Polish, description: "Pokazuje polecenia z określonego moda")]
+  [CommandAlias("помощьмод", Language.Russian, description: "Показывает команды определенного мода")]
+  [CommandAlias("ayudamod", Language.Spanish, description: "Muestra comandos de un mod específico")]
+  [CommandAlias("帮助模组", Language.ChineseSimplified, description: "显示特定模组的命令")]
+  [CommandAlias("幫助模組", Language.ChineseTraditional, description: "顯示特定模組的指令")]
+  [CommandAlias("ช่วยเหลือม็อด", Language.Thai, description: "แสดงคำสั่งจากม็อดเฉพาะ")]
+  [CommandAlias("yardımmod", Language.Turkish, description: "Belirli bir moddan komutları gösterir")]
+  [CommandAlias("допомогамод", Language.Ukrainian, description: "Показує команди певного мода")]
+  [CommandAlias("trợgiúpmod", Language.Vietnamese, description: "Hiển thị lệnh từ mod cụ thể")]
+  internal static void HelpModCommand(CommandContext ctx, string assemblyName, string language, int page = 1) {
+    var targetLanguage = Localizer.GetLanguageFromString(language);
+    if (targetLanguage == Language.None) {
+      ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, language).FormatError());
+      return;
+    }
+    HelpModCommandInternal(ctx, assemblyName, targetLanguage, page);
+  }
+
+  private static void HelpModCommandInternal(CommandContext ctx, string assemblyName, Language targetLanguage, int page) {
+    const int commandsPerMessage = 4;
+    const int messagesPerPage = 8;
+    const int commandsPerPage = commandsPerMessage * messagesPerPage;
+
+    if (page < 1) page = 1;
+
+    bool isCustomLanguage = targetLanguage != ctx.Sender.Language;
+
+    var commandsByAssembly = GetCommandsByAssembly(targetLanguage, ctx.Sender.IsAdmin);
+
+    // Buscar o assembly que corresponde ao nome fornecido (case-insensitive)
+    var matchingAssembly = commandsByAssembly.Keys.FirstOrDefault(key =>
+      key.Equals(assemblyName, StringComparison.OrdinalIgnoreCase));
+
+    if (matchingAssembly == null) {
+      // Assembly não encontrado - listar assemblies disponíveis
+      var availableAssemblies = string.Join(", ", commandsByAssembly.Keys);
+      string errorMsg = Localizer.Get(ctx.Sender, LocalizationKey.HelpModNotFound, assemblyName);
+      string availableMsg = Localizer.Get(ctx.Sender, LocalizationKey.HelpModAvailable, availableAssemblies);
+
+      ctx.Reply($"{errorMsg}\n{availableMsg}".FormatError());
+      return;
+    }
+
+    var commands = commandsByAssembly[matchingAssembly];
+
+    if (commands.Count == 0) {
+      ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.HelpNoCommands).FormatError());
+      return;
+    }
+
+    int totalCommands = commands.Count;
+    int totalPages = (int)Math.Ceiling(totalCommands / (double)commandsPerPage);
+
+    if (page > totalPages) page = totalPages;
+
+    int startIndex = (page - 1) * commandsPerPage;
+    int endIndex = Math.Min(startIndex + commandsPerPage, totalCommands);
+    var pageCommands = commands.Skip(startIndex).Take(endIndex - startIndex).ToList();
+
+    for (int i = 0; i < pageCommands.Count; i += commandsPerMessage) {
+      var messageBuilder = new System.Text.StringBuilder();
+
+      if (i == 0) {
+        string headerText = Localizer.Get(ctx.Sender, LocalizationKey.HelpModHeader, matchingAssembly, page, totalPages);
+        messageBuilder.AppendLine(headerText.Bold());
+
+        if (isCustomLanguage) {
+          messageBuilder.AppendLine($"~Language: {targetLanguage}~".WithColor("yellow"));
+        }
+
+        messageBuilder.AppendLine();
+      }
+
+      for (int j = i; j < Math.Min(i + commandsPerMessage, pageCommands.Count); j++) {
+        var command = pageCommands[j];
+        string commandWithParams = FormatCommandWithParameters(command);
+        messageBuilder.AppendLine($"  {CommandPrefix}{commandWithParams}".FormatSuccess());
+      }
+
+      if (i + commandsPerMessage >= pageCommands.Count && page < totalPages) {
+        messageBuilder.AppendLine();
+        string nextPageText = Localizer.Get(ctx.Sender, LocalizationKey.HelpModNextPage,
+          CommandPrefix, assemblyName, page + 1);
         messageBuilder.AppendLine(nextPageText.WithColor("white"));
       }
 

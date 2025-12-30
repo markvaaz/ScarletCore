@@ -562,6 +562,10 @@ public class Database : IDisposable {
     Dispose();
   }
 
+  /// <summary>
+  /// Releases database resources, performs a final checkpoint and disables auto-backup.
+  /// Also suppresses finalization for this instance.
+  /// </summary>
   public void Dispose() {
     try {
       DisableAutoBackup();
