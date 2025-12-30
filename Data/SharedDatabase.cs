@@ -202,7 +202,7 @@ public static class SharedDatabase {
           deleted++;
       }
 
-      Log.Info($"Cleared {deleted} entries from shared database '{databaseName}'");
+      Log.Message($"Cleared {deleted} entries from shared database '{databaseName}'");
       return deleted;
     }
   }

@@ -200,7 +200,8 @@ public class Database : IDisposable {
     }
 
     try {
-      var bsonData = BsonMapper.Global.ToDocument(data);
+      // Convert data to BsonValue (handles primitives and objects)
+      var bsonData = BsonMapper.Global.Serialize(data);
       var now = DateTime.UtcNow;
 
       var existing = _collection.FindById(key);
@@ -217,6 +218,7 @@ public class Database : IDisposable {
       throw new InvalidOperationException("Circular reference detected during serialization", ex);
     } catch (Exception ex) {
       Log.Error($"Failed to save data with key '{key}': {ex.Message}");
+      Log.Error($"Stack trace: {ex.StackTrace}");
       throw;
     }
   }
@@ -234,15 +236,22 @@ public class Database : IDisposable {
     try {
       var entry = _collection.FindById(key);
 
-      if (entry == null)
+      if (entry == null) {
+        Log.Warning($"[Database] Key '{key}' not found in database");
         return default;
+      }
 
-      if (entry.Data == null || entry.Data.IsNull)
+      if (entry.Data == null || entry.Data.IsNull) {
+        Log.Warning($"[Database] Key '{key}' has null data");
         return default;
+      }
 
-      return BsonMapper.Global.ToObject<T>(entry.Data.AsDocument);
+      // Deserialize BsonValue back to T (handles primitives and objects)
+      var result = BsonMapper.Global.Deserialize<T>(entry.Data);
+      return result;
     } catch (Exception ex) {
       Log.Error($"Failed to load data with key '{key}': {ex.Message}");
+      Log.Error($"Stack trace: {ex.StackTrace}");
       return default;
     }
   }
@@ -255,29 +264,15 @@ public class Database : IDisposable {
   /// <param name="factory">Factory function to create default value</param>
   /// <returns>Existing or newly created data</returns>
   public T GetOrCreate<T>(string key, Func<T> factory) {
-    var data = Get<T>(key);
-
-    // For value types, check if it's the default value
-    // For reference types, check if it's null
-    if (typeof(T).IsValueType) {
-      // Value types: always create if it's default (e.g., 0 for int, false for bool)
-      // We can't distinguish between "not found" and "stored default value"
-      // So we check if the key exists
-      if (!Has(key)) {
-        var newData = factory();
-        Set(key, newData);
-        return newData;
-      }
-      return data;
-    } else {
-      // Reference types: check for null
-      if (data == null) {
-        var newData = factory();
-        Set(key, newData);
-        return newData;
-      }
-      return data;
+    // First check if key exists
+    if (Has(key)) {
+      return Get<T>(key);
     }
+
+    // Key doesn't exist, create and save
+    var newData = factory();
+    Set(key, newData);
+    return newData;
   }
 
   /// <summary>
@@ -386,7 +381,7 @@ public class Database : IDisposable {
   public void Clear() {
     try {
       _collection.DeleteAll();
-      Log.Info($"Database '{_pluginGuid}' cleared successfully");
+      Log.Message($"Database '{_pluginGuid}' cleared successfully");
     } catch (Exception ex) {
       Log.Error($"Failed to clear database: {ex.Message}");
     }
@@ -427,7 +422,7 @@ public class Database : IDisposable {
     EventManager.On(ServerEvents.OnSave, AutoBackupHandler);
     _autoBackupEnabled = true;
 
-    Log.Info($"Auto-backup enabled for database '{_pluginGuid}'");
+    Log.Message($"Auto-backup enabled for database '{_pluginGuid}'");
   }
 
   /// <summary>
@@ -441,7 +436,7 @@ public class Database : IDisposable {
     } catch { }
 
     _autoBackupEnabled = false;
-    Log.Info($"Auto-backup disabled for database '{_pluginGuid}'");
+    Log.Message($"Auto-backup disabled for database '{_pluginGuid}'");
   }
 
   [EventPriority(EventPriority.Last)]
@@ -486,12 +481,13 @@ public class Database : IDisposable {
         );
 
         Directory.CreateDirectory(backupDir);
+
         var backupPath = Path.Combine(backupDir, backupFileName);
         File.Copy(dbPath, backupPath, true);
 
         CleanupOldBackups(backupDir);
 
-        Log.Info($"Backup created: {backupFileName}");
+        Log.Message($"Backup created: {backupFileName}");
         return backupPath;
       } catch (Exception ex) {
         Log.Error($"Failed to create backup: {ex.Message}");
@@ -514,14 +510,16 @@ public class Database : IDisposable {
         }
 
         var dbPath = GetDatabasePath();
+
         // Close database connection
         _db.Dispose();
 
         // Replace database file
         File.Copy(backupFilePath, dbPath, true);
 
-        Log.Info($"Database restored from: {backupFilePath}");
+        Log.Message($"Database restored from: {backupFilePath}");
         Log.Warning("Application restart required for changes to take effect");
+
         return true;
       } catch (Exception ex) {
         Log.Error($"Failed to restore backup: {ex.Message}");
@@ -544,7 +542,7 @@ public class Database : IDisposable {
       foreach (var file in files.Skip(_maxBackups)) {
         try {
           file.Delete();
-          Log.Info($"Deleted old backup: {file.Name}");
+          Log.Message($"Deleted old backup: {file.Name}");
         } catch (Exception ex) {
           Log.Warning($"Failed to delete old backup: {ex.Message}");
         }
