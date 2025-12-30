@@ -15,7 +15,6 @@ namespace ScarletCore.Services;
 /// </summary>
 public static class EntityLookupService {
   private static EntityManager EntityManager => GameSystems.EntityManager;
-  private static GenerateCastleSystem GenerateCastleSystem => GameSystems.GenerateCastleSystem;
 
   /// <summary>
   /// Queries entities that match the specified component types and query options.
@@ -220,8 +219,9 @@ public static class EntityLookupService {
   /// Gets all entities within a given radius from the center.
   /// </summary>
   public static NativeList<Entity> GetAllEntitiesInRadius(float2 center, float radius) {
-    var spatialData = GenerateCastleSystem._TileModelLookupSystemData;
-    var tileModelSpatialLookupRO = spatialData.GetSpatialLookupReadOnlyAndComplete(GenerateCastleSystem);
+    var utcs = GameSystems.Server.GetOrCreateSystemManaged<UpdateTileCellsSystem>();
+    var spatialData = utcs.TileModelSpatialLookupSystemData;
+    var tileModelSpatialLookupRO = spatialData.GetSpatialLookupReadOnlyAndComplete(utcs);
 
     var gridPosMin = ConvertPosToTileGrid(center - radius);
     var gridPosMax = ConvertPosToTileGrid(center + radius);

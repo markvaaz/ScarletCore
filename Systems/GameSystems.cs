@@ -193,11 +193,6 @@ public static class GameSystems {
   }
 
   /// <summary>
-  /// Provides access to the generate castle system instance.
-  /// </summary>
-  public static GenerateCastleSystem GenerateCastleSystem => _server.GetExistingSystemManaged<GenerateCastleSystem>();
-
-  /// <summary>
   /// Gets a value indicating whether the game systems have been initialized.
   /// </summary>
   public static bool Initialized { get; private set; } = false;
