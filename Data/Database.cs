@@ -81,7 +81,7 @@ public class Database : IDisposable {
   /// <summary>
   /// Detects circular references in an object graph
   /// </summary>
-  private string DetectCircularReference<T>(T data) {
+  private static string DetectCircularReference<T>(T data) {
     try {
       var visited = new HashSet<object>(new ReferenceEqualityComparer());
       var path = new List<string>();
@@ -93,7 +93,7 @@ public class Database : IDisposable {
     }
   }
 
-  private string DetectCircularReferenceRecursive(object obj, HashSet<object> visited, List<string> path, string currentPath) {
+  private static string DetectCircularReferenceRecursive(object obj, HashSet<object> visited, List<string> path, string currentPath) {
     if (obj == null)
       return null;
 
@@ -237,6 +237,9 @@ public class Database : IDisposable {
       if (entry == null)
         return default;
 
+      if (entry.Data == null || entry.Data.IsNull)
+        return default;
+
       return BsonMapper.Global.ToObject<T>(entry.Data.AsDocument);
     } catch (Exception ex) {
       Log.Error($"Failed to load data with key '{key}': {ex.Message}");
@@ -254,12 +257,27 @@ public class Database : IDisposable {
   public T GetOrCreate<T>(string key, Func<T> factory) {
     var data = Get<T>(key);
 
-    if (data != null && !EqualityComparer<T>.Default.Equals(data, default(T)))
+    // For value types, check if it's the default value
+    // For reference types, check if it's null
+    if (typeof(T).IsValueType) {
+      // Value types: always create if it's default (e.g., 0 for int, false for bool)
+      // We can't distinguish between "not found" and "stored default value"
+      // So we check if the key exists
+      if (!Has(key)) {
+        var newData = factory();
+        Set(key, newData);
+        return newData;
+      }
       return data;
-
-    var newData = factory();
-    Set(key, newData);
-    return newData;
+    } else {
+      // Reference types: check for null
+      if (data == null) {
+        var newData = factory();
+        Set(key, newData);
+        return newData;
+      }
+      return data;
+    }
   }
 
   /// <summary>
@@ -308,12 +326,10 @@ public class Database : IDisposable {
   /// <returns>Array of all keys</returns>
   public string[] GetAllKeys() {
     try {
-      return _collection.FindAll()
-        .Select(e => e.Id)
-        .ToArray();
+      return [.. _collection.FindAll().Select(e => e.Id)];
     } catch (Exception ex) {
       Log.Error($"Failed to get all keys: {ex.Message}");
-      return Array.Empty<string>();
+      return [];
     }
   }
 
@@ -327,12 +343,10 @@ public class Database : IDisposable {
       return GetAllKeys();
 
     try {
-      return _collection.Find(x => x.Id.StartsWith(prefix))
-        .Select(e => e.Id)
-        .ToArray();
+      return [.. _collection.Find(x => x.Id.StartsWith(prefix)).Select(e => e.Id)];
     } catch (Exception ex) {
       Log.Error($"Failed to get keys by prefix '{prefix}': {ex.Message}");
-      return Array.Empty<string>();
+      return [];
     }
   }
 
@@ -362,7 +376,7 @@ public class Database : IDisposable {
       return result;
     } catch (Exception ex) {
       Log.Error($"Failed to get all data by prefix '{prefix}': {ex.Message}");
-      return new Dictionary<string, T>();
+      return [];
     }
   }
 
@@ -430,7 +444,7 @@ public class Database : IDisposable {
     Log.Info($"Auto-backup disabled for database '{_pluginGuid}'");
   }
 
-  [EventPriority(-999)]
+  [EventPriority(EventPriority.Last)]
   private async void AutoBackupHandler(string saveName) {
     try {
       saveName = saveName?.Replace(".save", "") ?? "auto";
@@ -472,7 +486,6 @@ public class Database : IDisposable {
         );
 
         Directory.CreateDirectory(backupDir);
-
         var backupPath = Path.Combine(backupDir, backupFileName);
         File.Copy(dbPath, backupPath, true);
 
@@ -501,7 +514,6 @@ public class Database : IDisposable {
         }
 
         var dbPath = GetDatabasePath();
-
         // Close database connection
         _db.Dispose();
 
@@ -510,7 +522,6 @@ public class Database : IDisposable {
 
         Log.Info($"Database restored from: {backupFilePath}");
         Log.Warning("Application restart required for changes to take effect");
-
         return true;
       } catch (Exception ex) {
         Log.Error($"Failed to restore backup: {ex.Message}");
@@ -553,11 +564,6 @@ public class Database : IDisposable {
     Dispose();
   }
 
-  /// <summary>
-  /// Releases database resources and performs cleanup.
-  /// This will disable auto-backups, perform a final checkpoint to flush data to disk and dispose the underlying LiteDB instance.
-  /// Safe to call multiple times.
-  /// </summary>
   public void Dispose() {
     try {
       DisableAutoBackup();
