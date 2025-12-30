@@ -39,7 +39,6 @@ public static class CommandHandler {
 
   /// <summary>Initializes the command system by registering localization keys and discovering commands.</summary>
   internal static void Initialize() {
-    RegisterLocalizationKeys();
     RegisterAll();
   }
 
@@ -164,7 +163,9 @@ public static class CommandHandler {
       var param = parameters[i];
 
       if (param.ParameterType == typeof(CommandContext)) {
-        paramValues[i] = new CommandContext(Entity.Null, player, fullMessageText, args);
+        paramValues[i] = new CommandContext(Entity.Null, player, fullMessageText, args) {
+          CallingAssembly = commandInfo.Assembly
+        };
         continue;
       }
 
@@ -249,7 +250,7 @@ public static class CommandHandler {
 
         var aliasAttrs = method.GetCustomAttributes<CommandAliasAttribute>();
         foreach (var aliasAttr in aliasAttrs) {
-          bool effectiveAdminOnly = commandAttr?.AdminOnly ?? false || groupAdminOnly;
+          bool effectiveAdminOnly = groupAdminOnly || (commandAttr?.AdminOnly == true);
 
           if (groups.Count > 0) {
             foreach (var (groupName, groupLanguage) in groups) {
@@ -266,7 +267,11 @@ public static class CommandHandler {
 
     CommandKeysByAssembly[assembly] = commandKeys;
     FallbackKeysByAssembly[assembly] = fallbackKeys;
-    Log.Message($"[CommandHandler] Registered {commandKeys.Count} commands from assembly '{assembly.GetName().Name}'.");
+
+    var mainCommandCount = fallbackKeys.Count;
+    var aliasCommandCount = commandKeys.Count - mainCommandCount;
+
+    Log.Message($"[CommandHandler] Registered {mainCommandCount} commands and {aliasCommandCount} aliases from '{assembly.GetName().Name}'.");
   }
 
   /// <summary>
@@ -849,11 +854,6 @@ public static class CommandHandler {
     public const string HelpModAvailable = "help_mod_available";
     public const string HelpModHeader = "help_mod_header";
     public const string HelpModNextPage = "help_mod_next_page";
-  }
-
-  private static void RegisterLocalizationKeys() {
-    var resourceName = "ScarletCore.Localization.CommandTranslations.json";
-    Localizer.LoadFromResource(resourceName);
   }
 
   [Command("help", Language.English, description: "Shows available commands")]

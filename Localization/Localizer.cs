@@ -136,7 +136,8 @@ public static class Localizer {
     var language = Plugin.Settings.Get<Language>("PrefabLocalizationLanguage");
 
     try {
-      LoadGameTranslations();
+      // LoadGameTranslations();
+      AutoLoadFromLocalizationFolder();
       LoadPrefabMapping();
       EventManager.On(PlayerEvents.PlayerJoined, CheckLanguageOnJoin);
       _initialized = true;
@@ -173,6 +174,92 @@ public static class Localizer {
     } catch (Exception ex) {
       Log.Error($"CheckLanguageOnJoin failed: {ex}");
     }
+  }
+
+  /// <summary>
+  /// <para>Automatically finds and loads all JSON translation files from embedded resources 
+  /// in the "Localization" folder of the calling assembly.</para>
+  /// <para>The JSON files must be in the format: { key: { languageEnum: text } }.</para>
+  /// <para>Note: JSON files must be included as embedded resources in your .csproj file:</para>
+  /// <code>
+  /// &lt;ItemGroup&gt;
+  ///   &lt;EmbeddedResource Include="Localization\**\*.*" /&gt;
+  /// &lt;/ItemGroup&gt;
+  /// </code>
+  /// </summary>
+  public static void AutoLoadFromLocalizationFolder() {
+    try {
+      // Get the calling assembly (not the Localizer's assembly)
+      var callingAssembly = Assembly.GetCallingAssembly();
+      var assemblyName = callingAssembly.GetName().Name;
+      var localizationPrefix = $"{assemblyName}.Localization.";
+
+      // Get all embedded resource names that start with the localization prefix
+      var resourceNames = callingAssembly.GetManifestResourceNames()
+        .Where(name => name.StartsWith(localizationPrefix) && name.EndsWith(".json"))
+        .ToArray();
+
+      if (resourceNames.Length == 0) {
+        Log.Info($"No JSON files found in embedded resources '{localizationPrefix}' for assembly: {assemblyName}");
+        return;
+      }
+
+      int successCount = 0;
+      int errorCount = 0;
+
+      foreach (var resourceName in resourceNames) {
+        try {
+          var jsonContent = LoadResourceFromAssembly(callingAssembly, resourceName);
+
+          if (string.IsNullOrEmpty(jsonContent)) {
+            continue; // Silently skip empty resources
+          }
+
+          var deserialized = JsonSerializer.Deserialize<IDictionary<string, IDictionary<Language, string>>>(jsonContent);
+
+          if (deserialized == null || deserialized.Count == 0) {
+            continue; // Silently skip incompatible format
+          }
+
+          LoadKeys(deserialized);
+          successCount++;
+
+          var fileName = resourceName.Substring(localizationPrefix.Length);
+          Log.Message($"Loaded translations from: {fileName} ({deserialized.Count} keys)");
+        } catch (JsonException) {
+          // Silently skip files with incompatible JSON format
+          continue;
+        } catch (Exception ex) {
+          errorCount++;
+          Log.Error($"Error loading translation resource '{resourceName}': {ex.Message}");
+        }
+      }
+
+      if (successCount > 0) {
+        Log.Message($"Successfully loaded {successCount} translation file(s) from '{assemblyName}.Localization' embedded resources");
+      }
+
+      if (errorCount > 0) {
+        Log.Warning($"Failed to load {errorCount} translation file(s) due to read errors");
+      }
+    } catch (Exception ex) {
+      Log.Error($"Error loading translations from Localization embedded resources: {ex}");
+    }
+  }
+
+  /// <summary>
+  /// Helper method to load an embedded resource from an assembly.
+  /// </summary>
+  private static string LoadResourceFromAssembly(Assembly assembly, string resourceName) {
+    using var stream = assembly.GetManifestResourceStream(resourceName);
+
+    if (stream == null) {
+      Log.Error($"Resource '{resourceName}' not found in assembly '{assembly.FullName}'");
+      return null;
+    }
+
+    using var reader = new StreamReader(stream);
+    return reader.ReadToEnd();
   }
 
   /// <summary>

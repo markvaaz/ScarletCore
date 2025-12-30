@@ -46,8 +46,8 @@ public class Plugin : BasePlugin {
     _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
     _harmony.PatchAll(System.Reflection.Assembly.GetExecutingAssembly());
 
-    Settings = new Settings(MyPluginInfo.PLUGIN_GUID, Instance);
-    Database = new Database(MyPluginInfo.PLUGIN_GUID);
+    Settings = new Settings(MyPluginInfo.PLUGIN_NAME, Instance);
+    Database = new Database(MyPluginInfo.PLUGIN_NAME);
 
     Settings.Section("Language")
       .Add("PrefabLocalizationLanguage", Language.English, $"Language code for localization. Available languages: {string.Join(", ", Localizer.AvailableServerLanguages)}")
