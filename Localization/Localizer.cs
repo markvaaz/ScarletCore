@@ -141,7 +141,7 @@ public static class Localizer {
       EventManager.On(PlayerEvents.PlayerJoined, CheckLanguageOnJoin);
       _initialized = true;
       _currentServerLanguage = language;
-      Log.Info($"LocalizationService initialized with {_allTranslations.Count} translation keys and {_prefabToGuid.Count} prefab mappings");
+      Log.Message($"LocalizationService initialized with {_allTranslations.Count} translation keys and {_prefabToGuid.Count} prefab mappings");
     } catch (Exception ex) {
       Log.Error($"Failed to initialize LocalizationService: {ex}");
     }
@@ -222,7 +222,7 @@ public static class Localizer {
         }
       }
 
-      Log.Info($"Loaded {_allTranslations.Count} game translation keys");
+      Log.Message($"Loaded {_allTranslations.Count} game translation keys");
     } catch (Exception ex) {
       Log.Error($"Error loading game translations: {ex}");
     }
@@ -256,7 +256,7 @@ public static class Localizer {
         }
       }
 
-      Log.Info($"Loaded {_prefabToGuid.Count} prefab mappings");
+      Log.Message($"Loaded {_prefabToGuid.Count} prefab mappings");
     } catch (Exception ex) {
       Log.Error($"Error loading prefab mapping: {ex}");
     }
@@ -517,7 +517,7 @@ public static class Localizer {
       if (_allTranslations.TryRemove(k, out _)) removed++;
     }
 
-    Log.Info($"Disposed {removed} localization keys for assembly: {assemblyName}");
+    Log.Message($"Disposed {removed} localization keys for assembly: {assemblyName}");
     return removed;
   }
 
@@ -620,7 +620,7 @@ public static class Localizer {
     }
 
     _currentServerLanguage = language;
-    Log.Info($"Changed server language to: {language}");
+    Log.Message($"Changed server language to: {language}");
     return true;
   }
 }

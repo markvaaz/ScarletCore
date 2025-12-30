@@ -1439,7 +1439,7 @@ public static class CommandHandler {
       if (Localizer.ChangeLanguage(newLanguage)) {
         Plugin.Settings.Set("PrefabLocalizationLanguage", newLanguage);
         ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.ServerLanguageChanged, newLanguage).FormatSuccess());
-        Log.Info($"ScarletCore localization language changed to: {newLanguage} by admin {ctx.Sender?.Name}");
+        Log.Message($"ScarletCore localization language changed to: {newLanguage} by admin {ctx.Sender?.Name}");
       } else {
         ctx.ReplyError(Localizer.Get(ctx.Sender, LocalizationKey.LanguageChangeFailed, newLanguage));
       }

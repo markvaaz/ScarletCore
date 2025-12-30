@@ -48,7 +48,7 @@ public static class SpawnerService {
       var spawnerEntity = Entity.Null;
       GameSystems.UnitSpawnerUpdateSystem.SpawnUnit(spawnerEntity, prefabGUID, position, count, minRange, maxRange, lifeTime);
 
-      Log.Info($"Successfully spawned {count} entities of {prefabGUID.GuidHash} at {position}");
+      Log.Message($"Successfully spawned {count} entities of {prefabGUID.GuidHash} at {position}");
       return true;
     } catch (Exception ex) {
       Log.Error($"Error spawning entities: {ex.Message}");

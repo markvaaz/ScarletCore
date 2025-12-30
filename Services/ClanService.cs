@@ -166,7 +166,7 @@ public static class ClanService {
         });
 
         // Log the kick action for debugging
-        Log.Info($"Kicking {playerData.Name} from clan {clanEntity.Read<ClanTeam>().Name}");
+        Log.Message($"Kicking {playerData.Name} from clan {clanEntity.Read<ClanTeam>().Name}");
 
         return true; // Player successfully removed from clan
       }

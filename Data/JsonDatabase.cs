@@ -474,7 +474,7 @@ public class JsonDatabase {
           }
         }
 
-        Log.Info($"Database backup created successfully for '{_databaseName}'");
+        Log.Message($"Database backup created successfully for '{_databaseName}'");
         return fullBackupPath;
       } catch (Exception ex) {
         Log.Error($"Failed to create database backup: {ex.Message}");
@@ -527,7 +527,7 @@ public class JsonDatabase {
         // Clear cache to force reload of restored data
         ClearCache();
 
-        Log.Info($"Database restored successfully from: {backupFilePath}");
+        Log.Message($"Database restored successfully from: {backupFilePath}");
         return true;
       } catch (Exception ex) {
         Log.Error($"Failed to restore database from backup: {ex.Message}");
@@ -569,13 +569,13 @@ public class JsonDatabase {
       for (int i = 0; i < filesToDelete && i < sortedFiles.Length; i++) {
         try {
           File.Delete(sortedFiles[i].FullName);
-          Log.Info($"Deleted old backup: {sortedFiles[i].Name}");
+          Log.Message($"Deleted old backup: {sortedFiles[i].Name}");
         } catch (Exception ex) {
           Log.Warning($"Failed to delete old backup {sortedFiles[i].Name}: {ex.Message}");
         }
       }
 
-      Log.Info($"Cleanup completed. Kept {Math.Min(maxBackups, sortedFiles.Length - filesToDelete)} backup(s).");
+      Log.Message($"Cleanup completed. Kept {Math.Min(maxBackups, sortedFiles.Length - filesToDelete)} backup(s).");
     } catch (Exception ex) {
       Log.Warning($"Error during backup cleanup: {ex.Message}");
     }
