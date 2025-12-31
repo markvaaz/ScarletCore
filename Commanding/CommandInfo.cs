@@ -41,4 +41,6 @@ public sealed class CommandInfo {
   public MethodInfo Method { get; set; }
   /// <summary>The assembly where the command was defined.</summary>
   public Assembly Assembly { get; set; }
+  /// <summary>Flag to cancel command execution when emitted in OnBeforeExecute event.</summary>
+  public bool CancelExecution { get; set; } = false;
 }

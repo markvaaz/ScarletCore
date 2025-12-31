@@ -184,8 +184,12 @@ public static class CommandHandler {
 
     try {
       EventManager.Emit(CommandEvents.OnBeforeExecute, player, commandInfo, args);
-      method.Invoke(null, paramValues);
-      EventManager.Emit(CommandEvents.OnAfterExecute, player, commandInfo, args);
+      if (commandInfo.CancelExecution) {
+        commandInfo.CancelExecution = false;
+      } else {
+        method.Invoke(null, paramValues);
+        EventManager.Emit(CommandEvents.OnAfterExecute, player, commandInfo, args);
+      }
       Log.Message($"[CommandHandler] {player.Name} executed command: {commandInfo.FullCommandName} with args: {string.Join(", ", args)}");
     } catch (Exception ex) {
       Log.Error($"[CommandHandler] Error executing command '{commandInfo.FullCommandName}': {ex}");
