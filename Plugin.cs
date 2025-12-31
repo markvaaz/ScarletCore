@@ -5,6 +5,7 @@ using HarmonyLib;
 using ScarletCore.Commanding;
 using ScarletCore.Data;
 using ScarletCore.Localization;
+using ScarletCore.Services;
 
 namespace ScarletCore;
 
@@ -55,6 +56,7 @@ public class Plugin : BasePlugin {
       .Add("WelcomeMessage", "~Welcome to {ServerName}!~\n\nThis server uses ~ScarletMods~ to enhance your experience.\n\nTo get started, please set ~your preferred language~:\n\n{AvailableLanguages}\nUse: ~.language <language>~", "Welcome message shown to players who haven't set their language. Placeholders: {ServerName}, {AvailableLanguages}, {PlayerName}");
     Localizer.Initialize();
     CommandHandler.Initialize();
+    AdminService.Initialize();
   }
 
   /// <summary>
