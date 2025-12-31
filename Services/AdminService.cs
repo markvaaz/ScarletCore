@@ -27,7 +27,7 @@ public static class AdminService {
   }
 
   [Command("autoadmin", Language.English, adminOnly: true)]
-  public static void AutoAdminCommand(CommandContext context) {
+  internal static void AutoAdminCommand(CommandContext context) {
     var autoAdmin = Plugin.Database.Get<bool>($"auto_admin_{context.Sender.PlatformId}");
     autoAdmin = !autoAdmin;
     Plugin.Database.Set($"auto_admin_{context.Sender.PlatformId}", autoAdmin);
