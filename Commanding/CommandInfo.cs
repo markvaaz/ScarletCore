@@ -6,7 +6,7 @@ namespace ScarletCore.Commanding;
 /// <summary>
 /// Holds metadata for a registered command (name, parameters, attributes and origin assembly).
 /// </summary>
-internal sealed class CommandInfo {
+public sealed class CommandInfo {
   /// <summary>The command name (without group).</summary>
   public string Name { get; set; }
   /// <summary>Optional command group name.</summary>
