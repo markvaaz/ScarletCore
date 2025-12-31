@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using ScarletCore.Data;
 using ScarletCore.Utils;
+using ScarletCore.Commanding;
 using Unity.Collections;
 using Unity.Entities;
 using System.Linq.Expressions;
@@ -41,6 +42,7 @@ public static class EventManager {
   private static readonly Dictionary<PostfixEvents, List<PrioritizedHandler<Action<NativeArray<Entity>>>>> _postfixHandlers = [];
   private static readonly Dictionary<PlayerEvents, List<PrioritizedHandler<Action<PlayerData>>>> _playerHandlers = [];
   private static readonly Dictionary<ServerEvents, List<PrioritizedHandler<Delegate>>> _serverHandlers = [];
+  private static readonly Dictionary<CommandEvents, List<PrioritizedHandler<Delegate>>> _commandHandlers = [];
 
 
   /// <summary>
@@ -272,6 +274,92 @@ public static class EventManager {
       }
     }
     return false;
+  }
+
+  // --- Command event methods (similar to server events) ---
+  /// <summary>
+  /// Subscribes a callback to a command event. Handlers are invoked for command-related events.
+  /// </summary>
+  /// <param name="eventType">The command event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke when the event is emitted.</param>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  internal static void On(CommandEvents eventType, Action<PlayerData, CommandInfo, string[]> callback) {
+    if (callback == null) return;
+    if (!_commandHandlers.TryGetValue(eventType, out var list)) {
+      list = new List<PrioritizedHandler<Delegate>>(4);
+      _commandHandlers[eventType] = list;
+    }
+    var ph = new PrioritizedHandler<Delegate>(callback);
+    int idx = list.FindIndex(h => h.Priority < ph.Priority);
+    if (idx >= 0) list.Insert(idx, ph);
+    else list.Add(ph);
+  }
+
+  /// <summary>
+  /// Unsubscribes a callback from a command event.
+  /// </summary>
+  /// <param name="eventType">The command event type to unsubscribe from.</param>
+  /// <param name="callback">The callback to remove.</param>
+  /// <returns>True if the callback was removed; otherwise, false.</returns>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  internal static bool Off(CommandEvents eventType, Action<PlayerData, CommandInfo, string[]> callback) {
+    if (callback == null) return false;
+    if (_commandHandlers.TryGetValue(eventType, out var list)) {
+      int idx = list.FindIndex(h => AreDelegatesEqual(h.Handler, callback));
+      if (idx >= 0) {
+        list.RemoveAt(idx);
+        if (list.Count == 0) _commandHandlers.Remove(eventType);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// <summary>
+  /// Subscribes a callback to a command event for a single invocation. The handler is automatically removed after being called once.
+  /// </summary>
+  /// <param name="eventType">The command event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke once when the event is emitted.</param>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  internal static void Once(CommandEvents eventType, Action<PlayerData, CommandInfo, string[]> callback) {
+    if (callback == null) return;
+    void wrapped(PlayerData player, CommandInfo info, string[] args) {
+      try {
+        callback(player, info, args);
+      } finally {
+        Off(eventType, wrapped);
+      }
+    }
+    On(eventType, wrapped);
+  }
+
+  /// <summary>
+  /// Emits a command event, invoking all registered handlers for the specified event type.
+  /// </summary>
+  /// <param name="eventType">The command event type to emit.</param>
+  /// <param name="player">The player associated with the command event.</param>
+  /// <param name="commandInfo">The command info associated with the event.</param>
+  /// <param name="args">The command arguments.</param>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  internal static void Emit(CommandEvents eventType, PlayerData player, CommandInfo commandInfo, string[] args) {
+    if (!_commandHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
+    for (int i = 0; i < handlers.Count; i++) {
+      try {
+        if (handlers[i].Handler is Action<PlayerData, CommandInfo, string[]> cb) {
+          cb(player, commandInfo, args);
+        }
+      } catch (Exception ex) {
+        Log.Error($"[EventManager] Error in CommandEvents handler: {ex}");
+      }
+    }
+  }
+  /// <summary>
+  /// Gets the number of subscribers for a command event.
+  /// </summary>
+  /// <param name="eventType">The command event type.</param>
+  /// <returns>The number of subscribers.</returns>
+  internal static int GetSubscriberCount(CommandEvents eventType) {
+    return _commandHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
   }
 
   /// <summary>
