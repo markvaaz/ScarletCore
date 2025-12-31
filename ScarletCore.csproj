@@ -12,7 +12,7 @@
     <FileVersion>1.5.8.0</FileVersion>
     <Authors>markvaaz</Authors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- <NoWarn>$(NoWarn);1591</NoWarn> -->
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
   
   <PropertyGroup> 
