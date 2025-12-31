@@ -1,13 +1,11 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text.Json;
 using ProjectM.Network;
 using ScarletCore.Data;
+using ScarletCore.Events;
 using ScarletCore.Localization;
 using ScarletCore.Utils;
 using Stunlock.Core;
@@ -185,7 +183,9 @@ public static class CommandHandler {
     }
 
     try {
+      EventManager.Emit(CommandEvents.OnBeforeExecute, player, commandInfo, args);
       method.Invoke(null, paramValues);
+      EventManager.Emit(CommandEvents.OnAfterExecute, player, commandInfo, args);
       Log.Message($"[CommandHandler] {player.Name} executed command: {commandInfo.FullCommandName} with args: {string.Join(", ", args)}");
     } catch (Exception ex) {
       Log.Error($"[CommandHandler] Error executing command '{commandInfo.FullCommandName}': {ex}");
