@@ -106,6 +106,8 @@ public static class CommandHandler {
       return;
     }
 
+    commandInfo.CancelExecution = false;
+
     if (!IsHelpCommand(commandInfo) || !IsVCFLoaded()) {
       try {
         messageEntity.Destroy(true);
