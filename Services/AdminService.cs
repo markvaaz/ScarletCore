@@ -4,6 +4,9 @@ using ScarletCore.Systems;
 using ScarletCore.Data;
 using ScarletCore.Utils;
 using Unity.Entities;
+using ScarletCore.Events;
+using ScarletCore.Commanding;
+using ScarletCore.Localization;
 
 namespace ScarletCore.Services;
 
@@ -12,6 +15,25 @@ namespace ScarletCore.Services;
 /// Provides methods to add, remove, and check admin status for players.
 /// </summary>
 public static class AdminService {
+
+  internal static void Initialize() {
+    EventManager.On(PlayerEvents.PlayerJoined, (PlayerData playerData) => {
+      var autoAdmin = Plugin.Database.Get<bool>($"auto_admin_{playerData.PlatformId}");
+
+      if (autoAdmin) {
+        AddAdmin(playerData);
+      }
+    });
+  }
+
+  [Command("autoadmin", Language.English, adminOnly: true)]
+  public static void AutoAdminCommand(CommandContext context) {
+    var autoAdmin = Plugin.Database.Get<bool>($"auto_admin_{context.Sender.PlatformId}");
+    autoAdmin = !autoAdmin;
+    Plugin.Database.Set($"auto_admin_{context.Sender.PlatformId}", autoAdmin);
+    var status = autoAdmin ? "enabled" : "disabled";
+    context.ReplySuccess($"Auto admin has been ~{status}~ for you.");
+  }
 
   /// <summary>
   /// Adds admin privileges to a player using PlayerData.
