@@ -15,6 +15,20 @@ public enum ServerEvents {
 }
 
 /// <summary>
+/// Defines events related to command execution lifecycle.
+/// </summary>
+public enum CommandEvents {
+  /// <summary>
+  /// Triggered before a command is executed.
+  /// </summary>
+  OnBeforeExecute,
+  /// <summary>
+  /// Triggered after a command is executed.
+  /// </summary>
+  OnAfterExecute
+}
+
+/// <summary>
 /// Defines events related to player actions and state changes.
 /// </summary>
 public enum PlayerEvents {
