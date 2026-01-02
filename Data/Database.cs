@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using LiteDB;
 using ScarletCore.Utils;
 using ScarletCore.Events;
+using System.Linq.Expressions;
 
 namespace ScarletCore.Data;
 
@@ -395,6 +396,124 @@ public class Database : IDisposable {
       return _collection.Count();
     } catch {
       return 0;
+    }
+  }
+
+  /// <summary>
+  /// Queries the database using a predicate to filter entries by key
+  /// </summary>
+  /// <typeparam name="T">Type of data to retrieve</typeparam>
+  /// <param name="keyPredicate">Predicate to filter keys (e.g., x => x.StartsWith("players/"))</param>
+  /// <returns>List of matching data entries</returns>
+  public List<T> Query<T>(Expression<Func<string, bool>> keyPredicate) {
+    try {
+      // Convert the string predicate to a DataEntry predicate
+      var param = Expression.Parameter(typeof(DataEntry), "x");
+      var idProperty = Expression.Property(param, nameof(DataEntry.Id));
+      var body = Expression.Invoke(keyPredicate, idProperty);
+      var lambda = Expression.Lambda<Func<DataEntry, bool>>(body, param);
+
+      var entries = _collection.Find(lambda);
+      var result = new List<T>();
+
+      foreach (var entry in entries) {
+        try {
+          var data = BsonMapper.Global.Deserialize<T>(entry.Data);
+          result.Add(data);
+        } catch (Exception ex) {
+          Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+        }
+      }
+
+      return result;
+    } catch (Exception ex) {
+      Log.Error($"Failed to query database: {ex.Message}");
+      return [];
+    }
+  }
+
+  /// <summary>
+  /// Queries the database and returns both keys and values
+  /// </summary>
+  /// <typeparam name="T">Type of data to retrieve</typeparam>
+  /// <param name="keyPredicate">Predicate to filter keys</param>
+  /// <returns>Dictionary of key-value pairs</returns>
+  public Dictionary<string, T> QueryWithKeys<T>(Expression<Func<string, bool>> keyPredicate) {
+    try {
+      // Convert the string predicate to a DataEntry predicate
+      var param = Expression.Parameter(typeof(DataEntry), "x");
+      var idProperty = Expression.Property(param, nameof(DataEntry.Id));
+      var body = Expression.Invoke(keyPredicate, idProperty);
+      var lambda = Expression.Lambda<Func<DataEntry, bool>>(body, param);
+
+      var entries = _collection.Find(lambda);
+      var result = new Dictionary<string, T>();
+
+      foreach (var entry in entries) {
+        try {
+          var data = BsonMapper.Global.Deserialize<T>(entry.Data);
+          result[entry.Id] = data;
+        } catch (Exception ex) {
+          Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+        }
+      }
+
+      return result;
+    } catch (Exception ex) {
+      Log.Error($"Failed to query database: {ex.Message}");
+      return [];
+    }
+  }
+
+  /// <summary>
+  /// Gets all data entries of a specific type
+  /// </summary>
+  /// <typeparam name="T">Type of data to retrieve</typeparam>
+  /// <returns>List of all data entries</returns>
+  public List<T> GetAll<T>() {
+    try {
+      var entries = _collection.FindAll();
+      var result = new List<T>();
+
+      foreach (var entry in entries) {
+        try {
+          var data = BsonMapper.Global.Deserialize<T>(entry.Data);
+          result.Add(data);
+        } catch (Exception ex) {
+          Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+        }
+      }
+
+      return result;
+    } catch (Exception ex) {
+      Log.Error($"Failed to get all data: {ex.Message}");
+      return [];
+    }
+  }
+
+  /// <summary>
+  /// Gets all data entries with their keys
+  /// </summary>
+  /// <typeparam name="T">Type of data to retrieve</typeparam>
+  /// <returns>Dictionary of key-value pairs</returns>
+  public Dictionary<string, T> GetAllWithKeys<T>() {
+    try {
+      var entries = _collection.FindAll();
+      var result = new Dictionary<string, T>();
+
+      foreach (var entry in entries) {
+        try {
+          var data = BsonMapper.Global.Deserialize<T>(entry.Data);
+          result[entry.Id] = data;
+        } catch (Exception ex) {
+          Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+        }
+      }
+
+      return result;
+    } catch (Exception ex) {
+      Log.Error($"Failed to get all data: {ex.Message}");
+      return [];
     }
   }
 
