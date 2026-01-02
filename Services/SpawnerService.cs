@@ -328,7 +328,7 @@ public static class SpawnerService {
   /// <returns>Unique hash value</returns>
   public static long GetDurationHash() {
     // Generate a unique hash for the duration based on current time
-    return (long)math.round(DateTime.UtcNow.Ticks / TimeSpan.TicksPerSecond);
+    return (long)math.round(DateTime.Now.Ticks / TimeSpan.TicksPerSecond);
   }
 
   #endregion
