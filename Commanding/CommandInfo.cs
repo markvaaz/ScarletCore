@@ -29,6 +29,8 @@ public sealed class CommandInfo {
   public int MaxTokenCount => NameTokenCount + GroupTokenCount + MaxParameterCount;
   /// <summary>Whether the command is restricted to admins.</summary>
   public bool AdminOnly { get; set; }
+  /// <summary>Required permissions to execute this command.</summary>
+  public string[] RequiredPermissions { get; set; } = ["basic"];
   /// <summary>Whether this is the main command definition (as opposed to an alias).</summary>
   public bool IsMainCommand { get; set; }
   /// <summary>The <see cref="CommandAttribute"/> used to define the command (if main).</summary>

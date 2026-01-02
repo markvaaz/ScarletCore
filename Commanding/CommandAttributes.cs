@@ -44,11 +44,12 @@ public sealed class CommandGroupAliasAttribute(string group, Language language, 
 /// <param name="name">The command name.</param>
 /// <param name="language">The language of the command.</param>
 /// <param name="aliases">Optional aliases for the command.</param>
+/// <param name="requiredPermissions">Required permissions to execute this command.</param>
 /// <param name="adminOnly">Whether the command requires admin privileges.</param>
 /// <param name="description">A short description of the command.</param>
 /// <param name="usage">Optional usage text for the command.</param>
 [AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
-public sealed class CommandAttribute(string name, Language language, string[] aliases = null, bool adminOnly = false, string description = "", string usage = "") : Attribute {
+public sealed class CommandAttribute(string name, Language language, string[] aliases = null, string[] requiredPermissions = null, bool adminOnly = false, string description = "", string usage = "") : Attribute {
   /// <summary>The command name.</summary>
   public string Name { get; } = name;
   /// <summary>The language of the command.</summary>
@@ -61,6 +62,8 @@ public sealed class CommandAttribute(string name, Language language, string[] al
   public string Description { get; set; } = description;
   /// <summary>Optional usage information for the command.</summary>
   public string Usage { get; set; } = usage;
+  /// <summary>Required permissions to execute this command (default: ["basic"]).</summary>
+  public string[] RequiredPermissions { get; set; } = requiredPermissions ?? ["basic"];
 }
 
 /// <summary>

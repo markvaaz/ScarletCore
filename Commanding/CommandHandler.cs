@@ -7,6 +7,7 @@ using ProjectM.Network;
 using ScarletCore.Data;
 using ScarletCore.Events;
 using ScarletCore.Localization;
+using ScarletCore.Services;
 using ScarletCore.Utils;
 using Stunlock.Core;
 using Unity.Collections;
@@ -119,9 +120,24 @@ public static class CommandHandler {
     int commandNameTokens = commandInfo.NameTokenCount + commandInfo.GroupTokenCount;
     var args = tokens.AsSpan()[commandNameTokens..].ToArray();
 
-    if (commandInfo.AdminOnly && !player.IsAdmin) {
+    if (commandInfo.AdminOnly && !player.IsAdmin && !player.HasRole(DefaultRoles.Admin)) {
       player.SendLocalizedErrorMessage(LocalizationKey.CmdRequiresAdmin);
       return;
+    }
+
+    if (!commandInfo.AdminOnly) {
+      bool hasPermission = false;
+      foreach (var permission in commandInfo.RequiredPermissions) {
+        if (player.HasPermission(permission)) {
+          hasPermission = true;
+          break;
+        }
+      }
+      if (!hasPermission) {
+        var permissions = string.Join(", ", commandInfo.RequiredPermissions);
+        player.SendLocalizedErrorMessage(LocalizationKey.CmdRequiresPermission, permissions);
+        return;
+      }
     }
 
     if (args.Length < commandInfo.MinParameterCount || args.Length > commandInfo.MaxParameterCount) {
@@ -380,6 +396,7 @@ public static class CommandHandler {
       MaxParameterCount = maxParams,
       Parameters = commandParams,
       AdminOnly = effectiveAdminOnly,
+      RequiredPermissions = attr is CommandAttribute cmdAttribute ? cmdAttribute.RequiredPermissions : ["basic"],
       Language = language,
       Method = method,
       Attribute = isMain ? (CommandAttribute)attr : null,
@@ -842,6 +859,7 @@ public static class CommandHandler {
 
   private class LocalizationKey {
     public const string CmdRequiresAdmin = "cmd_requires_admin";
+    public const string CmdRequiresPermission = "cmd_requires_permission";
     public const string CmdExecutionError = "cmd_execution_error";
     public const string CmdAvailableUsages = "cmd_available_usages";
     public const string CmdInvalidParameter = "cmd_invalid_parameter";
