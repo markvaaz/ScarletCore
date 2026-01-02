@@ -144,9 +144,9 @@ public static class Localizer {
       EventManager.On(PlayerEvents.PlayerJoined, CheckLanguageOnJoin);
       _initialized = true;
       _currentServerLanguage = language;
-      Log.Message($"LocalizationService initialized with {_allTranslations.Count} translation keys and {_prefabToGuid.Count} prefab mappings");
+      Log.Message($"Localizer initialized with {_allTranslations.Count} translation keys and {_prefabToGuid.Count} prefab mappings");
     } catch (Exception ex) {
-      Log.Error($"Failed to initialize LocalizationService: {ex}");
+      Log.Error($"[Localizer] Failed to initialize LocalizationService: {ex}");
     }
   }
 
@@ -174,7 +174,7 @@ public static class Localizer {
         player.SendMessage(line.Trim());
       }
     } catch (Exception ex) {
-      Log.Error($"CheckLanguageOnJoin failed: {ex}");
+      Log.Error($"[Localizer] CheckLanguageOnJoin failed: {ex}");
     }
   }
 
@@ -202,7 +202,7 @@ public static class Localizer {
         .ToArray();
 
       if (resourceNames.Length == 0) {
-        Log.Info($"No JSON files found in embedded resources '{localizationPrefix}' for assembly: {assemblyName}");
+        Log.Message($"[Localizer] No JSON files found in embedded resources '{localizationPrefix}' for assembly: {assemblyName}");
         return;
       }
 
@@ -226,26 +226,26 @@ public static class Localizer {
           LoadKeys(deserialized);
           successCount++;
 
-          var fileName = resourceName.Substring(localizationPrefix.Length);
-          Log.Message($"Loaded translations from: {fileName} ({deserialized.Count} keys)");
+          var fileName = resourceName[localizationPrefix.Length..];
+          Log.Message($"[Localizer] Loaded translations from: {fileName} ({deserialized.Count} keys)");
         } catch (JsonException) {
           // Silently skip files with incompatible JSON format
           continue;
         } catch (Exception ex) {
           errorCount++;
-          Log.Error($"Error loading translation resource '{resourceName}': {ex.Message}");
+          Log.Error($"[Localizer] Error loading translation resource '{resourceName}': {ex.Message}");
         }
       }
 
       if (successCount > 0) {
-        Log.Message($"Successfully loaded {successCount} translation file(s) from '{assemblyName}.Localization' embedded resources");
+        Log.Message($"[Localizer] Successfully loaded {successCount} translation file(s) from '{assemblyName}.Localization' embedded resources");
       }
 
       if (errorCount > 0) {
-        Log.Warning($"Failed to load {errorCount} translation file(s) due to read errors");
+        Log.Warning($"[Localizer] Failed to load {errorCount} translation file(s) due to read errors");
       }
     } catch (Exception ex) {
-      Log.Error($"Error loading translations from Localization embedded resources: {ex}");
+      Log.Error($"[Localizer] Error loading translations from Localization embedded resources: {ex}");
     }
   }
 
@@ -256,7 +256,7 @@ public static class Localizer {
     using var stream = assembly.GetManifestResourceStream(resourceName);
 
     if (stream == null) {
-      Log.Error($"Resource '{resourceName}' not found in assembly '{assembly.FullName}'");
+      Log.Error($"[Localizer] Resource '{resourceName}' not found in assembly '{assembly.FullName}'");
       return null;
     }
 
@@ -274,7 +274,7 @@ public static class Localizer {
       var jsonContent = LoadResource(resourceName);
 
       if (string.IsNullOrEmpty(jsonContent)) {
-        Log.Warning($"No content found in resource: {resourceName}");
+        Log.Warning($"[Localizer] No content found in resource: {resourceName}");
         return;
       }
 
@@ -282,9 +282,9 @@ public static class Localizer {
 
       LoadKeys(deserialized);
 
-      Log.Message($"Loaded additional translations from resource: {resourceName}");
+      Log.Message($"[Localizer] Loaded additional translations from resource: {resourceName}");
     } catch (Exception ex) {
-      Log.Error($"Error loading translations from resource '{resourceName}': {ex}");
+      Log.Error($"[Localizer] Error loading translations from resource '{resourceName}': {ex}");
     }
   }
 
@@ -296,19 +296,19 @@ public static class Localizer {
   public static void LoadFromFile(string path) {
     try {
       if (string.IsNullOrWhiteSpace(path)) {
-        Log.Warning("File path cannot be null or empty");
+        Log.Warning("[Localizer] File path cannot be null or empty");
         return;
       }
 
       if (!File.Exists(path)) {
-        Log.Warning($"Translation file not found: {path}");
+        Log.Warning($"[Localizer] Translation file not found: {path}");
         return;
       }
 
       var jsonContent = File.ReadAllText(path);
 
       if (string.IsNullOrEmpty(jsonContent)) {
-        Log.Warning($"No content found in file: {path}");
+        Log.Warning($"[Localizer] No content found in file: {path}");
         return;
       }
 
@@ -316,9 +316,9 @@ public static class Localizer {
 
       LoadKeys(deserialized);
 
-      Log.Message($"Loaded additional translations from file: {path}");
+      Log.Message($"[Localizer] Loaded additional translations from file: {path}");
     } catch (Exception ex) {
-      Log.Error($"Error loading translations from file '{path}': {ex}");
+      Log.Error($"[Localizer] Error loading translations from file '{path}': {ex}");
     }
   }
 
@@ -328,7 +328,7 @@ public static class Localizer {
       var jsonContent = LoadResource(resourceName);
 
       if (string.IsNullOrEmpty(jsonContent)) {
-        Log.Warning($"No content found in resource: {resourceName}");
+        Log.Warning($"[Localizer] No content found in resource: {resourceName}");
         return;
       }
 
@@ -338,9 +338,9 @@ public static class Localizer {
 
       LoadKeys(deserialized);
 
-      Log.Message($"Loaded {_allTranslations.Count} game translation keys");
+      Log.Message($"[Localizer] Loaded {_allTranslations.Count} game translation keys");
     } catch (Exception ex) {
-      Log.Error($"Error loading game translations: {ex}");
+      Log.Error($"[Localizer] Error loading game translations: {ex}");
     }
   }
 
@@ -353,7 +353,7 @@ public static class Localizer {
       jsonContent = reader.ReadToEnd();
 
     } else {
-      Log.Error($"Resource '{resourceName}' not found in assembly '{assembly.FullName}'");
+      Log.Error($"[Localizer] Resource '{resourceName}' not found in assembly '{assembly.FullName}'");
     }
 
     return jsonContent;
@@ -369,7 +369,7 @@ public static class Localizer {
 
       using var stream = assembly.GetManifestResourceStream(resourceName);
       if (stream == null) {
-        Log.Warning("PrefabToGuidMap.json not found in embedded resources");
+        Log.Warning("[Localizer] PrefabToGuidMap.json not found in embedded resources");
         return;
       }
 
@@ -387,9 +387,9 @@ public static class Localizer {
         }
       }
 
-      Log.Message($"Loaded {_prefabToGuid.Count} prefab mappings");
+      Log.Message($"[Localizer] Loaded {_prefabToGuid.Count} prefab mappings");
     } catch (Exception ex) {
-      Log.Error($"Error loading prefab mapping: {ex}");
+      Log.Error($"[Localizer] Error loading prefab mapping: {ex}");
     }
   }
 
@@ -402,7 +402,7 @@ public static class Localizer {
     try {
       return string.Format(text, parameters);
     } catch (FormatException ex) {
-      Log.Warning($"Failed to format localized string: {ex.Message}");
+      Log.Warning($"[Localizer] Failed to format localized string: {ex.Message}");
       return text;
     }
   }
@@ -648,7 +648,7 @@ public static class Localizer {
       if (_allTranslations.TryRemove(k, out _)) removed++;
     }
 
-    Log.Message($"Disposed {removed} localization keys for assembly: {assemblyName}");
+    Log.Message($"[Localizer] Disposed {removed} localization keys for assembly: {assemblyName}");
     return removed;
   }
 
@@ -664,7 +664,7 @@ public static class Localizer {
       map[key] = language.ToString();
       Plugin.Database.Set("player_languages", map);
     } catch (Exception ex) {
-      Log.Error($"Failed to set player language: {ex}");
+      Log.Error($"[Localizer] Failed to set player language: {ex}");
     }
   }
 
@@ -684,7 +684,7 @@ public static class Localizer {
       }
       return Language.None;
     } catch (Exception ex) {
-      Log.Error($"Failed to get player language: {ex}");
+      Log.Error($"[Localizer] Failed to get player language: {ex}");
       return Language.None;
     }
   }
@@ -746,12 +746,12 @@ public static class Localizer {
   /// </summary>
   public static bool ChangeLanguage(Language language) {
     if (!_languages.Contains(language)) {
-      Log.Warning($"Language not supported: {language}");
+      Log.Warning($"[Localizer] Language not supported: {language}");
       return false;
     }
 
     _currentServerLanguage = language;
-    Log.Message($"Changed server language to: {language}");
+    Log.Message($"[Localizer] Changed server language to: {language}");
     return true;
   }
 }
