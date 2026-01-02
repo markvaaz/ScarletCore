@@ -147,7 +147,7 @@ public class JsonDatabase {
       // Updates cache after successful save
       string cacheKey = GetCacheKey(path);
       _cache[cacheKey] = data;
-      _cacheTimestamps[cacheKey] = DateTime.UtcNow;
+      _cacheTimestamps[cacheKey] = DateTime.Now;
     } catch (Exception ex) {
       Log.Error($"An error occurred while saving data: {ex.Message}");
     }
@@ -172,7 +172,7 @@ public class JsonDatabase {
       // Updates cache after successful load
       string cacheKey = GetCacheKey(path);
       _cache[cacheKey] = deserializedData;
-      _cacheTimestamps[cacheKey] = DateTime.UtcNow;
+      _cacheTimestamps[cacheKey] = DateTime.Now;
 
       return deserializedData;
     } catch (Exception ex) {
@@ -405,7 +405,7 @@ public class JsonDatabase {
           File.WriteAllText(filePath, jsonData);
 
           // Update cache timestamp after successful save
-          _cacheTimestamps[kvp.Key] = DateTime.UtcNow;
+          _cacheTimestamps[kvp.Key] = DateTime.Now;
         } catch (Exception ex) {
           Log.Error($"An error occurred while saving cached data for key '{kvp.Key}': {ex.Message}");
         }

@@ -202,7 +202,7 @@ public class Database : IDisposable {
     try {
       // Convert data to BsonValue (handles primitives and objects)
       var bsonData = BsonMapper.Global.Serialize(data);
-      var now = DateTime.UtcNow;
+      var now = DateTime.Now;
 
       var existing = _collection.FindById(key);
       var entry = new DataEntry {
