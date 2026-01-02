@@ -1,6 +1,6 @@
 using System;
 
-namespace ScarletCore.Data;
+namespace ScarletCore.Services;
 
 /// <summary>
 /// Represents a role assignment to a player with optional expiration

@@ -6,10 +6,10 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using ScarletCore.Utils;
-using ScarletCore.Data;
 using Stunlock.Core;
 using ScarletCore.Events;
 using ProjectM;
+using ScarletCore.Services;
 
 namespace ScarletCore.Localization;
 

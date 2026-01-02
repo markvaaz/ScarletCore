@@ -1,7 +1,6 @@
 using HarmonyLib;
 using ProjectM;
 using ScarletCore.Systems;
-using ScarletCore.Data;
 using ScarletCore.Events;
 using ScarletCore.Services;
 using ScarletCore.Utils;

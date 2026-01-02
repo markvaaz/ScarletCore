@@ -2,15 +2,12 @@ using Unity.Entities;
 using ProjectM.Network;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
-using ProjectM;
 using Unity.Mathematics;
-using ScarletCore.Services;
 using Stunlock.Core;
-using ScarletCore.Utils;
 using ScarletCore.Localization;
+using ProjectM;
 
-namespace ScarletCore.Data;
+namespace ScarletCore.Services;
 
 /// <summary>
 /// Represents comprehensive player data and provides convenient access to player-related information.

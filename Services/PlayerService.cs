@@ -1,4 +1,3 @@
-using ScarletCore.Data;
 using System.Collections.Generic;
 using ProjectM.Network;
 using Unity.Collections;
@@ -9,7 +8,6 @@ using ScarletCore.Utils;
 using ScarletCore.Systems;
 using ProjectM;
 using ScarletCore.Events;
-using Cpp2IL.Core.Api;
 
 namespace ScarletCore.Services;
 

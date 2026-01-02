@@ -1,7 +1,7 @@
 using System;
 using System.Reflection;
-using ScarletCore.Data;
 using ScarletCore.Localization;
+using ScarletCore.Services;
 
 namespace ScarletCore;
 

@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using ProjectM.Network;
-using ScarletCore.Data;
 using ScarletCore.Events;
 using ScarletCore.Localization;
 using ScarletCore.Services;

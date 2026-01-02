@@ -1,8 +1,8 @@
-using ScarletCore.Data;
 using Stunlock.Core;
 using Unity.Mathematics;
 using System;
 using System.Globalization;
+using ScarletCore.Services;
 
 namespace ScarletCore.Commanding;
 
@@ -47,7 +47,7 @@ public static class TypeConverter {
     }
 
     if (targetType == typeof(bool)) {
-      return bool.TryParse(input, out var result) ? result : false;
+      return bool.TryParse(input, out var result) && result;
     }
 
     if (targetType == typeof(byte)) {

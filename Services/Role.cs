@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ScarletCore.Data;
+namespace ScarletCore.Services;
 
 /// <summary>
 /// Represents a role that can be assigned to players.

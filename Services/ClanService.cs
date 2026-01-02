@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using ProjectM;
 using ProjectM.Network;
 using ScarletCore.Systems;
-using ScarletCore.Data;
 using ScarletCore.Utils;
 using Unity.Collections;
 using Unity.Entities;

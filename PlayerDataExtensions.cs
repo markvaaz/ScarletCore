@@ -1,6 +1,5 @@
 using ProjectM;
 using ProjectM.Network;
-using ScarletCore.Data;
 using ScarletCore.Services;
 using Unity.Entities;
 

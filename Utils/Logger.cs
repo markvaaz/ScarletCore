@@ -1,11 +1,11 @@
 using BepInEx.Logging;
 using ScarletCore.Systems;
-using ScarletCore.Data;
 using Unity.Entities;
 using System;
 using System.Reflection;
 using System.Diagnostics;
 using System.Collections.Concurrent;
+using ScarletCore.Services;
 
 namespace ScarletCore.Utils;
 

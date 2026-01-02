@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using ProjectM;
 using ScarletCore.Systems;
-using ScarletCore.Data;
 using ScarletCore.Utils;
 using Unity.Entities;
 using Unity.Mathematics;
