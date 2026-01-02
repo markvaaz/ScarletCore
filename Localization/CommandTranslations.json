@@ -19,6 +19,26 @@
     "Ukrainian": "Ця команда вимагає ~прав адміністратора~.",
     "Vietnamese": "Lệnh này yêu cầu ~quyền quản trị viên~."
   },
+  "cmd_requires_permission": {
+    "Portuguese": "Você não tem permissão para usar este comando. ~Permissões necessárias:~ {0}",
+    "English": "You don't have permission to use this command. ~Required permissions:~ {0}",
+    "French": "Vous n'avez pas la permission d'utiliser cette commande. ~Permissions requises:~ {0}",
+    "German": "Sie haben keine Berechtigung, diesen Befehl zu verwenden. ~Erforderliche Berechtigungen:~ {0}",
+    "Hungarian": "Nincs jogosultsága a parancs használatához. ~Szükséges jogosultságok:~ {0}",
+    "Italian": "Non hai il permesso di usare questo comando. ~Permessi richiesti:~ {0}",
+    "Japanese": "このコマンドを使用する権限がありません。~必要な権限:~ {0}",
+    "Korean": "이 명령을 사용할 권한이 없습니다. ~필요한 권한:~ {0}",
+    "Latam": "No tienes permiso para usar este comando. ~Permisos requeridos:~ {0}",
+    "Polish": "Nie masz uprawnień do używania tego polecenia. ~Wymagane uprawnienia:~ {0}",
+    "Russian": "У вас нет разрешения на использование этой команды. ~Требуемые разрешения:~ {0}",
+    "Spanish": "No tienes permiso para usar este comando. ~Permisos requeridos:~ {0}",
+    "ChineseSimplified": "您没有权限使用此命令。~所需权限:~ {0}",
+    "ChineseTraditional": "您沒有權限使用此指令。~所需權限:~ {0}",
+    "Thai": "คุณไม่มีสิทธิ์ใช้คำสั่งนี้ ~สิทธิ์ที่จำเป็น:~ {0}",
+    "Turkish": "Bu komutu kullanma izniniz yok. ~Gerekli izinler:~ {0}",
+    "Ukrainian": "У вас немає дозволу на використання цієї команди. ~Необхідні дозволи:~ {0}",
+    "Vietnamese": "Bạn không có quyền sử dụng lệnh này. ~Quyền cần thiết:~ {0}"
+  },
   "cmd_execution_error": {
     "Portuguese": "Ocorreu um ~erro~ ao executar o comando.",
     "English": "An ~error~ occurred while executing the command.",
