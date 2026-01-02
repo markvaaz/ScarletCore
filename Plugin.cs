@@ -6,6 +6,7 @@ using ScarletCore.Commanding;
 using ScarletCore.Data;
 using ScarletCore.Localization;
 using ScarletCore.Services;
+using ScarletCore.Systems;
 
 namespace ScarletCore;
 
@@ -49,6 +50,9 @@ public class Plugin : BasePlugin {
 
     Settings = new Settings(MyPluginInfo.PLUGIN_NAME, Instance);
     Database = new Database(MyPluginInfo.PLUGIN_NAME);
+
+    Settings.Section("Roles")
+      .Add("Owners", "", "Comma-separated list of Steam64 IDs for server owners with all permissions.");
 
     Settings.Section("Language")
       .Add("PrefabLocalizationLanguage", Language.English, $"Language code for localization. Available languages: {string.Join(", ", Localizer.AvailableServerLanguages)}")
