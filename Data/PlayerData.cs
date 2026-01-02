@@ -448,81 +448,72 @@ public class PlayerData {
     SendWarningMessage(localized);
   }
 
-  /// <summary>
-  /// Dictionary to store custom data from different mods.
-  /// Uses the calling assembly name as the key to prevent conflicts between mods.
-  /// </summary>
-  private Dictionary<string, object> CustomData { get; set; } = new Dictionary<string, object>();
+  // ========== Role Management ==========
 
   /// <summary>
-  /// Sets or updates custom data for the calling mod.
-  /// Each mod gets its own namespace based on the assembly name to prevent conflicts.
+  /// Adds a role to this player.
   /// </summary>
-  /// <typeparam name="T">The type of data to store.</typeparam>
-  /// <param name="value">The data value to store.</param>
-  /// <returns>The stored value for method chaining.</returns>
-  /// <example>
-  /// // Store custom mod data
-  /// var playerLevel = playerData.SetData(25);
-  /// var customConfig = playerData.SetData(new MyModConfig());
-  /// </example>
-  public T SetData<T>(T value) {
-    // Use the calling assembly name as the key to prevent mod data conflicts
-    var key = Assembly.GetCallingAssembly().GetName().Name;
-
-    // Update existing data or add new entry
-    if (CustomData.ContainsKey(key)) {
-      CustomData[key] = value;
-    } else {
-      CustomData.Add(key, value);
-    }
-    return value;
+  /// <param name="roleName">Name of the role to add</param>
+  /// <returns>True if the role was successfully added, false if the role doesn't exist or player already has it</returns>
+  public bool AddRole(string roleName) {
+    return RoleService.AddRoleToPlayer(this, roleName);
   }
 
   /// <summary>
-  /// Retrieves custom data for the calling mod.
-  /// Returns the default value for the type if no data is found or type mismatch occurs.
+  /// Removes a role from this player.
   /// </summary>
-  /// <typeparam name="T">The expected type of the stored data.</typeparam>
-  /// <returns>The stored data or default(T) if not found.</returns>
-  /// <example>
-  /// // Retrieve custom mod data
-  /// var playerLevel = playerData.GetData&lt;int&gt;();
-  /// var customConfig = playerData.GetData&lt;MyModConfig&gt;();
-  /// </example>
-  public T GetData<T>() {
-    // Use the calling assembly name as the key to retrieve mod-specific data
-    var key = Assembly.GetCallingAssembly().GetName().Name;
-
-    // Try to get the data and cast it to the expected type
-    if (CustomData.TryGetValue(key, out var value) && value is T typedValue) {
-      return typedValue;
-    }
-
-    // Return default value if data not found or type mismatch
-    return default;
+  /// <param name="roleName">Name of the role to remove</param>
+  /// <returns>True if the role was successfully removed, false if player didn't have the role</returns>
+  public bool RemoveRole(string roleName) {
+    return RoleService.RemoveRoleFromPlayer(this, roleName);
   }
 
   /// <summary>
-  /// Retrieves custom data from a specific assembly/mod.
-  /// Allows mods to access data stored by other mods if they know the assembly name.
-  /// Returns the default value for the type if no data is found or type mismatch occurs.
+  /// Checks if this player has a specific role.
   /// </summary>
-  /// <typeparam name="T">The expected type of the stored data.</typeparam>
-  /// <param name="assemblyName">The name of the assembly/mod to retrieve data from.</param>
-  /// <returns>The stored data or default(T) if not found.</returns>
-  /// <example>
-  /// // Retrieve data from another mod
-  /// var otherModConfig = playerData.GetDataFrom&lt;SomeConfig&gt;("OtherModName");
-  /// var sharedPlayerLevel = playerData.GetDataFrom&lt;int&gt;("SharedLevelingMod");
-  /// </example>
-  public T GetDataFrom<T>(string assemblyName) {
-    // Try to get the data and cast it to the expected type
-    if (CustomData.TryGetValue(assemblyName, out var value) && value is T typedValue) {
-      return typedValue;
-    }
+  /// <param name="roleName">Name of the role to check</param>
+  /// <returns>True if the player has the role, false otherwise</returns>
+  public bool HasRole(string roleName) {
+    return RoleService.PlayerHasRole(this, roleName);
+  }
 
-    // Return default value if data not found or type mismatch
-    return default;
+  /// <summary>
+  /// Gets all role names assigned to this player.
+  /// </summary>
+  /// <returns>List of role names</returns>
+  public List<string> GetRoles() {
+    return RoleService.GetPlayerRoles(this);
+  }
+
+  /// <summary>
+  /// Gets all Role objects assigned to this player, ordered by priority (highest first).
+  /// </summary>
+  /// <returns>List of Role objects</returns>
+  public List<Role> GetRoleObjects() {
+    return RoleService.GetPlayerRoleObjects(this);
+  }
+
+  /// <summary>
+  /// Gets the highest priority role for this player.
+  /// </summary>
+  /// <returns>The primary role, or null if player has no roles</returns>
+  public Role GetPrimaryRole() {
+    return RoleService.GetPlayerPrimaryRole(this);
+  }
+
+  /// <summary>
+  /// Checks if this player has a specific permission (from any of their roles).
+  /// </summary>
+  /// <param name="permission">The permission to check</param>
+  /// <returns>True if the player has the permission, false otherwise</returns>
+  public bool HasPermission(string permission) {
+    return RoleService.PlayerHasPermission(this, permission);
+  }
+
+  /// <summary>
+  /// Clears all roles from this player.
+  /// </summary>
+  public void ClearRoles() {
+    RoleService.ClearPlayerRoles(this);
   }
 }

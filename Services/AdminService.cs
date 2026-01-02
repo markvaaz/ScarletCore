@@ -35,6 +35,26 @@ public static class AdminService {
     context.ReplySuccess($"Auto admin has been ~{status}~ for you.");
   }
 
+  [Command("toggleadmin", Language.English, requiredPermissions: ["admin.toggle"])]
+  internal static void ToggleAdminCommand(CommandContext context, string targetPlayerName = null) {
+    PlayerData targetPlayer = null;
+
+    if (!string.IsNullOrEmpty(targetPlayerName) && !PlayerService.TryGetByName(targetPlayerName, out targetPlayer)) {
+      context.ReplyError($"Player ~{targetPlayerName}~ not found.");
+      return;
+    }
+
+    targetPlayer ??= context.Sender;
+
+    if (IsAdmin(targetPlayer.PlatformId)) {
+      RemoveAdmin(targetPlayer.PlatformId);
+      context.ReplySuccess($"Player ~{targetPlayer.Name}~ has been ~demoted~ from admin.");
+    } else {
+      AddAdmin(targetPlayer.PlatformId);
+      context.ReplySuccess($"Player ~{targetPlayer.Name}~ has been ~promoted~ to admin.");
+    }
+  }
+
   /// <summary>
   /// Adds admin privileges to a player using PlayerData.
   /// </summary>
@@ -74,6 +94,8 @@ public static class AdminService {
         Character = player.CharacterEntity,
         User = player.UserEntity
       });
+
+      RoleService.AddRoleToPlayer(player, DefaultRoles.Admin);
     }
 
     // Update local admin list and persist changes
@@ -127,6 +149,8 @@ public static class AdminService {
         Character = player.CharacterEntity,
         User = player.UserEntity
       });
+
+      RoleService.RemoveRoleFromPlayer(player, DefaultRoles.Admin);
     }
 
     // Update local admin list and persist changes

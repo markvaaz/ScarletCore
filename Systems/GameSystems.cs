@@ -222,7 +222,7 @@ public static class GameSystems {
     _networkIdSystem_Singleton = _serverScriptMapper.GetSingleton<NetworkIdSystem.Singleton>();
 
     Initialized = true;
-
+    RoleService.Initialize();
     PlayerService.Initialize();
   }
 

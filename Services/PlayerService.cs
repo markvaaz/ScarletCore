@@ -9,6 +9,7 @@ using ScarletCore.Utils;
 using ScarletCore.Systems;
 using ProjectM;
 using ScarletCore.Events;
+using Cpp2IL.Core.Api;
 
 namespace ScarletCore.Services;
 
@@ -161,7 +162,54 @@ public static class PlayerService {
       UnnamedPlayers.Remove(playerData);
     }
 
+
+    // Ensure new players have the default User role
+    EnsurePlayerHasDefaultRole(playerData);
+
+    EnsureOwnerRole(playerData);
+
     return playerData;
+  }
+
+  /// <summary>
+  /// Ensures a player has at least the default User role
+  /// </summary>
+  private static void EnsurePlayerHasDefaultRole(PlayerData player) {
+    if (player == null) return;
+
+    try {
+      // Check if player has any roles
+      var playerRoles = RoleService.GetPlayerRoles(player);
+
+      // If player has no roles, assign the default User role
+      if (playerRoles.Count == 0) {
+        RoleService.AddRoleToPlayer(player, DefaultRoles.Default);
+      }
+    } catch (Exception ex) {
+      Log.Error($"Failed to ensure default role for player {player.PlatformId}: {ex.Message}");
+    }
+  }
+
+  /// <summary>
+  /// Ensures that the player is assigned the Owner role if their platform ID is listed in the Owners setting
+  /// </summary>
+  /// <param name="player">The player data to check and assign the Owner role to</param>
+  public static void EnsureOwnerRole(PlayerData player) {
+    if (player == null) return;
+
+    try {
+      var owners = Plugin.Settings.Get<string>("Owners");
+
+      if (string.IsNullOrEmpty(owners)) return;
+
+      var ownersIds = owners.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+      if (!ownersIds.Contains(player.PlatformId.ToString())) return;
+
+      RoleService.AddRoleToPlayer(player, DefaultRoles.Owner);
+    } catch (Exception ex) {
+      Log.Error($"Failed to ensure owner role for player {player.PlatformId}: {ex.Message}");
+    }
   }
 
   /// <summary>
