@@ -186,6 +186,16 @@ public class InventoryService {
   }
 
   /// <summary>
+  /// Automatically sorts the inventory of the specified storage entity.
+  /// Uses the game's inventory sort utility to reorder items within the storage.
+  /// </summary>
+  /// <param name="storage">The storage/entity whose inventory will be sorted. If the entity does not exist nothing is done.</param>
+  public static void AutoSort(Entity storage) {
+    if (!storage.Exists()) return;
+    InventoryUtilitiesServer.TrySortInventory(GameSystems.EntityManager, GameSystems.ServerGameManager.ItemLookupMap, storage);
+  }
+
+  /// <summary>
   /// Checks if the specified entity has an inventory component.
   /// </summary>
   /// <param name="entity">The entity to check for inventory</param>
