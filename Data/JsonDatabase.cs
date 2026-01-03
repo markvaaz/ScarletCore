@@ -37,7 +37,7 @@ public class JsonDatabase {
   /// </summary>
 
   /// <summary>
-  /// Gets or sets the maximum number of backups to keep (default: 10)
+  /// Gets or sets the maximum number of backups to keep (default: 50)
   /// </summary>
   public int MaxBackups {
     get => _maxBackups;
@@ -540,8 +540,8 @@ public class JsonDatabase {
   /// Cleans up old backup files, keeping only the specified number of most recent backups
   /// </summary>
   /// <param name="backupPath">Directory containing backup files</param>
-  /// <param name="maxBackups">Maximum number of backups to keep (default: 10)</param>
-  private void CleanupOldBackups(string backupPath, int maxBackups = 10) {
+  /// <param name="maxBackups">Maximum number of backups to keep (default: 50)</param>
+  private void CleanupOldBackups(string backupPath, int maxBackups = 50) {
     try {
       if (!Directory.Exists(backupPath)) {
         return; // Nothing to clean up

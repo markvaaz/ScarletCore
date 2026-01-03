@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ScarletCore.Utils;
+using System.Linq.Expressions;
 
 namespace ScarletCore.Data;
 
@@ -155,6 +156,113 @@ public static class SharedDatabase {
       var dbPrefix = $"{databaseName}/";
       return [.. _database.GetKeysByPrefix(fullPrefix).Select(k => k[dbPrefix.Length..])];
     }
+  }
+
+  /// <summary>
+  /// Queries the database using a predicate to filter entries by key
+  /// </summary>
+  /// <typeparam name="T">Type of data to retrieve</typeparam>
+  /// <param name="databaseName">Name of the database/namespace</param>
+  /// <param name="keyPredicate">Predicate to filter keys (without database prefix)</param>
+  /// <returns>List of matching data entries</returns>
+  public static List<T> Query<T>(string databaseName, Expression<Func<string, bool>> keyPredicate) {
+    if (string.IsNullOrWhiteSpace(databaseName))
+      return [];
+
+    lock (_lock) {
+      var dbPrefix = $"{databaseName}/";
+
+      // Create a new predicate that includes the database prefix check
+      var param = Expression.Parameter(typeof(string), "fullKey");
+      var startsWithCall = Expression.Call(
+        param,
+        typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)]),
+        Expression.Constant(dbPrefix)
+      );
+
+      // Remove prefix for the user's predicate
+      var substringCall = Expression.Call(
+        param,
+        typeof(string).GetMethod(nameof(string.Substring), [typeof(int)]),
+        Expression.Constant(dbPrefix.Length)
+      );
+
+      var userPredicateBody = Expression.Invoke(keyPredicate, substringCall);
+      var combinedPredicate = Expression.AndAlso(startsWithCall, userPredicateBody);
+      var lambda = Expression.Lambda<Func<string, bool>>(combinedPredicate, param);
+
+      return _database.Query<T>(lambda);
+    }
+  }
+
+  /// <summary>
+  /// Queries the database and returns both keys and values
+  /// </summary>
+  /// <typeparam name="T">Type of data to retrieve</typeparam>
+  /// <param name="databaseName">Name of the database/namespace</param>
+  /// <param name="keyPredicate">Predicate to filter keys (without database prefix)</param>
+  /// <returns>Dictionary of key-value pairs (keys without database prefix)</returns>
+  public static Dictionary<string, T> QueryWithKeys<T>(string databaseName, Expression<Func<string, bool>> keyPredicate) {
+    if (string.IsNullOrWhiteSpace(databaseName))
+      return [];
+
+    lock (_lock) {
+      var dbPrefix = $"{databaseName}/";
+
+      // Create a new predicate that includes the database prefix check
+      var param = Expression.Parameter(typeof(string), "fullKey");
+      var startsWithCall = Expression.Call(
+        param,
+        typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)]),
+        Expression.Constant(dbPrefix)
+      );
+
+      // Remove prefix for the user's predicate
+      var substringCall = Expression.Call(
+        param,
+        typeof(string).GetMethod(nameof(string.Substring), [typeof(int)]),
+        Expression.Constant(dbPrefix.Length)
+      );
+
+      var userPredicateBody = Expression.Invoke(keyPredicate, substringCall);
+      var combinedPredicate = Expression.AndAlso(startsWithCall, userPredicateBody);
+      var lambda = Expression.Lambda<Func<string, bool>>(combinedPredicate, param);
+
+      var allData = _database.QueryWithKeys<T>(lambda);
+
+      // Remove database prefix from keys
+      return allData.ToDictionary(
+        kvp => kvp.Key[dbPrefix.Length..],
+        kvp => kvp.Value
+      );
+    }
+  }
+
+  /// <summary>
+  /// Gets all data entries of a specific type for a database
+  /// </summary>
+  /// <typeparam name="T">Type of data to retrieve</typeparam>
+  /// <param name="databaseName">Name of the database/namespace</param>
+  /// <returns>List of all data entries</returns>
+  public static List<T> GetAll<T>(string databaseName) {
+    if (string.IsNullOrWhiteSpace(databaseName))
+      return [];
+
+    lock (_lock) {
+      var dbPrefix = $"{databaseName}/";
+      var allData = _database.QueryWithKeys<T>(k => k.StartsWith(dbPrefix));
+      return [.. allData.Values];
+    }
+  }
+
+  /// <summary>
+  /// Gets all data entries with their keys for a database
+  /// </summary>
+  /// <typeparam name="T">Type of data to retrieve</typeparam>
+  /// <param name="databaseName">Name of the database/namespace</param>
+  /// <returns>Dictionary of key-value pairs (keys without database prefix)</returns>
+  public static Dictionary<string, T> GetAllWithKeys<T>(string databaseName) {
+    return GetAllByPrefix<T>(databaseName, "");
   }
 
   /// <summary>
