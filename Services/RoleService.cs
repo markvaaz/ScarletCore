@@ -707,9 +707,9 @@ public static class RoleService {
 
       var role = CreateRole(roleName, null, priority);
       if (role != null) {
-        ctx.Reply($"Role ~{roleName}~ created successfully with priority ~{priority}~.".FormatSuccess());
+        ctx.ReplySuccess($"Role ~{roleName}~ created successfully with priority ~{priority}~.");
       } else {
-        ctx.Reply($"Failed to create role ~{roleName}~. It may already exist.".FormatError());
+        ctx.ReplyError($"Failed to create role ~{roleName}~. It may already exist.");
       }
     }
 
@@ -740,9 +740,9 @@ public static class RoleService {
       }
 
       if (DeleteRole(roleName)) {
-        ctx.Reply($"Role ~{roleName}~ deleted successfully.".FormatSuccess());
+        ctx.ReplySuccess($"Role ~{roleName}~ deleted successfully.");
       } else {
-        ctx.Reply($"Failed to delete role ~{roleName}~. It may not exist.".FormatError());
+        ctx.ReplyError($"Failed to delete role ~{roleName}~. It may not exist.");
       }
     }
 
@@ -750,7 +750,7 @@ public static class RoleService {
     public static void ListRolesCommand(CommandContext ctx) {
       var roles = GetAllRoles();
       if (roles.Count == 0) {
-        ctx.Reply("No roles found.".FormatError());
+        ctx.ReplyError("No roles found.");
         return;
       }
 
@@ -765,7 +765,7 @@ public static class RoleService {
     public static void RoleInfoCommand(CommandContext ctx, string roleName) {
       var role = GetRole(roleName);
       if (role == null) {
-        ctx.Reply($"Role ~{roleName}~ not found.".FormatError());
+        ctx.ReplyError($"Role ~{roleName}~ not found.");
         return;
       }
 
@@ -796,9 +796,9 @@ public static class RoleService {
       }
 
       if (AddPermissionToRole(roleName, permission)) {
-        ctx.Reply($"Permission ~{permission}~ added to role ~{roleName}~.".FormatSuccess());
+        ctx.ReplySuccess($"Permission ~{permission}~ added to role ~{roleName}~.");
       } else {
-        ctx.Reply($"Failed to add permission. Role may not exist or already has this permission.".FormatError());
+        ctx.ReplyError($"Failed to add permission. Role may not exist or already has this permission.");
       }
     }
 
@@ -819,9 +819,9 @@ public static class RoleService {
       }
 
       if (RemovePermissionFromRole(roleName, permission)) {
-        ctx.Reply($"Permission ~{permission}~ removed from role ~{roleName}~.".FormatSuccess());
+        ctx.ReplySuccess($"Permission ~{permission}~ removed from role ~{roleName}~.");
       } else {
-        ctx.Reply($"Failed to remove permission. Role may not exist or doesn't have this permission.".FormatError());
+        ctx.ReplyError($"Failed to remove permission. Role may not exist or doesn't have this permission.");
       }
     }
 
@@ -860,9 +860,9 @@ public static class RoleService {
       }
 
       if (UpdateRole(roleName, newPriority: priority)) {
-        ctx.Reply($"Priority of role ~{roleName}~ set to ~{priority}~.".FormatSuccess());
+        ctx.ReplySuccess($"Priority of role ~{roleName}~ set to ~{priority}~.");
       } else {
-        ctx.Reply($"Failed to update role ~{roleName}~. It may not exist.".FormatError());
+        ctx.ReplyError($"Failed to update role ~{roleName}~. It may not exist.");
       }
     }
 
@@ -883,9 +883,9 @@ public static class RoleService {
       }
 
       if (UpdateRole(roleName, newDescription: description)) {
-        ctx.Reply($"Description of role ~{roleName}~ updated.".FormatSuccess());
+        ctx.ReplySuccess($"Description of role ~{roleName}~ updated.");
       } else {
-        ctx.Reply($"Failed to update role ~{roleName}~. It may not exist.".FormatError());
+        ctx.ReplyError($"Failed to update role ~{roleName}~. It may not exist.");
       }
     }
 
@@ -915,9 +915,9 @@ public static class RoleService {
 
       if (AddRoleToPlayer(player, roleName, duration)) {
         var durationInfo = string.IsNullOrWhiteSpace(duration) || duration == "-1" ? "permanently" : $"for {duration}";
-        ctx.Reply($"Role ~{roleName}~ assigned to player ~{player.Name}~ {durationInfo}.".FormatSuccess());
+        ctx.ReplySuccess($"Role ~{roleName}~ assigned to player ~{player.Name}~ {durationInfo}.");
       } else {
-        ctx.Reply($"Failed to assign role. Role may not exist, player already has it, or invalid duration format.".FormatError());
+        ctx.ReplyError($"Failed to assign role. Role may not exist, player already has it, or invalid duration format.");
       }
     }
 
@@ -952,9 +952,9 @@ public static class RoleService {
       }
 
       if (RemoveRoleFromPlayer(player, roleName, sender)) {
-        ctx.Reply($"Role ~{roleName}~ removed from player ~{player.Name}~.".FormatSuccess());
+        ctx.ReplySuccess($"Role ~{roleName}~ removed from player ~{player.Name}~.");
       } else {
-        ctx.Reply($"Failed to remove role. Player may not have this role.".FormatError());
+        ctx.ReplyError($"Failed to remove role. Player may not have this role.");
       }
     }
 
@@ -962,7 +962,7 @@ public static class RoleService {
     public static void PlayerRolesCommand(CommandContext ctx, PlayerData player) {
       var assignments = GetPlayerRoleAssignmentsInfo(player);
       if (assignments.Count == 0) {
-        ctx.Reply($"Player ~{player.Name}~ has no roles.".FormatError());
+        ctx.ReplyError($"Player ~{player.Name}~ has no roles.");
         return;
       }
 
@@ -982,13 +982,13 @@ public static class RoleService {
     [Command("playerswithRole", Language.English, aliases: ["who"], description: "Show players with a specific role", requiredPermissions: ["role.check"])]
     public static void PlayersWithRoleCommand(CommandContext ctx, string roleName) {
       if (!RoleExists(roleName)) {
-        ctx.Reply($"Role ~{roleName}~ not found.".FormatError());
+        ctx.ReplyError($"Role ~{roleName}~ not found.");
         return;
       }
 
       var players = GetPlayersWithRole(roleName);
       if (players.Count == 0) {
-        ctx.Reply($"No players have the role ~{roleName}~.".FormatError());
+        ctx.ReplyError($"No players have the role ~{roleName}~.");
         return;
       }
 
@@ -1014,14 +1014,14 @@ public static class RoleService {
       }
 
       ClearPlayerRoles(player);
-      ctx.Reply($"All roles cleared from player ~{player.Name}~.".FormatSuccess());
+      ctx.ReplySuccess($"All roles cleared from player ~{player.Name}~.");
     }
 
     [Command("listpermissions", Language.English, aliases: ["permissions", "perms"], description: "List all permissions in the system", requiredPermissions: ["role.info"])]
     public static void ListPermissionsCommand(CommandContext ctx) {
       var permissions = GetAllPermissions();
       if (permissions.Count == 0) {
-        ctx.Reply("No permissions found in the system.".FormatError());
+        ctx.ReplyError("No permissions found in the system.");
         return;
       }
 
