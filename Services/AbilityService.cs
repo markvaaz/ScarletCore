@@ -12,6 +12,7 @@ namespace ScarletCore.Services;
 /// Provides methods to cast abilities and modify NPC ability slots.
 /// </summary>
 public static class AbilityService {
+  private static PrefabGUID AbilityReplaceBuff = new(-1327674928); // EquipBuff_Weapon_Reaper_Ability01
 
   /// <summary>
   /// Casts an ability for the specified entity using the given ability group.
@@ -46,7 +47,58 @@ public static class AbilityService {
   }
 
   /// <summary>
-  /// Replaces an ability in a specific slot for an entity.
+  /// Performs a non-permanent (soft) replacement of ability groups for the specified <paramref name="entity"/>.
+  /// The method applies an internal replace buff to the target entity and populates that buff's replace buffer
+  /// with entries provided in <paramref name="abilities"/>. The replacement is managed by the buff system
+  /// and is therefore temporary.
+  /// </summary>
+  /// <param name="entity">The target entity whose ability slots will be soft-replaced (player character or NPC).</param>
+  /// <param name="abilities">Array of tuples describing replacements: (PrefabGUID PrefabGUID, int Slot, int Priority, bool CopyCooldown).</param>
+  /// <remarks>
+  /// If applying the internal replace buff fails the method logs an error and returns. Entries with an empty
+  /// `PrefabGUID` (GuidHash == 0) are ignored.
+  /// </remarks>
+  public static void ReplaceAbilityOnSlotSoft(Entity entity, (PrefabGUID PrefabGUID, int Slot, int Priority, bool CopyCooldown)[] abilities) {
+    if (!entity.Exists()) {
+      Log.Error("Entity does not exist for ReplaceAbilityOnSlotSoft");
+      return;
+    }
+
+    if (!BuffService.TryApplyBuff(entity, AbilityReplaceBuff, -1, out var buffEntity)) {
+      Log.Error($"Failed to apply buff {AbilityReplaceBuff.LocalizedName()} to entity {entity}");
+      return;
+    }
+
+    if (!buffEntity.Exists()) return;
+    if (abilities == null || abilities.Length == 0) return;
+
+    if (!buffEntity.Has<ReplaceAbilityOnSlotData>()) {
+      buffEntity.Add<ReplaceAbilityOnSlotData>();
+    }
+
+    if (!buffEntity.TryGetBuffer(out DynamicBuffer<ReplaceAbilityOnSlotBuff> buffer)) {
+      buffer = buffEntity.AddBuffer<ReplaceAbilityOnSlotBuff>();
+    }
+
+    buffer.Clear();
+
+    foreach (var ability in abilities) {
+      if (ability.PrefabGUID.GuidHash == 0) continue;
+
+      var replaceAbilityBuff = new ReplaceAbilityOnSlotBuff {
+        Slot = ability.Slot,
+        NewGroupId = ability.PrefabGUID,
+        CopyCooldown = ability.CopyCooldown,
+        Target = ReplaceAbilityTarget.BuffTarget,
+        Priority = ability.Priority,
+      };
+
+      buffer.Add(replaceAbilityBuff);
+    }
+  }
+
+  /// <summary>
+  /// Permanently eplaces an ability in a specific slot for an entity.
   /// </summary>
   /// <param name="entity">The entity whose ability slot will be modified</param>
   /// <param name="newAbilityGuid">The GUID of the new ability to assign</param>
@@ -55,7 +107,7 @@ public static class AbilityService {
   /// <remarks>
   /// This method modifies the ability group slot buffer of the entity to replace
   /// </remarks>
-  public static void ReplaceNpcAbilityOnSlot(Entity entity, PrefabGUID newAbilityGuid, int abilitySlotIndex = 0, int priority = 99) {
+  public static void ReplaceAbilityOnSlotHard(Entity entity, PrefabGUID newAbilityGuid, int abilitySlotIndex = 0, int priority = 99) {
     // Verify that the Entity has the required ability slot buffer component
     if (!entity.Has<AbilityGroupSlotBuffer>()) {
       Log.Warning("Entity doesn't have AbilityGroupSlotBuffer component");
