@@ -224,7 +224,7 @@ public class PlayerData {
   /// <param name="abilitySlotIndex">The slot index to replace (default: 0)</param>
   /// <param name="priority">The priority for the ability replacement (default: 99)</param>
   public void ReplaceAbilityOnSlot(PrefabGUID newAbilityGuid, int abilitySlotIndex = 0, int priority = 99) {
-    AbilityService.ReplaceNpcAbilityOnSlot(CharacterEntity, newAbilityGuid, abilitySlotIndex, priority);
+    AbilityService.ReplaceAbilityOnSlotHard(CharacterEntity, newAbilityGuid, abilitySlotIndex, priority);
   }
 
   /// <summary>
