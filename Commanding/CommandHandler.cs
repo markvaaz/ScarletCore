@@ -119,7 +119,7 @@ public static class CommandHandler {
     int commandNameTokens = commandInfo.NameTokenCount + commandInfo.GroupTokenCount;
     var args = tokens.AsSpan()[commandNameTokens..].ToArray();
 
-    if (commandInfo.AdminOnly && !player.IsAdmin && !player.HasRole(DefaultRoles.Admin)) {
+    if (commandInfo.AdminOnly && !player.IsAdmin && !player.HasRole(DefaultRoles.Admin) && !player.HasRole(DefaultRoles.Owner)) {
       player.SendLocalizedErrorMessage(LocalizationKey.CmdRequiresAdmin);
       return;
     }
@@ -900,7 +900,7 @@ public static class CommandHandler {
   internal static void HelpCommand(CommandContext ctx, string language, int page = 1) {
     var targetLanguage = Localizer.GetLanguageFromString(language);
     if (targetLanguage == Language.None) {
-      ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, language).FormatError());
+      ctx.ReplyLocalizedError(LocalizationKey.LanguageNotSupported, language);
       return;
     }
     HelpCommandInternal(ctx, targetLanguage, page);
@@ -940,7 +940,7 @@ public static class CommandHandler {
     var commandsByAssembly = GetCommandsByAssembly(targetLanguage, ctx.Sender.IsAdmin);
 
     if (commandsByAssembly.Count == 0) {
-      ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.HelpNoCommands).FormatError());
+      ctx.ReplyLocalizedError(LocalizationKey.HelpNoCommands);
       return;
     }
 
@@ -1046,7 +1046,7 @@ public static class CommandHandler {
   internal static void HelpModCommand(CommandContext ctx, string assemblyName, string language, int page = 1) {
     var targetLanguage = Localizer.GetLanguageFromString(language);
     if (targetLanguage == Language.None) {
-      ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, language).FormatError());
+      ctx.ReplyLocalizedError(LocalizationKey.LanguageNotSupported, language);
       return;
     }
     HelpModCommandInternal(ctx, assemblyName, targetLanguage, page);
@@ -1073,14 +1073,14 @@ public static class CommandHandler {
       string errorMsg = Localizer.Get(ctx.Sender, LocalizationKey.HelpModNotFound, assemblyName);
       string availableMsg = Localizer.Get(ctx.Sender, LocalizationKey.HelpModAvailable, availableAssemblies);
 
-      ctx.Reply($"{errorMsg}\n{availableMsg}".FormatError());
+      ctx.ReplyError($"{errorMsg}\n{availableMsg}");
       return;
     }
 
     var commands = commandsByAssembly[matchingAssembly];
 
     if (commands.Count == 0) {
-      ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.HelpNoCommands).FormatError());
+      ctx.ReplyLocalizedError(LocalizationKey.HelpNoCommands);
       return;
     }
 
@@ -1145,28 +1145,28 @@ public static class CommandHandler {
   private static void SetLanguage(CommandContext ctx, string language = "") {
     var player = ctx.Sender;
     if (player == null) {
-      ctx.ReplyError(Localizer.Get(ctx.Sender, LocalizationKey.MustBePlayer));
+      ctx.ReplyLocalizedError(LocalizationKey.MustBePlayer);
       return;
     }
 
     if (string.IsNullOrWhiteSpace(language)) {
       var current = Localizer.GetPlayerLanguage(player);
-      ctx.ReplyInfo(Localizer.Get(ctx.Sender, LocalizationKey.PlayerLanguageCurrent, current));
+      ctx.ReplyLocalizedInfo(LocalizationKey.PlayerLanguageCurrent, current.ToString());
       return;
     }
 
     var newLang = Localizer.GetLanguageFromString(language);
 
     if (!Localizer.IsLanguageAvailable(newLang)) {
-      ctx.ReplyError(Localizer.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, newLang));
+      ctx.ReplyLocalizedError(LocalizationKey.LanguageNotSupported, newLang.ToString());
 
       var availableLanguages = string.Join(", ", Localizer.AvailableServerLanguages);
-      ctx.ReplyInfo(Localizer.Get(ctx.Sender, LocalizationKey.AvailableLanguages, availableLanguages));
+      ctx.ReplyLocalizedInfo(LocalizationKey.AvailableLanguages, availableLanguages);
       return;
     }
 
     Localizer.SetPlayerLanguage(player, newLang);
-    ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.PlayerLanguageChanged, newLang).FormatSuccess());
+    ctx.ReplyLocalizedSuccess(LocalizationKey.PlayerLanguageChanged, newLang.ToString());
   }
 
   [CommandGroup("admin", language: Language.English, aliases: ["sc"], adminOnly: true)]
@@ -1195,24 +1195,24 @@ public static class CommandHandler {
 
       if (string.IsNullOrWhiteSpace(language)) {
         var current = Localizer.CurrentServerLanguage;
-        ctx.ReplyInfo(Localizer.Get(ctx.Sender, LocalizationKey.ServerLanguageCurrent, current));
+        ctx.ReplyLocalizedInfo(LocalizationKey.ServerLanguageCurrent, current.ToString());
         return;
       }
 
       if (!Localizer.IsLanguageAvailable(newLanguage)) {
-        ctx.ReplyError(Localizer.Get(ctx.Sender, LocalizationKey.LanguageNotSupported, newLanguage));
+        ctx.ReplyLocalizedError(LocalizationKey.LanguageNotSupported, newLanguage.ToString());
 
         var availableLanguages = string.Join(", ", Localizer.AvailableServerLanguages.Select(l => $"<mark=#a963ff25>{l}</mark>"));
-        ctx.ReplyInfo(Localizer.Get(ctx.Sender, LocalizationKey.AvailableLanguages, availableLanguages));
+        ctx.ReplyLocalizedInfo(LocalizationKey.AvailableLanguages, availableLanguages);
         return;
       }
 
       if (Localizer.ChangeLanguage(newLanguage)) {
         Plugin.Settings.Set("PrefabLocalizationLanguage", newLanguage);
-        ctx.Reply(Localizer.Get(ctx.Sender, LocalizationKey.ServerLanguageChanged, newLanguage).FormatSuccess());
+        ctx.ReplyLocalizedSuccess(LocalizationKey.ServerLanguageChanged, newLanguage.ToString());
         Log.Message($"ScarletCore localization language changed to: {newLanguage} by admin {ctx.Sender?.Name}");
       } else {
-        ctx.ReplyError(Localizer.Get(ctx.Sender, LocalizationKey.LanguageChangeFailed, newLanguage));
+        ctx.ReplyLocalizedError(LocalizationKey.LanguageChangeFailed, newLanguage.ToString());
       }
     }
   }

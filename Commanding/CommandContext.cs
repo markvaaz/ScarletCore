@@ -73,6 +73,12 @@ public sealed class CommandContext {
     MessageService.SendRaw(Sender, message.FormatSuccess());
   }
 
+  /// <summary>Sends a raw (unformatted and unlocalized) reply to the sender.</summary>
+  /// <param name="message">Message text to send.</param>
+  public void ReplyRaw(string message) {
+    MessageService.SendRaw(Sender, message);
+  }
+
   /// <summary>Sends a localized reply using the given localization key and optional formatting parameters.</summary>
   /// <param name="key">Localization key.</param>
   /// <param name="parameters">Optional parameters for localization formatting.</param>
@@ -121,5 +127,15 @@ public sealed class CommandContext {
     if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
     else localized = Localizer.Get(Sender, key, parameters);
     MessageService.SendRaw(Sender, localized.FormatSuccess());
+  }
+
+  /// <summary>Sends a localized raw (unformatted and unstyled) reply to the sender.</summary>
+  /// <param name="key">Localization key.</param>
+  /// <param name="parameters">Optional parameters for localization formatting.</param>
+  public void ReplyLocalizedRaw(string key, params string[] parameters) {
+    string localized;
+    if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
+    else localized = Localizer.Get(Sender, key, parameters);
+    MessageService.SendRaw(Sender, localized);
   }
 }
