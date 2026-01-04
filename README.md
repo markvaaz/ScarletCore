@@ -25,7 +25,7 @@ ScarletCore provides a foundation with:
 
 ## 🔧 For Developers
 
-If you're a developer wanting to use ScarletCore to create your own mods, check out the **[Documentation Wiki](https://github.com/markvaaz/ScarletCore/wiki)**.
+If you're a developer wanting to use ScarletCore to create your own mods, check out the **[Documentation Wiki](https://markvaaz.github.io/ScarletCore-Wiki/)**.
 
 ## ScarletMods
 
