@@ -103,6 +103,10 @@ public static class CommandHandler {
     var commandInfo = FindCommand(playerLanguage, tokens);
 
     if (commandInfo == null) {
+      var baseCommand = FindCommandByNameOnly(playerLanguage, tokens);
+      if (baseCommand != null) {
+        player.SendLocalizedErrorMessage(LocalizationKey.CmdAvailableUsages, GetCommandUsages(baseCommand));
+      }
       return;
     }
 
@@ -481,6 +485,30 @@ public static class CommandHandler {
   }
 
   /// <summary>
+  /// Finds a command by name only, ignoring parameter validation.
+  /// Used to provide usage information when parameters are incorrect.
+  /// </summary>
+  private static CommandInfo FindCommandByNameOnly(Language playerLanguage, ReadOnlySpan<string> tokens) {
+    if (tokens.Length == 0) return null;
+
+    for (int commandTokens = Math.Min(tokens.Length, 3); commandTokens > 0; commandTokens--) {
+      string commandName = BuildCommandName(tokens, commandTokens);
+      var key = new CommandLookupKey(playerLanguage, commandTokens, commandName);
+
+      if (CommandsByKey.TryGetValue(key, out var commands) && commands.Count > 0) {
+        return commands[0];
+      }
+
+      var fallbackKey = (commandTokens, commandName);
+      if (FallbackCommandsByKey.TryGetValue(fallbackKey, out var fallbackCommands) && fallbackCommands.Count > 0) {
+        return fallbackCommands[0];
+      }
+    }
+
+    return null;
+  }
+
+  /// <summary>
   /// Finds the best matching <see cref="CommandInfo"/> for the provided tokens and player language.
   /// Returns null when no match is found.
   /// </summary>
@@ -488,26 +516,33 @@ public static class CommandHandler {
     if (tokens.Length == 0) return null;
 
     int totalTokens = tokens.Length;
-    CommandInfo bestMatch = null;
-    int bestScore = -1;
 
+    // First: Check if there's a command with exact name match (starting from most tokens)
+    // If we find a command whose NAME matches, that's the one we should use (even if params are wrong)
     for (int commandTokens = totalTokens; commandTokens > 0; commandTokens--) {
       string commandName = BuildCommandName(tokens, commandTokens);
       var key = new CommandLookupKey(playerLanguage, commandTokens, commandName);
 
-      if (CommandsByKey.TryGetValue(key, out var commands)) {
+      // Check if ANY command exists with this exact name
+      if (CommandsByKey.TryGetValue(key, out var commands) && commands.Count > 0) {
+        // Found command(s) with this exact name - now find the best parameter match
+        CommandInfo bestMatch = null;
+        int bestScore = -1;
+
         foreach (var command in commands) {
+          // Try with strict type checking first
           int score = CalculateCommandMatchScore(command, tokens, commandTokens, allowTypeFailure: false);
           if (score >= 0) {
-            score += 1000;
+            score += 100000 + (commandTokens * 10000);
             if (score > bestScore) {
               bestMatch = command;
               bestScore = score;
             }
           } else {
+            // Try with lenient type checking (for usage messages)
             score = CalculateCommandMatchScore(command, tokens, commandTokens, allowTypeFailure: true);
             if (score >= 0) {
-              score += 1000;
+              score += 1000 + (commandTokens * 100);
               if (score > bestScore) {
                 bestMatch = command;
                 bestScore = score;
@@ -515,31 +550,51 @@ public static class CommandHandler {
             }
           }
         }
+
+        // If we found ANY match (even with wrong params), return it
+        if (bestMatch != null) {
+          return bestMatch;
+        }
+
+        // Name matches but no valid parameter combination - return first command for usage
+        return commands[0];
       }
 
+      // Check fallback commands
       var fallbackKey = (commandTokens, commandName);
-      if (FallbackCommandsByKey.TryGetValue(fallbackKey, out var fallbackCommands)) {
-        foreach (var fallbackCommand in fallbackCommands) {
-          int score = CalculateCommandMatchScore(fallbackCommand, tokens, commandTokens, allowTypeFailure: false);
+      if (FallbackCommandsByKey.TryGetValue(fallbackKey, out var fallbackCommands) && fallbackCommands.Count > 0) {
+        CommandInfo bestMatch = null;
+        int bestScore = -1;
+
+        foreach (var command in fallbackCommands) {
+          int score = CalculateCommandMatchScore(command, tokens, commandTokens, allowTypeFailure: false);
           if (score >= 0) {
+            score += 50000 + (commandTokens * 10000);
             if (score > bestScore) {
-              bestMatch = fallbackCommand;
+              bestMatch = command;
               bestScore = score;
             }
           } else {
-            score = CalculateCommandMatchScore(fallbackCommand, tokens, commandTokens, allowTypeFailure: true);
+            score = CalculateCommandMatchScore(command, tokens, commandTokens, allowTypeFailure: true);
             if (score >= 0) {
+              score += 500 + (commandTokens * 100);
               if (score > bestScore) {
-                bestMatch = fallbackCommand;
+                bestMatch = command;
                 bestScore = score;
               }
             }
           }
         }
+
+        if (bestMatch != null) {
+          return bestMatch;
+        }
+
+        return fallbackCommands[0];
       }
     }
 
-    return bestMatch;
+    return null;
   }
 
   private static string BuildCommandName(ReadOnlySpan<string> tokens, int count) {
