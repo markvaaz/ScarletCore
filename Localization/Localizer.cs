@@ -152,7 +152,7 @@ public static class Localizer {
 
   private static void CheckLanguageOnJoin(PlayerData player) {
     try {
-      if (player == null) return;
+      if (Plugin.Settings.Get<bool>("DisableLanguageSelectionPrompt") || player == null) return;
 
       var lang = GetPlayerLanguage(player);
 
