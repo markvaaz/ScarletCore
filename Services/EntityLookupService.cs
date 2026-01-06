@@ -211,14 +211,16 @@ public static class EntityLookupService {
     /// </summary>
     public NativeArray<Entity> ToArray() {
       var queryDesc = new EntityQueryDesc {
-        All = _all,
-        Any = _any,
-        None = _none,
-        Present = _present,
-        Absent = _absent,
-        Disabled = _disabled,
         Options = _options
       };
+
+      // Only set non-null arrays to avoid NullReferenceException in Unity ECS
+      if (_all != null && _all.Length > 0) queryDesc.All = _all;
+      if (_any != null && _any.Length > 0) queryDesc.Any = _any;
+      if (_none != null && _none.Length > 0) queryDesc.None = _none;
+      if (_present != null && _present.Length > 0) queryDesc.Present = _present;
+      if (_absent != null && _absent.Length > 0) queryDesc.Absent = _absent;
+      if (_disabled != null && _disabled.Length > 0) queryDesc.Disabled = _disabled;
 
       var query = GetOrCreateCachedQuery(queryDesc);
       return query.ToEntityArray(Allocator.Temp);
