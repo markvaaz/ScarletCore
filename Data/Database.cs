@@ -124,6 +124,18 @@ public class Database : IDisposable {
         if (!prop.CanRead)
           continue;
 
+        // Skip properties marked to be ignored by serializers (e.g. LiteDB's BsonIgnore, JsonIgnore, etc.)
+        try {
+          var propAttrs = prop.GetCustomAttributes(true);
+          if (propAttrs != null && propAttrs.Any(a => {
+            var n = a.GetType().Name;
+            return n == "BsonIgnoreAttribute" || n == "JsonIgnoreAttribute" || n == "JsonIgnore";
+          }))
+            continue;
+        } catch {
+          // If attribute inspection fails, fall back to attempting to read the property
+        }
+
         try {
           var value = prop.GetValue(obj);
 
@@ -146,6 +158,17 @@ public class Database : IDisposable {
       var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
 
       foreach (var field in fields) {
+        // Skip fields marked to be ignored by serializers (e.g. LiteDB's BsonIgnore, JsonIgnore, etc.)
+        try {
+          var fieldAttrs = field.GetCustomAttributes(true);
+          if (fieldAttrs != null && fieldAttrs.Any(a => {
+            var n = a.GetType().Name;
+            return n == "BsonIgnoreAttribute" || n == "JsonIgnoreAttribute" || n == "JsonIgnore";
+          }))
+            continue;
+        } catch {
+          // If attribute inspection fails, continue and attempt to read the field
+        }
         try {
           var value = field.GetValue(obj);
 

@@ -7,6 +7,7 @@ using ProjectM.CastleBuilding;
 using ScarletCore.Services;
 using ProjectM.Network;
 using ScarletCore.Events;
+using UnityEngine;
 
 namespace ScarletCore.Systems;
 
@@ -234,7 +235,11 @@ public static class GameSystems {
     if (Initialized) {
       action.DynamicInvoke();
     } else {
-      EventManager.Once(ServerEvents.OnInitialize, action);
+      void Wrapper() {
+        action.DynamicInvoke();
+        EventManager.Off(ServerEvents.OnInitialize, Wrapper);
+      }
+      EventManager.On(ServerEvents.OnInitialize, Wrapper);
     }
   }
 
