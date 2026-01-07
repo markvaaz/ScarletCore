@@ -141,6 +141,7 @@ public static class Localizer {
       // LoadGameTranslations();
       AutoLoadFromLocalizationFolder();
       LoadPrefabMapping();
+      LoadGameTranslations();
       EventManager.On(PlayerEvents.PlayerJoined, CheckLanguageOnJoin);
       _initialized = true;
       _currentServerLanguage = language;
