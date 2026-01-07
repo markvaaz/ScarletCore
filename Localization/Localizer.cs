@@ -138,10 +138,9 @@ public static class Localizer {
     var language = Plugin.Settings.Get<Language>("PrefabLocalizationLanguage");
 
     try {
-      // LoadGameTranslations();
+      LoadGameTranslations();
       AutoLoadFromLocalizationFolder();
       LoadPrefabMapping();
-      LoadGameTranslations();
       EventManager.On(PlayerEvents.PlayerJoined, CheckLanguageOnJoin);
       _initialized = true;
       _currentServerLanguage = language;
