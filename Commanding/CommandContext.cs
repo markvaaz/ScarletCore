@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using ScarletCore.Localization;
 using ScarletCore.Services;
@@ -137,5 +138,12 @@ public sealed class CommandContext {
     if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
     else localized = Localizer.Get(Sender, key, parameters);
     MessageService.SendRaw(Sender, localized);
+  }
+
+  public void ReplyLocalizedFormatted(string key, List<string> colors, params string[] parameters) {
+    string localized;
+    if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
+    else localized = Localizer.Get(Sender, key, parameters);
+    MessageService.SendRaw(Sender, localized.Format(colors));
   }
 }
