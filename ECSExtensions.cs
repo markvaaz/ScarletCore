@@ -442,6 +442,16 @@ public static class ECSExtensions {
   /// <param name="prefabGuid">The PrefabGUID to localize.</param>
   /// <returns>The localized name string.</returns>
   public static string LocalizedName(this PrefabGUID prefabGuid) {
-    return Localizer.GetText(prefabGuid);
+    return Localizer.GetPrefabName(prefabGuid);
+  }
+
+  /// <summary>
+  /// Gets the localized name for a PrefabGUID.
+  /// </summary>
+  /// <param name="prefabGuid">The PrefabGUID to localize.</param>
+  /// <param name="language">The language to use for localization.</param>
+  /// <returns>The localized name string.</returns>
+  public static string LocalizedName(this PrefabGUID prefabGuid, Language language) {
+    return Localizer.GetPrefabName(language, prefabGuid);
   }
 }
