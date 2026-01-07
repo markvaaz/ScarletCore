@@ -454,10 +454,31 @@ public static class Localizer {
   }
 
   /// <summary>
+  /// Get localized text by PrefabGUID using specified language.
+  /// </summary>
+  public static string GetText(Language language, PrefabGUID prefabGuid, params object[] parameters) {
+    if (!_initialized) Initialize();
+
+    if (_prefabToGuid.TryGetValue(prefabGuid.GuidHash, out var guid)) {
+      return GetTextForLanguage(guid, language, parameters);
+    }
+
+    return prefabGuid.ToString();
+  }
+
+  /// <summary>
   /// Get prefab name (alias for GetText).
   /// </summary>
   public static string GetPrefabName(PrefabGUID prefabGuid, params object[] parameters) {
     return GetText(prefabGuid, parameters);
+  }
+
+
+  /// <summary>
+  /// Get prefab name (alias for GetText).
+  /// </summary>
+  public static string GetPrefabName(Language language, PrefabGUID prefabGuid, params object[] parameters) {
+    return GetText(language, prefabGuid, parameters);
   }
 
   /// <summary>
