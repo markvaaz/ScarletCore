@@ -235,11 +235,7 @@ public static class GameSystems {
     if (Initialized) {
       action.DynamicInvoke();
     } else {
-      void Wrapper() {
-        action.DynamicInvoke();
-        EventManager.Off(ServerEvents.OnInitialize, Wrapper);
-      }
-      EventManager.On(ServerEvents.OnInitialize, Wrapper);
+      EventManager.On(ServerEvents.OnInitialize, action);
     }
   }
 
