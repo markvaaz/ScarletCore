@@ -138,12 +138,11 @@ public static class Localizer {
     var language = Plugin.Settings.Get<Language>("PrefabLocalizationLanguage");
 
     try {
-      LoadGameTranslations();
+      _initialized = true;
+      _currentServerLanguage = language;
       AutoLoadFromLocalizationFolder();
       LoadPrefabMapping();
       EventManager.On(PlayerEvents.PlayerJoined, CheckLanguageOnJoin);
-      _initialized = true;
-      _currentServerLanguage = language;
       Log.Message($"Localizer initialized with {_allTranslations.Count} translation keys and {_prefabToGuid.Count} prefab mappings");
     } catch (Exception ex) {
       Log.Error($"[Localizer] Failed to initialize LocalizationService: {ex}");
@@ -223,10 +222,14 @@ public static class Localizer {
             continue; // Silently skip incompatible format
           }
 
+          var fileName = resourceName[localizationPrefix.Length..];
           LoadKeys(deserialized);
+          // If this is the global game translations file, also register the keys without assembly prefix
+          if (fileName.Equals("GameTranslations.json", StringComparison.OrdinalIgnoreCase)) {
+            LoadKeysGlobal(deserialized);
+          }
           successCount++;
 
-          var fileName = resourceName[localizationPrefix.Length..];
           Log.Message($"[Localizer] Loaded translations from: {fileName} ({deserialized.Count} keys)");
         } catch (JsonException) {
           // Silently skip files with incompatible JSON format
@@ -322,28 +325,6 @@ public static class Localizer {
     }
   }
 
-  private static void LoadGameTranslations() {
-    try {
-      var resourceName = "ScarletCore.Localization.GameTranslations.json";
-      var jsonContent = LoadResource(resourceName);
-
-      if (string.IsNullOrEmpty(jsonContent)) {
-        Log.Warning($"[Localizer] No content found in resource: {resourceName}");
-        return;
-      }
-
-      var deserialized = JsonSerializer.Deserialize<IDictionary<string, IDictionary<Language, string>>>(jsonContent);
-
-      _allTranslations.Clear();
-
-      LoadKeys(deserialized);
-
-      Log.Message($"[Localizer] Loaded {_allTranslations.Count} game translation keys");
-    } catch (Exception ex) {
-      Log.Error($"[Localizer] Error loading game translations: {ex}");
-    }
-  }
-
   private static string LoadResource(string resourceName) {
     var assembly = Assembly.GetExecutingAssembly();
     var stream = assembly.GetManifestResourceStream(resourceName);
@@ -427,6 +408,27 @@ public static class Localizer {
       var first = translations.Values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
       if (first != null) return FormatString(first, parameters);
     }
+
+    // If not found using the provided key, allow fallback to an unprefixed (global) key.
+    // This enables entries (e.g. from GameTranslations.json) to be accessible across assemblies.
+    try {
+      var idx = guid.IndexOf(':');
+      if (idx >= 0 && idx < guid.Length - 1) {
+        var unprefixed = guid[(idx + 1)..];
+        if (!string.Equals(unprefixed, guid, StringComparison.OrdinalIgnoreCase) && _allTranslations.TryGetValue(unprefixed, out var globalTranslations)) {
+          if (globalTranslations.TryGetValue(language, out var gtext) && !string.IsNullOrEmpty(gtext)) {
+            return FormatString(gtext, parameters);
+          }
+
+          if (language != _currentServerLanguage && globalTranslations.TryGetValue(_currentServerLanguage, out var gServerText) && !string.IsNullOrEmpty(gServerText)) {
+            return FormatString(gServerText, parameters);
+          }
+
+          var firstGlobal = globalTranslations.Values.FirstOrDefault(v => !string.IsNullOrEmpty(v));
+          if (firstGlobal != null) return FormatString(firstGlobal, parameters);
+        }
+      }
+    } catch { }
 
     return guid;
   }
@@ -557,6 +559,33 @@ public static class Localizer {
 
       if (!map.IsEmpty) {
         _allTranslations[compositeKey] = map;
+      }
+    }
+  }
+
+  /// <summary>
+  /// Loads keys into the global namespace (no assembly prefix).
+  /// Intended for files like GameTranslations.json that should be accessible by any assembly.
+  /// </summary>
+  private static void LoadKeysGlobal(IDictionary<string, IDictionary<Language, string>> languageMap) {
+    if (languageMap == null || languageMap.Count == 0) return;
+
+    foreach (var kvp in languageMap) {
+      var key = kvp.Key;
+      var translations = kvp.Value;
+
+      if (string.IsNullOrWhiteSpace(key) || translations == null || translations.Count == 0) continue;
+
+      var map = new ConcurrentDictionary<Language, string>();
+
+      foreach (var langKv in translations) {
+        if (langKv.Value == null) continue;
+        map[langKv.Key] = langKv.Value;
+      }
+
+      if (!map.IsEmpty) {
+        // Store under the plain key so any assembly can access it via fallback lookup
+        _allTranslations[key.Trim()] = map;
       }
     }
   }
