@@ -544,10 +544,24 @@ public class Database : IDisposable {
   /// Performs a checkpoint to ensure all data is written to disk
   /// </summary>
   public void Checkpoint() {
-    try {
-      _db.Checkpoint();
-    } catch (Exception ex) {
-      Log.Error($"Failed to perform checkpoint: {ex.Message}");
+    const int maxRetries = 3;
+    const int delayMs = 100;
+
+    for (int i = 0; i < maxRetries; i++) {
+      try {
+        _db.Checkpoint();
+        return; // Success
+      } catch (IOException ex) when (ex.Message.Contains("being used by another process")) {
+        if (i < maxRetries - 1) {
+          Log.Warning($"Checkpoint retry {i + 1}/{maxRetries}: File is locked, waiting {delayMs}ms...");
+          System.Threading.Thread.Sleep(delayMs);
+        } else {
+          Log.Error($"Failed to perform checkpoint after {maxRetries} attempts: {ex.Message}");
+        }
+      } catch (Exception ex) {
+        Log.Error($"Failed to perform checkpoint: {ex.Message}");
+        return; // Don't retry for other exceptions
+      }
     }
   }
 
@@ -600,7 +614,7 @@ public class Database : IDisposable {
   public async Task<string> CreateBackup(string backupLocation = null, string saveName = null) {
     return await Task.Run(() => {
       try {
-        Checkpoint(); // Ensure all data is written
+        Checkpoint(); // Ensure all data is written (with retry logic)
 
         var dbPath = GetDatabasePath();
         if (!File.Exists(dbPath)) {
@@ -625,7 +639,30 @@ public class Database : IDisposable {
         Directory.CreateDirectory(backupDir);
 
         var backupPath = Path.Combine(backupDir, backupFileName);
-        File.Copy(dbPath, backupPath, true);
+
+        // Retry logic for file copy in case of temporary lock
+        const int maxRetries = 3;
+        const int delayMs = 100;
+        bool copied = false;
+
+        for (int i = 0; i < maxRetries && !copied; i++) {
+          try {
+            File.Copy(dbPath, backupPath, true);
+            copied = true;
+          } catch (IOException ex) when (ex.Message.Contains("being used by another process")) {
+            if (i < maxRetries - 1) {
+              Log.Warning($"Backup copy retry {i + 1}/{maxRetries}: File is locked, waiting {delayMs}ms...");
+              System.Threading.Thread.Sleep(delayMs);
+            } else {
+              throw; // Re-throw on final attempt
+            }
+          }
+        }
+
+        if (!copied) {
+          Log.Error("Failed to copy database file after multiple attempts");
+          return null;
+        }
 
         CleanupOldBackups(backupDir);
 
