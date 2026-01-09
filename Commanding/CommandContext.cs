@@ -4,6 +4,7 @@ using System.Reflection;
 using ScarletCore.Localization;
 using ScarletCore.Services;
 using ScarletCore.Utils;
+using Stunlock.Core;
 using Unity.Entities;
 
 namespace ScarletCore.Commanding;
@@ -47,36 +48,42 @@ public sealed class CommandContext {
   /// <summary>Sends a plain (unlocalized) reply to the sender.</summary>
   /// <param name="message">Message text to send.</param>
   public void Reply(string message) {
+    message = ProcessPlaceholders(message);
     MessageService.SendRaw(Sender, message.Format());
   }
 
   /// <summary>Sends an error-styled reply to the sender.</summary>
   /// <param name="message">Message text to send.</param>
   public void ReplyError(string message) {
+    message = ProcessPlaceholders(message);
     MessageService.SendRaw(Sender, message.FormatError());
   }
 
   /// <summary>Sends a warning-styled reply to the sender.</summary>
   /// <param name="message">Message text to send.</param>
   public void ReplyWarning(string message) {
+    message = ProcessPlaceholders(message);
     MessageService.SendRaw(Sender, message.FormatWarning());
   }
 
   /// <summary>Sends an informational-styled reply to the sender.</summary>
   /// <param name="message">Message text to send.</param>
   public void ReplyInfo(string message) {
+    message = ProcessPlaceholders(message);
     MessageService.SendRaw(Sender, message.FormatInfo());
   }
 
   /// <summary>Sends a success-styled reply to the sender.</summary>
   /// <param name="message">Message text to send.</param>
   public void ReplySuccess(string message) {
+    message = ProcessPlaceholders(message);
     MessageService.SendRaw(Sender, message.FormatSuccess());
   }
 
   /// <summary>Sends a raw (unformatted and unlocalized) reply to the sender.</summary>
   /// <param name="message">Message text to send.</param>
   public void ReplyRaw(string message) {
+    message = ProcessPlaceholders(message);
     MessageService.SendRaw(Sender, message);
   }
 
@@ -87,6 +94,7 @@ public sealed class CommandContext {
     string localized;
     if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
     else localized = Localizer.Get(Sender, key, parameters);
+    localized = ProcessPlaceholders(localized);
     MessageService.SendRaw(Sender, localized.Format());
   }
 
@@ -97,6 +105,7 @@ public sealed class CommandContext {
     string localized;
     if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
     else localized = Localizer.Get(Sender, key, parameters);
+    localized = ProcessPlaceholders(localized);
     MessageService.SendRaw(Sender, localized.FormatError());
   }
 
@@ -107,6 +116,7 @@ public sealed class CommandContext {
     string localized;
     if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
     else localized = Localizer.Get(Sender, key, parameters);
+    localized = ProcessPlaceholders(localized);
     MessageService.SendRaw(Sender, localized.FormatWarning());
   }
 
@@ -117,6 +127,7 @@ public sealed class CommandContext {
     string localized;
     if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
     else localized = Localizer.Get(Sender, key, parameters);
+    localized = ProcessPlaceholders(localized);
     MessageService.SendRaw(Sender, localized.FormatInfo());
   }
 
@@ -127,6 +138,7 @@ public sealed class CommandContext {
     string localized;
     if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
     else localized = Localizer.Get(Sender, key, parameters);
+    localized = ProcessPlaceholders(localized);
     MessageService.SendRaw(Sender, localized.FormatSuccess());
   }
 
@@ -137,6 +149,7 @@ public sealed class CommandContext {
     string localized;
     if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
     else localized = Localizer.Get(Sender, key, parameters);
+    localized = ProcessPlaceholders(localized);
     MessageService.SendRaw(Sender, localized);
   }
 
@@ -144,6 +157,29 @@ public sealed class CommandContext {
     string localized;
     if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
     else localized = Localizer.Get(Sender, key, parameters);
+    localized = ProcessPlaceholders(localized);
     MessageService.SendRaw(Sender, localized.Format(colors));
+  }
+
+  /// <summary>Processes placeholders in the message text.</summary>
+  /// <param name="message">The message text containing placeholders.</param>
+  /// <returns>The message with placeholders replaced.</returns>
+  private string ProcessPlaceholders(string message) {
+    if (string.IsNullOrEmpty(message)) return message;
+
+    // Replace {playerName} with Sender.Name
+    message = message.Replace("{playerName}", Sender.Name);
+
+    // Replace PrefabGuid(...) with localized name
+    var prefabPattern = System.Text.RegularExpressions.Regex.Matches(message, @"PrefabGuid\((\d+)\)");
+    foreach (System.Text.RegularExpressions.Match match in prefabPattern) {
+      if (int.TryParse(match.Groups[1].Value, out int guidValue)) {
+        var prefabGuid = new PrefabGUID(guidValue);
+        var localizedName = prefabGuid.LocalizedName(Sender.Language);
+        message = message.Replace(match.Value, localizedName);
+      }
+    }
+
+    return message;
   }
 }
