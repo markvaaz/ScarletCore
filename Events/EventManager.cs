@@ -58,6 +58,10 @@ public static class EventManager {
     /// </summary>
     public Action<object> FastInvoker;
     /// <summary>
+    /// A compiled fast invoker for handlers that return bool (for cancellable events).
+    /// </summary>
+    public Func<object, bool> CancellableInvoker;
+    /// <summary>
     /// The expected parameter type for the handler, or null for parameterless handlers.
     /// </summary>
     public Type ExpectedType;
@@ -65,6 +69,14 @@ public static class EventManager {
     /// Indicates whether the handler parameter is nullable.
     /// </summary>
     public bool IsNullable;
+    /// <summary>
+    /// Indicates whether the handler returns bool and can cancel event propagation.
+    /// </summary>
+    public bool IsCancellable;
+    /// <summary>
+    /// The priority of the handler. Higher values are invoked first.
+    /// </summary>
+    public int Priority;
   }
 
   private static readonly ConcurrentDictionary<string, List<EventHandlerInfo>> _customHandlers = new();
@@ -542,39 +554,74 @@ public static class EventManager {
   private static EventHandlerInfo CreateHandlerInfo(Delegate callback) {
     var invokeMethod = callback.GetType().GetMethod("Invoke");
     var parameters = invokeMethod.GetParameters();
+    var returnType = invokeMethod.ReturnType;
 
     Type expectedType = null;
     bool isNullable = true;
-    Action<object> fastInvoker;
+    bool isCancellable = returnType == typeof(bool);
+    Action<object> fastInvoker = null;
+    Func<object, bool> cancellableInvoker = null;
+
+    // Get priority from the method
+    int priority = 0;
+    var priorityAttr = callback.Method.GetCustomAttribute<EventPriorityAttribute>();
+    if (priorityAttr != null) {
+      priority = priorityAttr.Priority;
+    }
 
     if (parameters.Length == 0) {
-      fastInvoker = _ => callback.DynamicInvoke();
+      if (isCancellable) {
+        cancellableInvoker = _ => (bool)callback.DynamicInvoke();
+      } else {
+        fastInvoker = _ => callback.DynamicInvoke();
+      }
     } else if (parameters.Length == 1) {
       expectedType = parameters[0].ParameterType;
       isNullable = !expectedType.IsValueType || Nullable.GetUnderlyingType(expectedType) != null;
 
-      var dataParam = Expression.Parameter(typeof(object), "data");
-      var convertedParam = Expression.Convert(dataParam, expectedType);
-      var invokeExpr = Expression.Invoke(Expression.Constant(callback), convertedParam);
-      var lambda = Expression.Lambda<Action<object>>(invokeExpr, dataParam);
-
-      fastInvoker = lambda.Compile();
+      if (isCancellable) {
+        var dataParam = Expression.Parameter(typeof(object), "data");
+        var convertedParam = Expression.Convert(dataParam, expectedType);
+        var invokeExpr = Expression.Invoke(Expression.Constant(callback), convertedParam);
+        var lambda = Expression.Lambda<Func<object, bool>>(invokeExpr, dataParam);
+        cancellableInvoker = lambda.Compile();
+      } else {
+        var dataParam = Expression.Parameter(typeof(object), "data");
+        var convertedParam = Expression.Convert(dataParam, expectedType);
+        var invokeExpr = Expression.Invoke(Expression.Constant(callback), convertedParam);
+        var lambda = Expression.Lambda<Action<object>>(invokeExpr, dataParam);
+        fastInvoker = lambda.Compile();
+      }
     } else {
       expectedType = typeof(object[]);
-      fastInvoker = data => {
-        if (data is object[] arr && arr.Length == parameters.Length) {
-          callback.DynamicInvoke(arr);
-        } else {
-          Log.Warning($"EventManager: Parameter count mismatch for multi-param delegate");
-        }
-      };
+      if (isCancellable) {
+        cancellableInvoker = data => {
+          if (data is object[] arr && arr.Length == parameters.Length) {
+            return (bool)callback.DynamicInvoke(arr);
+          } else {
+            Log.Warning($"EventManager: Parameter count mismatch for multi-param delegate");
+            return true; // Continue on error
+          }
+        };
+      } else {
+        fastInvoker = data => {
+          if (data is object[] arr && arr.Length == parameters.Length) {
+            callback.DynamicInvoke(arr);
+          } else {
+            Log.Warning($"EventManager: Parameter count mismatch for multi-param delegate");
+          }
+        };
+      }
     }
 
     return new EventHandlerInfo {
       Original = callback,
       FastInvoker = fastInvoker,
+      CancellableInvoker = cancellableInvoker,
       ExpectedType = expectedType,
-      IsNullable = isNullable
+      IsNullable = isNullable,
+      IsCancellable = isCancellable,
+      Priority = priority
     };
   }
 
@@ -600,7 +647,10 @@ public static class EventManager {
         handlers = new List<EventHandlerInfo>(4);
         _customHandlers[eventName] = handlers;
       }
-      handlers.Add(handlerInfo);
+      // Insert handler sorted by priority (higher first)
+      int idx = handlers.FindIndex(h => h.Priority < handlerInfo.Priority);
+      if (idx >= 0) handlers.Insert(idx, handlerInfo);
+      else handlers.Add(handlerInfo);
     }
   }
 
@@ -655,19 +705,22 @@ public static class EventManager {
 
   /// <summary>
   /// Emits a custom event by name, invoking all registered handlers with the provided data.
+  /// Handlers are invoked in priority order (highest first).
+  /// If a handler returns false, the event propagation is cancelled and subsequent handlers are not invoked.
   /// </summary>
   /// <param name="eventName">The name of the custom event to emit.</param>
   /// <param name="data">The data to pass to handlers (optional).</param>
+  /// <returns>True if the event propagated through all handlers; false if cancelled by a handler.</returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
-  public static void Emit(string eventName, object data = null) {
+  public static bool Emit(string eventName, object data = null) {
     if (string.IsNullOrWhiteSpace(eventName)) {
       Log.Warning("EventManager: Event name cannot be null or empty");
-      return;
+      return true;
     }
 
     EventHandlerInfo[] handlersToExecute;
     lock (_customLock) {
-      if (!_customHandlers.TryGetValue(eventName, out var handlers) || handlers.Count == 0) return;
+      if (!_customHandlers.TryGetValue(eventName, out var handlers) || handlers.Count == 0) return true;
       handlersToExecute = [.. handlers];
     }
 
@@ -686,11 +739,23 @@ public static class EventManager {
           }
         }
 
-        handler.FastInvoker(data);
+        // If handler is cancellable (returns bool), check the return value
+        if (handler.IsCancellable) {
+          bool shouldContinue = handler.CancellableInvoker(data);
+          if (!shouldContinue) {
+            // Event propagation cancelled by handler
+            return false;
+          }
+        } else {
+          // Non-cancellable handler (void), always continue
+          handler.FastInvoker(data);
+        }
       } catch (Exception ex) {
         Log.Error($"EventManager: Error executing callback for '{eventName}': {ex}");
+        // Continue to next handler even on error
       }
     }
+    return true;
   }
 
   // --- Utility Methods ---
