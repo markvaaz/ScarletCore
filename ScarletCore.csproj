@@ -3,13 +3,13 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>ScarletCore</AssemblyName>
     <Description>Framework and utilities for all Scarlet mods in V Rising</Description>
-    <Version>1.5.27</Version>
+    <Version>1.5.29</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RootNamespace>ScarletCore</RootNamespace>
     <PackageId>ScarletCore</PackageId>
-    <AssemblyVersion>1.5.27.0</AssemblyVersion>
-    <FileVersion>1.5.27.0</FileVersion>
+    <AssemblyVersion>1.5.29.0</AssemblyVersion>
+    <FileVersion>1.5.29.0</FileVersion>
     <Authors>markvaaz</Authors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
@@ -18,7 +18,7 @@
   <PropertyGroup> 
     <BepInExPluginGuid>markvaaz.ScarletCore</BepInExPluginGuid>
     <BepInExPluginName>ScarletCore</BepInExPluginName>
-    <BepInExPluginVersion>1.5.27</BepInExPluginVersion>
+    <BepInExPluginVersion>1.5.29</BepInExPluginVersion>
   </PropertyGroup>
   
   <ItemGroup>
