@@ -710,17 +710,16 @@ public static class EventManager {
   /// </summary>
   /// <param name="eventName">The name of the custom event to emit.</param>
   /// <param name="data">The data to pass to handlers (optional).</param>
-  /// <returns>True if the event propagated through all handlers; false if cancelled by a handler.</returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
-  public static bool Emit(string eventName, object data = null) {
+  public static void Emit(string eventName, object data = null) {
     if (string.IsNullOrWhiteSpace(eventName)) {
       Log.Warning("EventManager: Event name cannot be null or empty");
-      return true;
+      return;
     }
 
     EventHandlerInfo[] handlersToExecute;
     lock (_customLock) {
-      if (!_customHandlers.TryGetValue(eventName, out var handlers) || handlers.Count == 0) return true;
+      if (!_customHandlers.TryGetValue(eventName, out var handlers) || handlers.Count == 0) return;
       handlersToExecute = [.. handlers];
     }
 
@@ -743,8 +742,8 @@ public static class EventManager {
         if (handler.IsCancellable) {
           bool shouldContinue = handler.CancellableInvoker(data);
           if (!shouldContinue) {
-            // Event propagation cancelled by handler
-            return false;
+            // Event propagation cancelled by handler - stop processing
+            return;
           }
         } else {
           // Non-cancellable handler (void), always continue
@@ -755,7 +754,6 @@ public static class EventManager {
         // Continue to next handler even on error
       }
     }
-    return true;
   }
 
   // --- Utility Methods ---
