@@ -7,6 +7,7 @@ using Stunlock.Core;
 using ScarletCore.Localization;
 using ProjectM;
 using ScarletCore.Commanding;
+using System.Reflection;
 
 namespace ScarletCore.Services;
 
@@ -402,7 +403,8 @@ public class PlayerData {
   /// <param name="key">The localization key to look up.</param>
   /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedMessage(string key, params object[] args) {
-    var localized = Localizer.Get(this, key, args);
+    var assembly = Assembly.GetCallingAssembly();
+    var localized = Localizer.Get(this, key, assembly, args);
     SendMessage(localized);
   }
 
@@ -412,7 +414,8 @@ public class PlayerData {
   /// <param name="key">The localization key to look up.</param>
   /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedErrorMessage(string key, params object[] args) {
-    var localized = Localizer.Get(this, key, args);
+    var assembly = Assembly.GetCallingAssembly();
+    var localized = Localizer.Get(this, key, assembly, args);
     SendErrorMessage(localized);
   }
 
@@ -422,7 +425,8 @@ public class PlayerData {
   /// <param name="key">The localization key to look up.</param>
   /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedInfoMessage(string key, params object[] args) {
-    var localized = Localizer.Get(this, key, args);
+    var assembly = Assembly.GetCallingAssembly();
+    var localized = Localizer.Get(this, key, assembly, args);
     SendInfoMessage(localized);
   }
 
@@ -432,7 +436,8 @@ public class PlayerData {
   /// <param name="key">The localization key to look up.</param>
   /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedSuccessMessage(string key, params object[] args) {
-    var localized = Localizer.Get(this, key, args);
+    var assembly = Assembly.GetCallingAssembly();
+    var localized = Localizer.Get(this, key, assembly, args);
     SendSuccessMessage(localized);
   }
 
@@ -442,7 +447,8 @@ public class PlayerData {
   /// <param name="key">The localization key to look up.</param>
   /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedWarningMessage(string key, params object[] args) {
-    var localized = Localizer.Get(this, key, args);
+    var assembly = Assembly.GetCallingAssembly();
+    var localized = Localizer.Get(this, key, assembly, args);
     SendWarningMessage(localized);
   }
 

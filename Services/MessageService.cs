@@ -7,6 +7,8 @@ using System.Linq;
 using ScarletCore.Systems;
 using Stunlock.Core;
 using Unity.Mathematics;
+using ScarletCore.Localization;
+using System.Reflection;
 
 namespace ScarletCore.Services;
 
@@ -348,7 +350,8 @@ public static class MessageService {
   /// Sends a localized message to a player using player's preferred language (key.Localize(player)).
   /// </summary>
   public static void SendLocalized(PlayerData player, string localizationKey, params object[] parameters) {
-    var text = localizationKey.Localize(player, parameters);
+    var assembly = Assembly.GetCallingAssembly();
+    var text = Localizer.Get(player, localizationKey, assembly, parameters);
     Send(player, text);
   }
 
@@ -356,9 +359,10 @@ public static class MessageService {
   /// Sends a localized message individually to all players using each player's preferred language.
   /// </summary>
   public static void SendAllLocalized(string localizationKey, params object[] parameters) {
+    var assembly = Assembly.GetCallingAssembly();
     foreach (var player in PlayerService.AllPlayers) {
       try {
-        var text = localizationKey.Localize(player, parameters);
+        var text = Localizer.Get(player, localizationKey, assembly, parameters);
         Send(player, text);
       } catch { }
     }
