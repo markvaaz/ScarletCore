@@ -83,6 +83,33 @@ public static class CommandHandler {
   }
 
   /// <summary>
+  /// Tries to execute a command as if it were sent by the specified player.
+  /// </summary>
+  /// <param name="player">The player who is executing the command.</param>
+  /// <param name="commandText">The command text (with or without the prefix).</param>
+  /// <returns>True if the command was found and executed, false otherwise.</returns>
+  public static bool TryExecuteCommand(PlayerData player, string commandText) {
+    if (player == null || string.IsNullOrWhiteSpace(commandText)) {
+      return false;
+    }
+
+    var text = commandText.Trim();
+
+    // Add prefix if not present
+    if (!text.StartsWith(CommandPrefix)) {
+      text = CommandPrefix + text;
+    }
+
+    try {
+      HandleCommand(player, text, Entity.Null);
+      return true;
+    } catch (Exception ex) {
+      Log.Error($"[CommandHandler] Error in TryExecuteCommand for player {player.Name}: {ex}");
+      return false;
+    }
+  }
+
+  /// <summary>
   /// Processes a command string from a <see cref="PlayerData"/> sender and invokes the matching method if found.
   /// </summary>
   /// <param name="player">The player who sent the command.</param>
@@ -112,7 +139,7 @@ public static class CommandHandler {
 
     commandInfo.CancelExecution = false;
 
-    if (!IsHelpCommand(commandInfo) || !IsVCFLoaded()) {
+    if (messageEntity != Entity.Null && (!IsHelpCommand(commandInfo) || !IsVCFLoaded())) {
       try {
         messageEntity.Destroy(true);
       } catch (Exception ex) {

@@ -6,6 +6,7 @@ using Unity.Mathematics;
 using Stunlock.Core;
 using ScarletCore.Localization;
 using ProjectM;
+using ScarletCore.Commanding;
 
 namespace ScarletCore.Services;
 
@@ -512,5 +513,15 @@ public class PlayerData {
   /// </summary>
   public void ClearRoles() {
     RoleService.ClearPlayerRoles(this);
+  }
+
+  /// <summary>
+  /// Attempts to execute a command as if it were sent by this player.
+  /// The command can be provided with or without the command prefix.
+  /// </summary>
+  /// <param name="commandText">The command text to execute (e.g., "teleport spawn" or ".teleport spawn")</param>
+  /// <returns>True if the command was found and executed, false otherwise</returns>
+  public bool TryExecuteCommand(string commandText) {
+    return CommandHandler.TryExecuteCommand(this, commandText);
   }
 }
