@@ -167,6 +167,12 @@ public class JsonDatabase {
     }
     try {
       string jsonData = File.ReadAllText(filePath);
+
+      // Return default if file is empty or contains only whitespace
+      if (string.IsNullOrWhiteSpace(jsonData)) {
+        return default;
+      }
+
       var deserializedData = JsonSerializer.Deserialize<T>(jsonData, _jsonOptions);
 
       // Updates cache after successful load
