@@ -44,13 +44,26 @@ public static class DefaultRoles {
 /// </summary>
 public static class RoleService {
   private const string ROLES_KEY = "system.roles";
+  private const string EXPIRING_ROLES_KEY = "system.expiring_roles";
   private const string PLAYER_ROLES_PREFIX = "player.roles.";
 
   private static Dictionary<string, Role> _roleCache = [];
 
   /// <summary>
-  /// Predefined role names for common use cases
+  /// Tracks a role assignment that has an expiration date
   /// </summary>
+  [Serializable]
+  private class ExpiringRoleReference {
+    public ulong PlatformId { get; set; }
+    public string RoleName { get; set; }
+    public DateTime ExpiresAt { get; set; }
+
+    public ExpiringRoleReference(ulong platformId, string roleName, DateTime expiresAt) {
+      PlatformId = platformId;
+      RoleName = roleName;
+      ExpiresAt = expiresAt;
+    }
+  }
 
 
   /// <summary>
@@ -80,7 +93,7 @@ public static class RoleService {
       CreateRole(DefaultRoles.Default, ["basic"], 0, "Default user role");
     }
 
-    ActionScheduler.Repeating(CheckForExpiredRoles, 60);
+    ActionScheduler.Repeating(CheckForExpiredRoles, 60 * 10);
 
     CheckForExpiredRoles();
   }
@@ -103,7 +116,8 @@ public static class RoleService {
           _roleCache[role.Name.ToLower()] = role;
         }
       }
-    } catch (Exception ex) {
+    }
+    catch (Exception ex) {
       Log.Error($"Failed to load roles from database: {ex.Message}");
       _roleCache = [];
     }
@@ -116,7 +130,8 @@ public static class RoleService {
     try {
       var rolesList = _roleCache.Values.ToList();
       Plugin.Database.Set(ROLES_KEY, rolesList);
-    } catch (Exception ex) {
+    }
+    catch (Exception ex) {
       Log.Error($"Failed to save roles to database: {ex.Message}");
     }
   }
@@ -148,7 +163,8 @@ public static class RoleService {
         Log.Warning($"Cannot create role '{normalizedName}' with priority {priority}. Priority must be between 0 and 100.");
         return null;
       }
-    } else {
+    }
+    else {
       priority = 200;
       permissions = ["*"];
     }
@@ -301,6 +317,51 @@ public static class RoleService {
   }
 
   /// <summary>
+  /// Adds a reference to track an expiring role assignment
+  /// </summary>
+  private static void AddExpiringRoleReference(ulong platformId, string roleName, DateTime expiresAt) {
+    try {
+      var references = GetExpiringRoleReferences();
+      references.Add(new ExpiringRoleReference(platformId, roleName, expiresAt));
+      Plugin.Database.Set(EXPIRING_ROLES_KEY, references);
+    }
+    catch (Exception ex) {
+      Log.Error($"Failed to add expiring role reference: {ex.Message}");
+    }
+  }
+
+  /// <summary>
+  /// Removes a reference for an expiring role assignment
+  /// </summary>
+  private static void RemoveExpiringRoleReference(ulong platformId, string roleName) {
+    try {
+      var references = GetExpiringRoleReferences();
+      references.RemoveAll(r => r.PlatformId == platformId &&
+                               r.RoleName.Equals(roleName, StringComparison.OrdinalIgnoreCase));
+      Plugin.Database.Set(EXPIRING_ROLES_KEY, references);
+    }
+    catch (Exception ex) {
+      Log.Error($"Failed to remove expiring role reference: {ex.Message}");
+    }
+  }
+
+  /// <summary>
+  /// Gets all expiring role references
+  /// </summary>
+  private static List<ExpiringRoleReference> GetExpiringRoleReferences() {
+    try {
+      if (!Plugin.Database.Has(EXPIRING_ROLES_KEY)) {
+        return new List<ExpiringRoleReference>();
+      }
+      return Plugin.Database.Get<List<ExpiringRoleReference>>(EXPIRING_ROLES_KEY) ?? new List<ExpiringRoleReference>();
+    }
+    catch (Exception ex) {
+      Log.Error($"Failed to get expiring role references: {ex.Message}");
+      return new List<ExpiringRoleReference>();
+    }
+  }
+
+  /// <summary>
   /// Parses a duration string into a TimeSpan
   /// Supported formats: number (seconds), Xs, Xm, Xh, Xd, Xw, Xmonth/Xmonths, Xy
   /// Also supports: X seconds/minutes/hours/days/weeks/months/years
@@ -328,7 +389,8 @@ public static class RoleService {
     foreach (var c in durationStr) {
       if (parsingNumber && (char.IsDigit(c) || c == '.' || c == ',')) {
         numStr += c == ',' ? '.' : c;
-      } else {
+      }
+      else {
         parsingNumber = false;
         if (!char.IsWhiteSpace(c)) {
           unitStr += c;
@@ -386,28 +448,47 @@ public static class RoleService {
   }
 
   /// <summary>
-  /// Checks for and removes expired roles from all players
+  /// Checks for and removes expired roles efficiently using tracked references
   /// </summary>
   private static void CheckForExpiredRoles() {
     try {
-      foreach (var player in PlayerService.AllPlayers) {
-        var key = GetPlayerRolesKey(player.PlatformId);
-        if (!Plugin.Database.Has(key)) continue;
+      var references = GetExpiringRoleReferences();
+      if (references.Count == 0) return;
 
-        var assignments = Plugin.Database.Get<List<PlayerRoleAssignment>>(key);
-        if (assignments == null || assignments.Count == 0) continue;
+      var now = DateTime.Now;
+      var expiredReferences = references.Where(r => r.ExpiresAt <= now).ToList();
 
-        var expiredRoles = assignments.Where(a => a.IsExpired).ToList();
-        if (expiredRoles.Count > 0) {
-          assignments.RemoveAll(a => a.IsExpired);
-          Plugin.Database.Set(key, assignments);
+      if (expiredReferences.Count == 0) return;
 
-          foreach (var expired in expiredRoles) {
-            Log.Message($"Role '{expired.RoleName}' expired for player {player.PlatformId}");
+      var processedPlayers = new HashSet<ulong>();
+
+      foreach (var expired in expiredReferences) {
+        // Only load player data once per player
+        if (!processedPlayers.Contains(expired.PlatformId)) {
+          var key = GetPlayerRolesKey(expired.PlatformId);
+
+          if (Plugin.Database.Has(key)) {
+            var assignments = Plugin.Database.Get<List<PlayerRoleAssignment>>(key);
+            if (assignments != null && assignments.Count > 0) {
+              var removedAny = assignments.RemoveAll(a => a.IsExpired) > 0;
+              if (removedAny) {
+                Plugin.Database.Set(key, assignments);
+              }
+            }
           }
+
+          processedPlayers.Add(expired.PlatformId);
         }
+
+        Log.Message($"Role '{expired.RoleName}' expired for player {expired.PlatformId}");
       }
-    } catch (Exception ex) {
+
+      // Remove expired references from tracking
+      references.RemoveAll(r => r.ExpiresAt <= now);
+      Plugin.Database.Set(EXPIRING_ROLES_KEY, references);
+
+    }
+    catch (Exception ex) {
       Log.Error($"Error checking for expired roles: {ex.Message}");
     }
   }
@@ -448,7 +529,8 @@ public static class RoleService {
     if (!string.IsNullOrWhiteSpace(durationStr) && durationStr != "-1") {
       if (ParseDuration(durationStr, out var duration)) {
         expiresAt = DateTime.Now.Add(duration);
-      } else {
+      }
+      else {
         Log.Warning($"Invalid duration format: {durationStr}");
         return false;
       }
@@ -457,6 +539,11 @@ public static class RoleService {
     var assignment = new PlayerRoleAssignment(roleName, expiresAt);
     assignments.Add(assignment);
     SavePlayerRoleAssignments(player, assignments);
+
+    // Track expiring role for efficient cleanup
+    if (expiresAt.HasValue) {
+      AddExpiringRoleReference(player.PlatformId, roleName, expiresAt.Value);
+    }
 
     var expInfo = expiresAt.HasValue ? $" (expires: {expiresAt.Value:dd/MM/yyyy HH:mm})" : " (permanent)";
     Log.Message($"Added role '{roleName}' to player {player.PlatformId}{expInfo}");
@@ -492,6 +579,7 @@ public static class RoleService {
 
     if (removed) {
       SavePlayerRoleAssignments(player, assignments);
+      RemoveExpiringRoleReference(player.PlatformId, roleName);
       Log.Message($"Removed role '{roleName}' from player {player.PlatformId}");
     }
 
@@ -528,7 +616,8 @@ public static class RoleService {
 
       var assignments = Plugin.Database.Get<List<PlayerRoleAssignment>>(key);
       return assignments ?? [];
-    } catch (Exception ex) {
+    }
+    catch (Exception ex) {
       Log.Error($"Failed to get role assignments for player {player.PlatformId}: {ex.Message}");
       return [];
     }
@@ -602,7 +691,8 @@ public static class RoleService {
     try {
       var key = GetPlayerRolesKey(player.PlatformId);
       Plugin.Database.Set(key, assignments);
-    } catch (Exception ex) {
+    }
+    catch (Exception ex) {
       Log.Error($"Failed to save role assignments for player {player.PlatformId}: {ex.Message}");
     }
   }
@@ -708,7 +798,8 @@ public static class RoleService {
       var role = CreateRole(roleName, null, priority);
       if (role != null) {
         ctx.ReplySuccess($"Role ~{roleName}~ created successfully with priority ~{priority}~.");
-      } else {
+      }
+      else {
         ctx.ReplyError($"Failed to create role ~{roleName}~. It may already exist.");
       }
     }
@@ -741,7 +832,8 @@ public static class RoleService {
 
       if (DeleteRole(roleName)) {
         ctx.ReplySuccess($"Role ~{roleName}~ deleted successfully.");
-      } else {
+      }
+      else {
         ctx.ReplyError($"Failed to delete role ~{roleName}~. It may not exist.");
       }
     }
@@ -797,7 +889,8 @@ public static class RoleService {
 
       if (AddPermissionToRole(roleName, permission)) {
         ctx.ReplySuccess($"Permission ~{permission}~ added to role ~{roleName}~.");
-      } else {
+      }
+      else {
         ctx.ReplyError($"Failed to add permission. Role may not exist or already has this permission.");
       }
     }
@@ -820,7 +913,8 @@ public static class RoleService {
 
       if (RemovePermissionFromRole(roleName, permission)) {
         ctx.ReplySuccess($"Permission ~{permission}~ removed from role ~{roleName}~.");
-      } else {
+      }
+      else {
         ctx.ReplyError($"Failed to remove permission. Role may not exist or doesn't have this permission.");
       }
     }
@@ -861,7 +955,8 @@ public static class RoleService {
 
       if (UpdateRole(roleName, newPriority: priority)) {
         ctx.ReplySuccess($"Priority of role ~{roleName}~ set to ~{priority}~.");
-      } else {
+      }
+      else {
         ctx.ReplyError($"Failed to update role ~{roleName}~. It may not exist.");
       }
     }
@@ -884,7 +979,8 @@ public static class RoleService {
 
       if (UpdateRole(roleName, newDescription: description)) {
         ctx.ReplySuccess($"Description of role ~{roleName}~ updated.");
-      } else {
+      }
+      else {
         ctx.ReplyError($"Failed to update role ~{roleName}~. It may not exist.");
       }
     }
@@ -916,7 +1012,8 @@ public static class RoleService {
       if (AddRoleToPlayer(player, roleName, duration)) {
         var durationInfo = string.IsNullOrWhiteSpace(duration) || duration == "-1" ? "permanently" : $"for {duration}";
         ctx.ReplySuccess($"Role ~{roleName}~ assigned to player ~{player.Name}~ {durationInfo}.");
-      } else {
+      }
+      else {
         ctx.ReplyError($"Failed to assign role. Role may not exist, player already has it, or invalid duration format.");
       }
     }
@@ -953,7 +1050,8 @@ public static class RoleService {
 
       if (RemoveRoleFromPlayer(player, roleName, sender)) {
         ctx.ReplySuccess($"Role ~{roleName}~ removed from player ~{player.Name}~.");
-      } else {
+      }
+      else {
         ctx.ReplyError($"Failed to remove role. Player may not have this role.");
       }
     }
