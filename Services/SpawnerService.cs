@@ -14,23 +14,34 @@ namespace ScarletCore.Services;
 /// Service for spawning entities (not limited to units) with various configurations and options
 /// </summary>
 public static class SpawnerService {
+  private static long _counter = 0;
+
   #region Public Methods
 
   /// <summary>
-  /// Spawns entities at a specific position with validation and error handling.
+  /// Spawns an Unit with a post-spawn action to be executed
   /// </summary>
   /// <param name="prefabGUID">The prefab GUID of the entity to spawn.</param>
   /// <param name="position">The position to spawn at.</param>
-  /// <param name="count">Number of entities to spawn (default: 1; must be &gt; 0).</param>
   /// <param name="minRange">Minimum spawn offset from <paramref name="position"/> (default: 0; must be &gt;= 0).</param>
   /// <param name="maxRange">Maximum spawn offset from <paramref name="position"/> (default: 0; must be &gt;= <paramref name="minRange"/>).</param>
   /// <param name="lifeTime">How long the entities should live in seconds (0 = permanent, default: 0).</param>
+  /// <param name="count">Number of entities to spawn (default: 1; must be &gt; 0).</param>
+  /// <param name="postSpawnAction">Action to execute after the entity is spawned.</param>
   /// <returns>True if spawn was successful.</returns>
-  public static bool Spawn(PrefabGUID prefabGUID, float3 position, float minRange = 0f, float maxRange = 0f, float lifeTime = 0f, int count = 1) {
+  public static bool Spawn(PrefabGUID prefabGUID, float3 position, float minRange = 0f, float maxRange = 0f, float lifeTime = 0f, int count = 1, Action<Entity> postSpawnAction = null) {
     try {
       // Validate parameters
       if (prefabGUID.GuidHash == 0) {
         Log.Warning("Invalid prefab GUID provided to SpawnerService.Spawn");
+        return false;
+      }
+
+      var name = GameSystems.PrefabCollectionSystem._PrefabLookupMap.GetName(prefabGUID);
+      var isUnit = name.StartsWith("CHAR_");
+
+      if (!isUnit) {
+        Log.Warning("SpawnerService.Spawn only supports unit entities");
         return false;
       }
 
@@ -44,16 +55,27 @@ public static class SpawnerService {
         return false;
       }
 
-      // Use Entity.Null as spawner
-      var spawnerEntity = Entity.Null;
-      GameSystems.UnitSpawnerUpdateSystem.SpawnUnit(spawnerEntity, prefabGUID, position, count, minRange, maxRange, lifeTime);
-
-      Log.Message($"Successfully spawned {count} entities of {prefabGUID.GuidHash} at {position}");
+      float lifeTimeHash = GetLifeTimeHash();
+      GameSystems.UnitSpawnerUpdateSystem.SpawnUnit(Entity.Null, prefabGUID, position, count, minRange, maxRange, lifeTimeHash);
+      UnitSpawnerReactSystemPatch.PostActions.Add(lifeTimeHash, (lifeTime, position, postSpawnAction));
       return true;
     } catch (Exception ex) {
       Log.Error($"Error spawning entities: {ex.Message}");
       return false;
     }
+  }
+
+  /// <summary>
+  /// Spawns an Unit with a post-spawn action to be executed
+  /// </summary>
+  /// <param name="prefabGUID">The prefab GUID of the entity to spawn</param>
+  /// <param name="position">The position to spawn at</param>
+  /// <param name="lifeTime">How long the entity should live</param>
+  /// <param name="postSpawnAction">Action to execute after spawning</param>
+  /// <returns>True if spawn was successful</returns>
+  [Obsolete("Use Spawn method instead")]
+  public static bool SpawnWithPostAction(PrefabGUID prefabGUID, float3 position, float lifeTime, Action<Entity> postSpawnAction) {
+    return Spawn(prefabGUID, position, 0f, 0f, lifeTime, 1, postSpawnAction);
   }
 
   /// <summary>
@@ -151,7 +173,6 @@ public static class SpawnerService {
       TeleportService.TeleportToPosition(entity, spawnPosition);
       entities.Add(entity);
     }
-
     return entities;
   }
 
@@ -292,32 +313,6 @@ public static class SpawnerService {
     return Spawn(prefabGUID, centerPosition, minRange: 0, maxRange: range, lifeTime: lifeTime, count: count);
   }
 
-  /// <summary>
-  /// Spawns an entity with a post-spawn action to be executed
-  /// </summary>
-  /// <param name="prefabGUID">The prefab GUID of the entity to spawn</param>
-  /// <param name="position">The position to spawn at</param>
-  /// <param name="lifeTime">How long the entity should live</param>
-  /// <param name="postSpawnAction">Action to execute after spawning</param>
-  /// <returns>True if spawn was successful</returns>
-  public static bool SpawnWithPostAction(PrefabGUID prefabGUID, float3 position, float lifeTime, Action<Entity> postSpawnAction) {
-    try {
-      var durationHash = GetDurationHash();
-
-      if (Spawn(prefabGUID, position, count: 1, minRange: 0, maxRange: 0, lifeTime: durationHash)) {
-        UnitSpawnerReactSystemPatch.PostActions.Add(durationHash, (lifeTime, postSpawnAction));
-      } else {
-        Log.Warning("Failed to spawn entity with post action");
-        return false;
-      }
-
-      return true;
-    } catch (Exception ex) {
-      Log.Error($"Error spawning entity with post action: {ex.Message}");
-      return false;
-    }
-  }
-
   #endregion
 
   #region Helper Methods
@@ -326,10 +321,7 @@ public static class SpawnerService {
   /// Generates a unique duration hash based on current time
   /// </summary>
   /// <returns>Unique hash value</returns>
-  public static long GetDurationHash() {
-    // Generate a unique hash for the duration based on current time
-    return (long)math.round(DateTime.Now.Ticks / TimeSpan.TicksPerSecond);
-  }
+  public static float GetLifeTimeHash() => math.round(DateTime.Now.Ticks / TimeSpan.TicksPerSecond) + ++_counter;
 
   #endregion
 }
