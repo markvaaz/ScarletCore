@@ -285,6 +285,9 @@ public sealed class CommandContext {
       if (string.Equals(message.Trim(), localizedCancelResponse.Trim(), StringComparison.OrdinalIgnoreCase)) {
         Sender.SendLocalizedSuccessMessage("response_cancelled");
         unsubscribe?.Invoke();
+
+        // Destroy the chat message entity to prevent further processing
+        entity.Destroy(true);
         return;
       }
 
@@ -299,6 +302,9 @@ public sealed class CommandContext {
         if (string.Equals(message.Trim(), compareValue.Trim(), StringComparison.OrdinalIgnoreCase)) {
           callback?.Invoke(expected);
           unsubscribe?.Invoke();
+
+          // Destroy the chat message entity to prevent further processing
+          entity.Destroy(true);
           return;
         }
       }
