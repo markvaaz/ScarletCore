@@ -30,6 +30,7 @@ public static class CommandHandler {
   /// <summary>The prefix used to identify chat commands (e.g. '.')</summary>
   public const char CommandPrefix = '.';
 
+  internal static readonly HashSet<ulong> PlayersWaitingForReply = [];
   private static readonly Dictionary<CommandLookupKey, List<CommandInfo>> CommandsByKey = [];
   private static readonly Dictionary<(int TokenCount, string CommandName), List<CommandInfo>> FallbackCommandsByKey = [];
   private static readonly Dictionary<Assembly, List<CommandLookupKey>> CommandKeysByAssembly = [];
@@ -145,6 +146,12 @@ public static class CommandHandler {
       } catch (Exception ex) {
         Log.Error($"[CommandHandler] Error destroying chat message entity {messageEntity.Index}: {ex}");
       }
+    }
+
+    if (PlayersWaitingForReply.Contains(player.PlatformId)) {
+      var localizedCancelResponseCommand = Localizer.Get(player, "cancel_response");
+      player.SendLocalizedErrorMessage(LocalizationKey.AlreadyWaitingForResponse, localizedCancelResponseCommand);
+      return;
     }
 
     int commandNameTokens = commandInfo.NameTokenCount + commandInfo.GroupTokenCount;
@@ -959,6 +966,7 @@ public static class CommandHandler {
     public const string HelpModAvailable = "help_mod_available";
     public const string HelpModHeader = "help_mod_header";
     public const string HelpModNextPage = "help_mod_next_page";
+    public const string AlreadyWaitingForResponse = "already_waiting_for_response";
   }
 
   [Command("help", Language.English, description: "Shows available commands")]

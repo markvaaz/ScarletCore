@@ -10,7 +10,6 @@ using ScarletCore.Utils;
 using Stunlock.Core;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Entities.UniversalDelegates;
 
 namespace ScarletCore.Commanding;
 
@@ -29,6 +28,19 @@ public sealed class CommandContext {
   public string Raw { get; }
   /// <summary>Tokenized arguments parsed from the raw message.</summary>
   public string[] Args { get; }
+  /// <summary>Gets the command name.</summary>
+  public string CommandName {
+    get {
+      if (Args == null || Args.Length == 0) return Raw;
+
+      var argsString = string.Join(" ", Args);
+      var index = Raw.IndexOf(argsString, StringComparison.Ordinal);
+
+      if (index == -1) return Raw;
+
+      return Raw.Substring(0, index).TrimEnd();
+    }
+  }
   /// <summary>
   /// The assembly to use when resolving localization keys for localized replies.
   /// When commands are registered from another assembly, the command system sets this so lookups resolve correctly.
@@ -220,6 +232,15 @@ public sealed class CommandContext {
   /// <param name="timeoutSeconds">Timeout duration in seconds.</param>
   /// <param name="localized">Whether to treat expected responses as localization keys.</param>
   private void WaitForReplyInternal(string[] expectedResponses, Action<string> callback, int timeoutSeconds, bool localized) {
+    var steamId = Sender.PlatformId;
+
+    if (CommandHandler.PlayersWaitingForReply.Contains(steamId)) {
+      ReplyLocalizedWarning("already_waiting_for_response");
+      return;
+    }
+
+    CommandHandler.PlayersWaitingForReply.Add(steamId);
+
     if (timeoutSeconds <= 0) {
       Log.Warning("[WaitForReply] Timeout seconds must be greater than zero. Using default of 30 seconds.");
       timeoutSeconds = 30;
@@ -227,6 +248,7 @@ public sealed class CommandContext {
 
     void Unsubscribe() {
       EventManager.Off(PrefixEvents.OnChatMessage, OnMessageResponse);
+      CommandHandler.PlayersWaitingForReply.Remove(steamId);
     }
 
     [EventPriority(EventPriority.First)]
@@ -234,10 +256,7 @@ public sealed class CommandContext {
       HandleReply(entities, expectedResponses, callback, Unsubscribe, localized);
     }
 
-    // Subscribe to chat messages
     EventManager.On(PrefixEvents.OnChatMessage, OnMessageResponse);
-
-    // Schedule automatic unsubscribe after timeout
     ActionScheduler.Delayed(Unsubscribe, timeoutSeconds * 1000);
   }
 
@@ -258,8 +277,16 @@ public sealed class CommandContext {
       var player = fromCharacter.GetPlayerData();
       var message = chatEvent.MessageText.Value;
 
-      // Only process messages from the expected sender
       if (player != Sender) continue;
+
+      var localizedCancelResponse = Localizer.Get(Sender, "cancel_response");
+
+      // Check for cancel response
+      if (string.Equals(message.Trim(), localizedCancelResponse.Trim(), StringComparison.OrdinalIgnoreCase)) {
+        Sender.SendLocalizedSuccessMessage("response_cancelled");
+        unsubscribe?.Invoke();
+        return;
+      }
 
       // Check each expected response for a match
       foreach (var expected in expectedResponses) {
@@ -269,7 +296,7 @@ public sealed class CommandContext {
             : expected;
 
         // Case-insensitive comparison with trimmed strings
-        if (string.Equals(message.Trim(), compareValue.Trim(), StringComparison.InvariantCultureIgnoreCase)) {
+        if (string.Equals(message.Trim(), compareValue.Trim(), StringComparison.OrdinalIgnoreCase)) {
           callback?.Invoke(expected);
           unsubscribe?.Invoke();
           return;
