@@ -1,11 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using ProjectM.Network;
+using ScarletCore.Events;
 using ScarletCore.Localization;
 using ScarletCore.Services;
+using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Stunlock.Core;
+using Unity.Collections;
 using Unity.Entities;
+using Unity.Entities.UniversalDelegates;
 
 namespace ScarletCore.Commanding;
 
@@ -153,6 +158,10 @@ public sealed class CommandContext {
     MessageService.SendRaw(Sender, localized);
   }
 
+  /// <summary>Sends a localized reply using the given localization key, applies placeholders, and formats the message using the provided colors list.</summary>
+  /// <param name="key">Localization key.</param>
+  /// <param name="colors">List of color strings used for formatting the localized message.</param>
+  /// <param name="parameters">Optional parameters for localization formatting.</param>
   public void ReplyLocalizedFormatted(string key, List<string> colors, params string[] parameters) {
     string localized;
     if (CallingAssembly != null) localized = Localizer.Get(Sender, key, CallingAssembly, parameters);
@@ -171,7 +180,7 @@ public sealed class CommandContext {
     message = message.Replace("{playerName}", Sender.Name);
 
     // Replace PrefabGuid(...) with localized name
-    var prefabPattern = System.Text.RegularExpressions.Regex.Matches(message, @"PrefabGuid\((\d+)\)");
+    var prefabPattern = System.Text.RegularExpressions.Regex.Matches(message, @"PrefabGuid\((-?\d+)\)");
     foreach (System.Text.RegularExpressions.Match match in prefabPattern) {
       if (int.TryParse(match.Groups[1].Value, out int guidValue)) {
         var prefabGuid = new PrefabGUID(guidValue);
@@ -181,5 +190,91 @@ public sealed class CommandContext {
     }
 
     return message;
+  }
+
+  /// <summary>
+  /// Waits for a chat reply from the sender that matches one of the expected responses.
+  /// </summary>
+  /// <param name="expectedResponses">Array of expected response strings to match against.</param>
+  /// <param name="callback">Action to invoke when a matching response is received. Receives the matched response.</param>
+  /// <param name="timeoutSeconds">Time in seconds before automatically unsubscribing. Default is 30 seconds.</param>
+  public void WaitForReply(string[] expectedResponses, Action<string> callback, int timeoutSeconds = 30) {
+    WaitForReplyInternal(expectedResponses, callback, timeoutSeconds, localized: false);
+  }
+
+  /// <summary>
+  /// Waits for a chat reply from the sender that matches one of the expected localized response keys.
+  /// </summary>
+  /// <param name="expectedResponsesKeys">Array of localization keys to match against.</param>
+  /// <param name="callback">Action to invoke when a matching response is received. Receives the localization key.</param>
+  /// <param name="timeoutSeconds">Time in seconds before automatically unsubscribing. Default is 30 seconds.</param>
+  public void WaitForReplyLocalized(string[] expectedResponsesKeys, Action<string> callback, int timeoutSeconds = 30) {
+    WaitForReplyInternal(expectedResponsesKeys, callback, timeoutSeconds, localized: true);
+  }
+
+  /// <summary>
+  /// Internal method that sets up the chat message listener with automatic timeout.
+  /// </summary>
+  /// <param name="expectedResponses">Array of expected responses or localization keys.</param>
+  /// <param name="callback">Action to invoke when a match is found.</param>
+  /// <param name="timeoutSeconds">Timeout duration in seconds.</param>
+  /// <param name="localized">Whether to treat expected responses as localization keys.</param>
+  private void WaitForReplyInternal(string[] expectedResponses, Action<string> callback, int timeoutSeconds, bool localized) {
+    if (timeoutSeconds <= 0) {
+      Log.Warning("[WaitForReply] Timeout seconds must be greater than zero. Using default of 30 seconds.");
+      timeoutSeconds = 30;
+    }
+
+    void Unsubscribe() {
+      EventManager.Off(PrefixEvents.OnChatMessage, OnMessageResponse);
+    }
+
+    [EventPriority(EventPriority.First)]
+    void OnMessageResponse(NativeArray<Entity> entities) {
+      HandleReply(entities, expectedResponses, callback, Unsubscribe, localized);
+    }
+
+    // Subscribe to chat messages
+    EventManager.On(PrefixEvents.OnChatMessage, OnMessageResponse);
+
+    // Schedule automatic unsubscribe after timeout
+    ActionScheduler.Delayed(Unsubscribe, timeoutSeconds * 1000);
+  }
+
+  /// <summary>
+  /// Handles incoming chat messages and checks if they match expected responses.
+  /// </summary>
+  /// <param name="entities">Array of chat message entities to process.</param>
+  /// <param name="expectedResponses">Array of expected responses or localization keys.</param>
+  /// <param name="callback">Action to invoke when a match is found.</param>
+  /// <param name="unsubscribe">Action to unsubscribe from the event.</param>
+  /// <param name="localized">Whether to localize the expected responses before comparison.</param>
+  private void HandleReply(NativeArray<Entity> entities, string[] expectedResponses, Action<string> callback, Action unsubscribe, bool localized) {
+    foreach (var entity in entities) {
+      if (!entity.Exists() || !entity.Has<ChatMessageEvent>()) continue;
+
+      var chatEvent = entity.Read<ChatMessageEvent>();
+      var fromCharacter = entity.Read<FromCharacter>().Character;
+      var player = fromCharacter.GetPlayerData();
+      var message = chatEvent.MessageText.Value;
+
+      // Only process messages from the expected sender
+      if (player != Sender) continue;
+
+      // Check each expected response for a match
+      foreach (var expected in expectedResponses) {
+        // Get localized value if needed, otherwise use the expected response as-is
+        var compareValue = localized
+            ? Localizer.Get(Sender, expected, CallingAssembly ?? Assembly.GetExecutingAssembly())
+            : expected;
+
+        // Case-insensitive comparison with trimmed strings
+        if (string.Equals(message.Trim(), compareValue.Trim(), StringComparison.InvariantCultureIgnoreCase)) {
+          callback?.Invoke(expected);
+          unsubscribe?.Invoke();
+          return;
+        }
+      }
+    }
   }
 }
