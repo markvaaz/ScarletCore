@@ -8,6 +8,7 @@ using ScarletCore.Utils;
 using ScarletCore.Systems;
 using ProjectM;
 using ScarletCore.Events;
+using Unity.Mathematics;
 
 namespace ScarletCore.Services;
 
@@ -62,6 +63,11 @@ public static class PlayerService {
       var userEntities = query.ToEntityArray(Allocator.Temp);
 
       foreach (var entity in userEntities) {
+        if (entity.Has<NameableInteractable>()) continue;
+
+        var user = entity.Read<User>();
+
+        if (user.CharacterName.Value.StartsWith("[NPC]")) continue;
         // Add each user to the cache system
         SetPlayerCache(entity, true);
       }
@@ -550,6 +556,44 @@ public static class PlayerService {
   public static List<string> GetAllTags(PlayerData player) {
     if (player == null) return [];
     return ExtractTags(player.FullName);
+  }
+
+  /// <summary>
+  /// Gets all players within a circular radius of a 2D world position (X,Z).
+  /// </summary>
+  /// <param name="position">2D position in world coordinates (X,Z)</param>
+  /// <param name="range">Search radius in world units</param>
+  /// <returns>List of players found within the specified radius</returns>
+  public static List<PlayerData> GetPlayersInRange(float2 position, float range) {
+    var nearByEntities = EntityLookupService.GetAllEntitiesInRadius(position, range);
+    var playersInRange = new List<PlayerData>();
+
+    foreach (var entity in nearByEntities) {
+      if (!entity.IsPlayer()) continue;
+
+      playersInRange.Add(entity.GetPlayerData());
+    }
+
+    return playersInRange;
+  }
+
+  /// <summary>
+  /// Gets all players within a spherical radius of a 3D world position.
+  /// </summary>
+  /// <param name="position">3D position in world coordinates</param>
+  /// <param name="range">Search radius in world units</param>
+  /// <returns>List of players found within the specified radius</returns>
+  public static List<PlayerData> GetPlayersInRange(float3 position, float range) {
+    var nearByEntities = EntityLookupService.GetAllEntitiesInRadius(position, range);
+    var playersInRange = new List<PlayerData>();
+
+    foreach (var entity in nearByEntities) {
+      if (!entity.IsPlayer()) continue;
+
+      playersInRange.Add(entity.GetPlayerData());
+    }
+
+    return playersInRange;
   }
 
   /// <summary>

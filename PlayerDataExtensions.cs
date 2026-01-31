@@ -63,4 +63,66 @@ public static class PlayerDataExtensions {
   public static PlayerData GetPlayerData(this User user) {
     return PlayerService.TryGetById(user.PlatformId, out PlayerData playerData) ? playerData : null;
   }
+
+  /// <summary>
+  /// Tries to get the PlayerData for the specified player name.
+  /// </summary>
+  /// <param name="playerName">The player name.</param>
+  /// <param name="playerData">Output PlayerData if found.</param>
+  /// <returns>True if found; otherwise, false.</returns>
+  public static bool TryGetPlayerData(this string playerName, out PlayerData playerData) {
+    return PlayerService.TryGetByName(playerName, out playerData);
+  }
+
+  /// <summary>
+  /// Tries to get the PlayerData for the specified player ID.
+  /// </summary>
+  /// <param name="playerId">The player ID.</param>
+  /// <param name="playerData">Output PlayerData if found.</param>
+  /// <returns>True if found; otherwise, false.</returns>
+  public static bool TryGetPlayerData(this ulong playerId, out PlayerData playerData) {
+    return PlayerService.TryGetById(playerId, out playerData);
+  }
+
+  /// <summary>
+  /// Tries to get the PlayerData for the specified entity, if it represents a user or player character.
+  /// </summary>
+  /// <param name="entity">The entity to query.</param>
+  /// <param name="playerData">Output PlayerData if found.</param>
+  /// <returns>True if found; otherwise, false.</returns>
+  public static bool TryGetPlayerData(this Entity entity, out PlayerData playerData) {
+    playerData = null;
+    if (entity.Has<User>()) {
+      var user = entity.Read<User>();
+      return PlayerService.TryGetById(user.PlatformId, out playerData);
+    }
+
+    if (entity.Has<PlayerCharacter>()) {
+      var playerCharacter = entity.Read<PlayerCharacter>();
+      var user = playerCharacter.UserEntity.Read<User>();
+      return PlayerService.TryGetById(user.PlatformId, out playerData);
+    }
+
+    return false;
+  }
+
+  /// <summary>
+  /// Tries to get the PlayerData for the specified network ID.
+  /// </summary>
+  /// <param name="networkId">The network ID.</param>
+  /// <param name="playerData">Output PlayerData if found.</param>
+  /// <returns>True if found; otherwise, false.</returns>
+  public static bool TryGetPlayerData(this NetworkId networkId, out PlayerData playerData) {
+    return PlayerService.TryGetByNetworkId(networkId, out playerData);
+  }
+
+  /// <summary>
+  /// Tries to get the PlayerData for the specified User.
+  /// </summary>
+  /// <param name="user">The User instance.</param>
+  /// <param name="playerData">Output PlayerData if found.</param>
+  /// <returns>True if found; otherwise, false.</returns>
+  public static bool TryGetPlayerData(this User user, out PlayerData playerData) {
+    return PlayerService.TryGetById(user.PlatformId, out playerData);
+  }
 }

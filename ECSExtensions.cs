@@ -160,11 +160,7 @@ public static class ECSExtensions {
   /// <param name="entity">The entity to check.</param>
   /// <returns>True if the entity is a player; otherwise, false.</returns>
   public static bool IsPlayer(this Entity entity) {
-    if (entity.Has<PlayerCharacter>()) {
-      return true;
-    }
-
-    return false;
+    return entity.Has<PlayerCharacter>() && !entity.Has<NameableInteractable>();
   }
 
   /// <summary>
@@ -442,16 +438,35 @@ public static class ECSExtensions {
   /// <param name="prefabGuid">The PrefabGUID to localize.</param>
   /// <returns>The localized name string.</returns>
   public static string LocalizedName(this PrefabGUID prefabGuid) {
-    return Localizer.GetPrefabName(prefabGuid);
+    var name = Localizer.GetPrefabName(prefabGuid);
+    if (string.IsNullOrEmpty(name) || name.Contains("PrefabGuid")) name = GetName(prefabGuid);
+    return name;
   }
 
   /// <summary>
   /// Gets the localized name for a PrefabGUID.
   /// </summary>
   /// <param name="prefabGuid">The PrefabGUID to localize.</param>
+  /// 
   /// <param name="language">The language to use for localization.</param>
   /// <returns>The localized name string.</returns>
   public static string LocalizedName(this PrefabGUID prefabGuid, Language language) {
-    return Localizer.GetPrefabName(language, prefabGuid);
+    var name = Localizer.GetPrefabName(language, prefabGuid);
+    if (string.IsNullOrEmpty(name) || name.Contains("PrefabGuid")) name = GetName(prefabGuid);
+    return name;
+  }
+
+  /// <summary>
+  /// Gets the name for the specified PrefabGUID from the Prefab lookup map.
+  /// Returns "Unknown Prefab" if the PrefabGUID cannot be resolved.
+  /// </summary>
+  /// <param name="prefabGuid">The PrefabGUID to resolve.</param>
+  /// <returns>The resolved prefab name, or "Unknown Prefab" if not found.</returns>
+  public static string GetName(this PrefabGUID prefabGuid) {
+    if (GameSystems.PrefabCollectionSystem._PrefabLookupMap.TryGetName(prefabGuid, out var name)) {
+      return name;
+    } else {
+      return "Unknown Prefab";
+    }
   }
 }
