@@ -357,99 +357,144 @@ public class PlayerData {
   /// <summary>
   /// Sends a chat or system message to the player.
   /// Ignores empty or whitespace-only messages.
+  /// Supports placeholders: {playerName} and PrefabGuid(number).
   /// </summary>
   /// <param name="message">The message text to send</param>
   public void SendMessage(string message) {
     if (string.IsNullOrWhiteSpace(message)) return;
+    message = ProcessPlaceholders(message);
     MessageService.Send(this, message);
   }
 
   /// <summary>
   /// Sends an error-styled message to the player using <see cref="MessageService.SendError(PlayerData, string)"/>.
+  /// Supports placeholders: {playerName} and PrefabGuid(number).
   /// </summary>
   /// <param name="message">The message text to send.</param>
   public void SendErrorMessage(string message) {
+    message = ProcessPlaceholders(message);
     MessageService.SendError(this, message);
   }
 
   /// <summary>
   /// Sends an informational-styled message to the player using <see cref="MessageService.SendInfo(PlayerData, string)"/>.
   /// Ignores empty or whitespace-only messages.
+  /// Supports placeholders: {playerName} and PrefabGuid(number).
   /// </summary>
   /// <param name="message">The message text to send.</param>
   public void SendInfoMessage(string message) {
+    message = ProcessPlaceholders(message);
     MessageService.SendInfo(this, message);
   }
 
   /// <summary>
   /// Sends a success-styled message to the player using <see cref="MessageService.SendSuccess(PlayerData, string)"/>.
+  /// Supports placeholders: {playerName} and PrefabGuid(number).
   /// </summary>
   /// <param name="message">The message text to send.</param>
   public void SendSuccessMessage(string message) {
+    message = ProcessPlaceholders(message);
     MessageService.SendSuccess(this, message);
   }
 
   /// <summary>
   /// Sends a warning-styled message to the player using <see cref="MessageService.SendWarning(PlayerData, string)"/>.
+  /// Supports placeholders: {playerName} and PrefabGuid(number).
   /// </summary>
   /// <param name="message">The message text to send.</param>
   public void SendWarningMessage(string message) {
+    message = ProcessPlaceholders(message);
     MessageService.SendWarning(this, message);
   }
 
   /// <summary>
   /// Sends a localized message to the player by looking up the given localization key and formatting with arguments.
+  /// Supports placeholders: {playerName} and PrefabGuid(number).
   /// </summary>
   /// <param name="key">The localization key to look up.</param>
   /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedMessage(string key, params object[] args) {
     var assembly = Assembly.GetCallingAssembly();
     var localized = Localizer.Get(this, key, assembly, args);
-    SendMessage(localized);
+    localized = ProcessPlaceholders(localized);
+    MessageService.Send(this, localized);
   }
 
   /// <summary>
   /// Sends a localized error message to the player by looking up the given key and formatting with arguments.
+  /// Supports placeholders: {playerName} and PrefabGuid(number).
   /// </summary>
   /// <param name="key">The localization key to look up.</param>
   /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedErrorMessage(string key, params object[] args) {
     var assembly = Assembly.GetCallingAssembly();
     var localized = Localizer.Get(this, key, assembly, args);
-    SendErrorMessage(localized);
+    localized = ProcessPlaceholders(localized);
+    MessageService.SendError(this, localized);
   }
 
   /// <summary>
   /// Sends a localized informational message to the player by looking up the given key and formatting with arguments.
+  /// Supports placeholders: {playerName} and PrefabGuid(number).
   /// </summary>
   /// <param name="key">The localization key to look up.</param>
   /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedInfoMessage(string key, params object[] args) {
     var assembly = Assembly.GetCallingAssembly();
     var localized = Localizer.Get(this, key, assembly, args);
-    SendInfoMessage(localized);
+    localized = ProcessPlaceholders(localized);
+    MessageService.SendInfo(this, localized);
   }
 
   /// <summary>
   /// Sends a localized success message to the player by looking up the given key and formatting with arguments.
+  /// Supports placeholders: {playerName} and PrefabGuid(number).
   /// </summary>
   /// <param name="key">The localization key to look up.</param>
   /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedSuccessMessage(string key, params object[] args) {
     var assembly = Assembly.GetCallingAssembly();
     var localized = Localizer.Get(this, key, assembly, args);
-    SendSuccessMessage(localized);
+    localized = ProcessPlaceholders(localized);
+    MessageService.SendSuccess(this, localized);
   }
 
   /// <summary>
   /// Sends a localized warning message to the player by looking up the given key and formatting with arguments.
+  /// Supports placeholders: {playerName} and PrefabGuid(number).
   /// </summary>
   /// <param name="key">The localization key to look up.</param>
   /// <param name="args">Optional formatting arguments.</param>
   public void SendLocalizedWarningMessage(string key, params object[] args) {
     var assembly = Assembly.GetCallingAssembly();
     var localized = Localizer.Get(this, key, assembly, args);
-    SendWarningMessage(localized);
+    localized = ProcessPlaceholders(localized);
+    MessageService.SendWarning(this, localized);
+  }
+
+  /// <summary>
+  /// Processes placeholders in the message text.
+  /// Replaces {playerName} with the player's name and PrefabGuid(number) with localized item names.
+  /// </summary>
+  /// <param name="message">The message text containing placeholders.</param>
+  /// <returns>The message with placeholders replaced.</returns>
+  private string ProcessPlaceholders(string message) {
+    if (string.IsNullOrEmpty(message)) return message;
+
+    // Replace {playerName} with player's name
+    message = message.Replace("{playerName}", Name);
+
+    // Replace PrefabGuid(...) with localized name
+    var prefabPattern = System.Text.RegularExpressions.Regex.Matches(message, @"PrefabGuid\((-?\d+)\)");
+    foreach (System.Text.RegularExpressions.Match match in prefabPattern) {
+      if (int.TryParse(match.Groups[1].Value, out int guidValue)) {
+        var prefabGuid = new PrefabGUID(guidValue);
+        var localizedName = prefabGuid.LocalizedName(Language);
+        message = message.Replace(match.Value, localizedName);
+      }
+    }
+
+    return message;
   }
 
   // ========== Role Management ==========
