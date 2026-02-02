@@ -587,7 +587,6 @@ public class InventoryService {
       var totalAvailable = GetItemAmountInInventory(fromInventory, itemType);
 
       if (totalAvailable < requestedAmount) {
-        Log.Warning($"Not enough items available. Requested: {requestedAmount}, Available: {totalAvailable}");
         return false;
       }
 
