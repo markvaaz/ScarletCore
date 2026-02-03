@@ -53,12 +53,12 @@ public static class MapService {
   public static readonly Dictionary<string, WorldRegionType> RegionNameMap = new() {
     { "farbane", WorldRegionType.FarbaneWoods },
     { "dunley", WorldRegionType.DunleyFarmlands },
-    { "floresta", WorldRegionType.CursedForest },
-    { "montanha", WorldRegionType.HallowedMountains },
-    { "argenta", WorldRegionType.SilverlightHills },
+    { "forest", WorldRegionType.CursedForest },
+    { "mountains", WorldRegionType.HallowedMountains },
+    { "silverlight", WorldRegionType.SilverlightHills },
     { "gloomrot", WorldRegionType.Gloomrot_North },
-    { "gloomrotsul", WorldRegionType.Gloomrot_South },
-    { "gloomrotnorte", WorldRegionType.Gloomrot_North },
+    { "gloomrotsouth", WorldRegionType.Gloomrot_South },
+    { "gloomrotnorth", WorldRegionType.Gloomrot_North },
     { "mortium", WorldRegionType.RuinsOfMortium },
     { "oakveil", WorldRegionType.Strongblade }
   };
@@ -117,7 +117,7 @@ public static class MapService {
   /// <returns>The display name or the region type name if not found</returns>
   public static string GetRegionDisplayName(WorldRegionType regionType, Language language) {
     if (RegionLocalizationKeys.TryGetValue(regionType, out var locKey)) {
-      return Localizer.GetText(locKey, language);
+      return Localizer.GetText(language, locKey);
     }
     return regionType.ToString();
   }
