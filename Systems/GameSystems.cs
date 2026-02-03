@@ -224,6 +224,7 @@ public static class GameSystems {
 
     Initialized = true;
     RoleService.Initialize();
+    MapService.Initialize();
     PlayerService.Initialize();
   }
 
