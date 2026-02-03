@@ -102,8 +102,7 @@ public class Database : IDisposable {
     try {
       var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
       return DetectCircularReferenceRecursive(data, visited, type.Name);
-    }
-    catch {
+    } catch {
       return null;
     }
   }
@@ -142,8 +141,7 @@ public class Database : IDisposable {
 
           var result = DetectCircularReferenceRecursive(value, visited, $"{currentPath}.{prop.Name}");
           if (result != null) return result;
-        }
-        catch {
+        } catch {
           continue;
         }
       }
@@ -161,13 +159,11 @@ public class Database : IDisposable {
 
           var result = DetectCircularReferenceRecursive(value, visited, $"{currentPath}.{field.Name}");
           if (result != null) return result;
-        }
-        catch {
+        } catch {
           continue;
         }
       }
-    }
-    finally {
+    } finally {
       visited.Remove(obj);
     }
 
@@ -187,8 +183,7 @@ public class Database : IDisposable {
         if (name == "BsonIgnoreAttribute" || name == "JsonIgnoreAttribute" || name == "JsonIgnore")
           return true;
       }
-    }
-    catch { }
+    } catch { }
 
     return false;
   }
@@ -240,12 +235,10 @@ public class Database : IDisposable {
       };
 
       _collection.Upsert(entry);
-    }
-    catch (LiteException ex) when (ex.Message.Contains("circular") || ex.Message.Contains("reference")) {
+    } catch (LiteException ex) when (ex.Message.Contains("circular") || ex.Message.Contains("reference")) {
       Log.Error($"Cannot save data with key '{key}': Circular reference detected during serialization");
       throw new InvalidOperationException("Circular reference detected during serialization", ex);
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to save data with key '{key}': {ex.Message}");
       throw;
     }
@@ -275,8 +268,7 @@ public class Database : IDisposable {
       }
 
       return SharedMapper.Deserialize<T>(entry.Data);
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to load data with key '{key}': {ex.Message}");
       return default;
     }
@@ -304,8 +296,7 @@ public class Database : IDisposable {
       var newData = factory();
       Set(key, newData);
       return newData;
-    }
-    catch {
+    } catch {
       var newData = factory();
       Set(key, newData);
       return newData;
@@ -331,8 +322,7 @@ public class Database : IDisposable {
     try {
       // FindById is faster than Exists with a query
       return _collection.FindById(key) != null;
-    }
-    catch {
+    } catch {
       return false;
     }
   }
@@ -348,8 +338,7 @@ public class Database : IDisposable {
 
     try {
       return _collection.Delete(key);
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to delete data with key '{key}': {ex.Message}");
       return false;
     }
@@ -367,8 +356,7 @@ public class Database : IDisposable {
         .ToArray();
 
       return keys;
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to get all keys: {ex.Message}");
       return Array.Empty<string>();
     }
@@ -391,8 +379,7 @@ public class Database : IDisposable {
         .ToArray();
 
       return keys;
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to get keys by prefix '{prefix}': {ex.Message}");
       return Array.Empty<string>();
     }
@@ -410,8 +397,7 @@ public class Database : IDisposable {
 
       if (string.IsNullOrEmpty(prefix)) {
         entries = _collection.Query().ToEnumerable();
-      }
-      else {
+      } else {
         entries = _collection.Query()
           .Where(x => x.Id.StartsWith(prefix))
           .ToEnumerable();
@@ -423,15 +409,13 @@ public class Database : IDisposable {
         try {
           var data = SharedMapper.Deserialize<T>(entry.Data);
           result[entry.Id] = data;
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
           Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
         }
       }
 
       return result;
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to get all data by prefix '{prefix}': {ex.Message}");
       return new Dictionary<string, T>();
     }
@@ -444,8 +428,7 @@ public class Database : IDisposable {
     try {
       _collection.DeleteAll();
       Log.Message($"Database '{_pluginGuid}' cleared successfully");
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to clear database: {ex.Message}");
     }
   }
@@ -456,8 +439,7 @@ public class Database : IDisposable {
   public int Count() {
     try {
       return _collection.Count();
-    }
-    catch {
+    } catch {
       return 0;
     }
   }
@@ -486,15 +468,13 @@ public class Database : IDisposable {
         try {
           var data = SharedMapper.Deserialize<T>(entry.Data);
           result.Add(data);
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
           Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
         }
       }
 
       return result;
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to query database: {ex.Message}");
       return new List<T>();
     }
@@ -523,15 +503,13 @@ public class Database : IDisposable {
         try {
           var data = SharedMapper.Deserialize<T>(entry.Data);
           result[entry.Id] = data;
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
           Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
         }
       }
 
       return result;
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to query database: {ex.Message}");
       return new Dictionary<string, T>();
     }
@@ -551,15 +529,13 @@ public class Database : IDisposable {
         try {
           var data = SharedMapper.Deserialize<T>(entry.Data);
           result.Add(data);
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
           Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
         }
       }
 
       return result;
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to get all data: {ex.Message}");
       return new List<T>();
     }
@@ -579,15 +555,13 @@ public class Database : IDisposable {
         try {
           var data = SharedMapper.Deserialize<T>(entry.Data);
           result[entry.Id] = data;
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
           Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
         }
       }
 
       return result;
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Failed to get all data: {ex.Message}");
       return new Dictionary<string, T>();
     }
@@ -604,17 +578,14 @@ public class Database : IDisposable {
       try {
         _db.Checkpoint();
         return;
-      }
-      catch (IOException ex) when (ex.Message.Contains("being used by another process")) {
+      } catch (IOException ex) when (ex.Message.Contains("being used by another process")) {
         if (i < maxRetries - 1) {
           Log.Warning($"Checkpoint retry {i + 1}/{maxRetries}: File is locked, waiting {delayMs}ms...");
           System.Threading.Thread.Sleep(delayMs);
-        }
-        else {
+        } else {
           Log.Error($"Failed to perform checkpoint after {maxRetries} attempts: {ex.Message}");
         }
-      }
-      catch (Exception ex) {
+      } catch (Exception ex) {
         Log.Error($"Failed to perform checkpoint: {ex.Message}");
         return;
       }
@@ -645,8 +616,7 @@ public class Database : IDisposable {
 
     try {
       EventManager.Off(ServerEvents.OnSave, AutoBackupHandler);
-    }
-    catch { }
+    } catch { }
 
     _autoBackupEnabled = false;
     Log.Message($"Auto-backup disabled for database '{_pluginGuid}'");
@@ -657,8 +627,7 @@ public class Database : IDisposable {
     try {
       saveName = saveName?.Replace(".save", "") ?? "auto";
       await CreateBackup(_autoBackupLocation, saveName);
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Error($"Auto-backup failed for '{_pluginGuid}': {ex.Message}");
     }
   }
@@ -707,13 +676,11 @@ public class Database : IDisposable {
           try {
             File.Copy(dbPath, backupPath, true);
             copied = true;
-          }
-          catch (IOException ex) when (ex.Message.Contains("being used by another process")) {
+          } catch (IOException ex) when (ex.Message.Contains("being used by another process")) {
             if (i < maxRetries - 1) {
               Log.Warning($"Backup copy retry {i + 1}/{maxRetries}: File is locked, waiting {delayMs}ms...");
               System.Threading.Thread.Sleep(delayMs);
-            }
-            else {
+            } else {
               throw;
             }
           }
@@ -726,10 +693,8 @@ public class Database : IDisposable {
 
         CleanupOldBackups(backupDir);
 
-        Log.Message($"Backup created: {backupFileName}");
         return backupPath;
-      }
-      catch (Exception ex) {
+      } catch (Exception ex) {
         Log.Error($"Failed to create backup: {ex.Message}");
         return null;
       }
@@ -759,8 +724,7 @@ public class Database : IDisposable {
         Log.Warning("Application restart required for changes to take effect");
 
         return true;
-      }
-      catch (Exception ex) {
+      } catch (Exception ex) {
         Log.Error($"Failed to restore backup: {ex.Message}");
         return false;
       }
@@ -785,14 +749,11 @@ public class Database : IDisposable {
       for (int i = _maxBackups; i < files.Length; i++) {
         try {
           File.Delete(files[i]);
-          Log.Message($"Deleted old backup: {Path.GetFileName(files[i])}");
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
           Log.Warning($"Failed to delete old backup: {ex.Message}");
         }
       }
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Warning($"Backup cleanup failed: {ex.Message}");
     }
   }
@@ -816,11 +777,9 @@ public class Database : IDisposable {
       DisableAutoBackup();
       Checkpoint();
       _db?.Dispose();
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       Log.Warning($"Error during database disposal: {ex.Message}");
-    }
-    finally {
+    } finally {
       GC.SuppressFinalize(this);
     }
   }
