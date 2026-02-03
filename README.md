@@ -17,7 +17,7 @@ ScarletCore is the foundational framework that powers all **ScarletMods** - a co
 ScarletCore provides a foundation with:
 
 - **Unified Event System** - Custom events for chat, death, damage, connections, and much more
-- **Ready-to-use Services** - PlayerService, BuffService, TeleportService, AdminService, RevealMapService and others
+- **Ready-to-use Services** - PlayerService, BuffService, TeleportService, AdminService, MapService and others
 - **Essential Utilities** - Logger, text formatting, task scheduler, math utilities
 - **Data Management** - Custom player data and settings management systems
 

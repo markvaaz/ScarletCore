@@ -8,6 +8,7 @@ using ScarletCore.Localization;
 using ProjectM;
 using ScarletCore.Commanding;
 using System.Reflection;
+using ProjectM.Terrain;
 
 namespace ScarletCore.Services;
 
@@ -117,6 +118,12 @@ public class PlayerData {
   /// Converts from UTC ticks to local DateTime for easier handling.
   /// </summary>
   public DateTime LastConnected => new DateTime(User.TimeLastConnected, DateTimeKind.Utc).ToLocalTime();
+
+  /// <summary>
+  /// Gets the world region type where the player's character is currently located.
+  /// Returns WorldRegionType.None if the player is not in any defined region.
+  /// </summary>
+  public WorldRegionType CurrentRegion => UserEntity.Read<CurrentWorldRegion>().CurrentRegion;
 
   /// <summary>
   /// Gets the player's preferred localization language.
@@ -335,14 +342,14 @@ public class PlayerData {
   /// Reveals the entire map for the player.
   /// </summary>
   public void RevealMap() {
-    RevealMapService.RevealFullMap(this);
+    MapService.RevealFullMap(this);
   }
 
   /// <summary>
   /// Hides the entire map for the player.
   /// </summary>
   public void HideMap() {
-    RevealMapService.HideFullMap(this);
+    MapService.HideFullMap(this);
   }
 
   /// <summary>
