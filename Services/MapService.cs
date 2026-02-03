@@ -24,13 +24,32 @@ public static class MapService {
   /// Model representing a world region with its boundaries and vertices
   /// </summary>
   public class Region {
+    /// <summary>
+    /// The type of world region (e.g., FarbaneWoods, DunleyFarmlands)
+    /// </summary>
     public WorldRegionType RegionType { get; set; }
+    
+    /// <summary>
+    /// The axis-aligned bounding box that encompasses the region polygon
+    /// </summary>
     public Aabb Aabb { get; set; }
+    
+    /// <summary>
+    /// Array of 2D vertices defining the region's polygon boundary
+    /// </summary>
     public float2[] Vertices { get; set; }
   }
 
+  /// <summary>
+  /// Dictionary containing all loaded world regions mapped by their WorldRegionType.
+  /// Populated during initialization by loading region polygons from game entities.
+  /// </summary>
   public static readonly Dictionary<WorldRegionType, Region> Regions = [];
 
+  /// <summary>
+  /// Maps user-friendly region names (in Portuguese) to their corresponding WorldRegionType.
+  /// Used for command parsing and region name lookups.
+  /// </summary>
   public static readonly Dictionary<string, WorldRegionType> RegionNameMap = new() {
     { "farbane", WorldRegionType.FarbaneWoods },
     { "dunley", WorldRegionType.DunleyFarmlands },
@@ -44,6 +63,10 @@ public static class MapService {
     { "oakveil", WorldRegionType.Strongblade }
   };
 
+  /// <summary>
+  /// Maps WorldRegionType to their localization key GUIDs for game-based translations.
+  /// These keys correspond to the game's internal localization system.
+  /// </summary>
   public static readonly Dictionary<WorldRegionType, string> RegionLocalizationKeys = new() {
     { WorldRegionType.FarbaneWoods, "21af333f-d58b-422e-adaf-cb9139788794" },
     { WorldRegionType.DunleyFarmlands, "d6067e94-9c9a-4e3c-b151-c4dd5b467c6a" },
