@@ -207,6 +207,7 @@ public static class Localizer {
 
       int successCount = 0;
       int errorCount = 0;
+      var loadedFiles = new List<string>();
 
       foreach (var resourceName in resourceNames) {
         try {
@@ -229,8 +230,7 @@ public static class Localizer {
             LoadKeysGlobal(deserialized);
           }
           successCount++;
-
-          Log.Message($"[Localizer] Loaded translations from: {fileName} ({deserialized.Count} keys)");
+          loadedFiles.Add($"{fileName} ({deserialized.Count} keys)");
         } catch (JsonException) {
           // Silently skip files with incompatible JSON format
           continue;
@@ -241,7 +241,8 @@ public static class Localizer {
       }
 
       if (successCount > 0) {
-        Log.Message($"[Localizer] Successfully loaded {successCount} translation file(s) from '{assemblyName}.Localization' embedded resources");
+        var fileList = string.Join(", ", loadedFiles);
+        Log.Message($"[Localizer] Successfully loaded {successCount} translation file(s) from '{assemblyName}.Localization': {fileList}");
       }
 
       if (errorCount > 0) {
@@ -431,6 +432,14 @@ public static class Localizer {
     } catch { }
 
     return guid;
+  }
+
+  /// <summary>
+  /// Get localized text by GUID string using server language.
+  /// </summary>
+  public static string GetText(Language language, string guid, params object[] parameters) {
+    if (!_initialized) Initialize();
+    return GetTextForLanguage(guid, language, parameters);
   }
 
   /// <summary>
