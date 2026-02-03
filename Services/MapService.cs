@@ -4,6 +4,7 @@ using System.Linq;
 using ProjectM;
 using ProjectM.Network;
 using ProjectM.Terrain;
+using ScarletCore.Localization;
 using ScarletCore.Systems;
 using Unity.Collections;
 using Unity.Entities;
@@ -43,16 +44,16 @@ public static class MapService {
     { "oakveil", WorldRegionType.Strongblade }
   };
 
-  public static readonly Dictionary<WorldRegionType, string> RegionDisplayNameMap = new() {
-    { WorldRegionType.FarbaneWoods, "Floresta de Farbane" },
-    { WorldRegionType.DunleyFarmlands, "Fazenda de Dunley" },
-    { WorldRegionType.CursedForest, "Floresta Amaldiçoada" },
-    { WorldRegionType.HallowedMountains, "Montanhas Sagradas" },
-    { WorldRegionType.SilverlightHills, "Colinas da Luz Argenta" },
-    { WorldRegionType.Gloomrot_South, "Gloomrot Sul" },
-    { WorldRegionType.Gloomrot_North, "Gloomrot Norte" },
-    { WorldRegionType.RuinsOfMortium, "Ruinas de Mortium" },
-    { WorldRegionType.Strongblade, "Florestas de Oakveil" }
+  public static readonly Dictionary<WorldRegionType, string> RegionLocalizationKeys = new() {
+    { WorldRegionType.FarbaneWoods, "21af333f-d58b-422e-adaf-cb9139788794" },
+    { WorldRegionType.DunleyFarmlands, "d6067e94-9c9a-4e3c-b151-c4dd5b467c6a" },
+    { WorldRegionType.CursedForest, "de2b1608-54cd-4de8-af51-a7350c938a4b" },
+    { WorldRegionType.HallowedMountains, "e137642d-9d0b-4b1b-ab0b-19d1e4a20951" },
+    { WorldRegionType.SilverlightHills, "53973904-acf8-4c58-89db-f08e047da1db" },
+    { WorldRegionType.Gloomrot_South, "997b1df5-6d88-4f8f-abea-62799fe148a5" },
+    { WorldRegionType.Gloomrot_North, "ee00edb1-b0a6-449c-a93a-dbb57c37befe" },
+    { WorldRegionType.RuinsOfMortium, "dbdbd8fd-ae32-49bb-b0ea-eef178771d60" },
+    { WorldRegionType.Strongblade, "ddd81c87-b5c9-46f0-af75-62c302879019" }
   };
   private const int MAP_CANVAS_SIZE = 256; // The client map canvas size
   private const int BYTES_PER_ROW = 32; // 256 pixels per row, 8 pixels per byte, so 256 / 8 = 32 bytes per row
@@ -89,10 +90,11 @@ public static class MapService {
   /// Gets the display name for a region type
   /// </summary>
   /// <param name="regionType">The region type</param>
+  /// <param name="language">The language for localization</param>
   /// <returns>The display name or the region type name if not found</returns>
-  public static string GetRegionDisplayName(WorldRegionType regionType) {
-    if (RegionDisplayNameMap.TryGetValue(regionType, out var displayName)) {
-      return displayName;
+  public static string GetRegionDisplayName(WorldRegionType regionType, Language language) {
+    if (RegionLocalizationKeys.TryGetValue(regionType, out var locKey)) {
+      return Localizer.GetText(locKey, language);
     }
     return regionType.ToString();
   }
