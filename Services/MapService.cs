@@ -28,12 +28,12 @@ public static class MapService {
     /// The type of world region (e.g., FarbaneWoods, DunleyFarmlands)
     /// </summary>
     public WorldRegionType RegionType { get; set; }
-    
+
     /// <summary>
     /// The axis-aligned bounding box that encompasses the region polygon
     /// </summary>
     public Aabb Aabb { get; set; }
-    
+
     /// <summary>
     /// Array of 2D vertices defining the region's polygon boundary
     /// </summary>
