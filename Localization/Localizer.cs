@@ -689,6 +689,16 @@ public static class Localizer {
   }
 
   /// <summary>
+  /// Check if a custom key exists for the calling assembly.
+  /// </summary>
+  public static bool HasCustomKey(string key, Assembly assembly) {
+    if (string.IsNullOrWhiteSpace(key)) return false;
+    if (!_initialized) Initialize();
+    var compositeKey = BuildCompositeKey(assembly, key.Trim());
+    return _allTranslations.ContainsKey(compositeKey);
+  }
+
+  /// <summary>
   /// Unregister all custom localization keys for the given assembly.
   /// </summary>
   public static int Dispose(Assembly assembly = null) {
