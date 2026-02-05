@@ -2,6 +2,7 @@ using ProjectM;
 using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Stunlock.Core;
+using System.Collections.Generic;
 using Unity.Entities;
 
 namespace ScarletCore.Services;
@@ -29,6 +30,7 @@ public struct Modifier(float value, UnitStatType statType, ModificationType modi
 /// Provides utility methods for applying, removing, and managing stat modifiers on entities using modifier buffs.
 /// </summary>
 public static class StatModifierService {
+  private static readonly Dictionary<Entity, ActionId> pendingActions = [];
   /// <summary>
   /// Applies an array of stat modifiers to a character entity using a specified modifier buff.
   /// Removes any existing modifier buff before applying the new one.
@@ -36,13 +38,28 @@ public static class StatModifierService {
   /// <param name="character">The character entity to modify.</param>
   /// <param name="modifierBuff">The prefab GUID of the modifier buff to apply.</param>
   /// <param name="modifiers">An array of modifiers to apply to the character.</param>
+  /// <remarks>
+  /// WARNING: Do not call this method multiple times per second for the same entity.
+  /// This method uses debouncing - calling it at high frequency will continuously cancel pending actions,
+  /// potentially preventing modifiers from ever being applied. Ensure adequate delay between calls.
+  /// </remarks>
   public static void ApplyModifiers(Entity character, PrefabGUID modifierBuff, Modifier[] modifiers) {
     if (!character.Exists()) return;
+
+    // Cancel any pending action for this character to prevent conflicts
+    if (pendingActions.Remove(character, out var existingActionId)) {
+      ActionScheduler.CancelAction(existingActionId);
+    }
 
     BuffService.TryRemoveBuff(character, modifierBuff);
 
     // Delay to ensure buff is removed before reapplying otherwise it will throw an error. (I don't want to use a patch just for this)
-    ActionScheduler.DelayedFrames(() => {
+    var actionId = ActionScheduler.DelayedFrames(() => {
+      // Clean up the action tracking
+      pendingActions.Remove(character);
+
+      if (!character.Exists()) return;
+
       if (!BuffService.TryApplyBuff(character, modifierBuff, -1, out var buffEntity)) {
         Log.Error($"Failed to apply modifier buff {modifierBuff} to character entity {character}.");
         return;
@@ -60,6 +77,9 @@ public static class StatModifierService {
         UpdateModifiers(buffEntity, modifiers);
       }
     }, 5);
+
+    // Track the pending action for this character
+    pendingActions[character] = actionId;
   }
 
   /// <summary>
