@@ -6,7 +6,7 @@ using Unity.Entities;
 namespace ScarletCore.Patches;
 
 [HarmonyPatch]
-internal unsafe class PerformanceRecorderSystemPatch {
+internal class PerformanceRecorderSystemPatch {
 
   [HarmonyPatch(typeof(PerformanceRecorderSystem), nameof(PerformanceRecorderSystem.OnUpdate))]
   [HarmonyPrefix]
