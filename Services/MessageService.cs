@@ -362,8 +362,51 @@ public static class MessageService {
     var assembly = Assembly.GetCallingAssembly();
     foreach (var player in PlayerService.AllPlayers) {
       try {
-        var text = Localizer.Get(player, localizationKey, assembly, parameters);
+        // Process parameters to check if they are localization keys
+        var processedParams = new object[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++) {
+          if (parameters[i] is string paramStr && Localizer.HasCustomKey(paramStr, assembly)) {
+            // If parameter is a custom localization key, get its translation
+            processedParams[i] = Localizer.Get(player, paramStr, assembly);
+          } else if (parameters[i] is string paramStr2 && Localizer.HasTranslation(paramStr2)) {
+            // If parameter is a game translation key, get its translation
+            processedParams[i] = Localizer.GetText(player.Language, paramStr2);
+          } else {
+            // Otherwise, use the parameter as-is
+            processedParams[i] = parameters[i];
+          }
+        }
+
+        var text = Localizer.Get(player, localizationKey, assembly, processedParams);
         Send(player, text);
+      } catch { }
+    }
+  }
+
+  /// <summary>
+  /// Sends a raw (unformatted) localized message individually to all players using each player's preferred language.
+  /// </summary>
+  public static void SendAllLocalizedRaw(string localizationKey, params object[] parameters) {
+    var assembly = Assembly.GetCallingAssembly();
+    foreach (var player in PlayerService.AllPlayers) {
+      try {
+        // Process parameters to check if they are localization keys
+        var processedParams = new object[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++) {
+          if (parameters[i] is string paramStr && Localizer.HasCustomKey(paramStr, assembly)) {
+            // If parameter is a custom localization key, get its translation
+            processedParams[i] = Localizer.Get(player, paramStr, assembly);
+          } else if (parameters[i] is string paramStr2 && Localizer.HasTranslation(paramStr2)) {
+            // If parameter is a game translation key, get its translation
+            processedParams[i] = Localizer.GetText(player.Language, paramStr2);
+          } else {
+            // Otherwise, use the parameter as-is
+            processedParams[i] = parameters[i];
+          }
+        }
+
+        var text = Localizer.Get(player, localizationKey, assembly, processedParams);
+        SendRaw(player, text);
       } catch { }
     }
   }
