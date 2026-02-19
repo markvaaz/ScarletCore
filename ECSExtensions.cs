@@ -9,6 +9,7 @@ using Unity.Mathematics;
 using Unity.Transforms;
 using ScarletCore.Systems;
 using ScarletCore.Localization;
+using Unity.Collections;
 
 namespace ScarletCore;
 
@@ -160,7 +161,20 @@ public static class ECSExtensions {
   /// <param name="entity">The entity to check.</param>
   /// <returns>True if the entity is a player; otherwise, false.</returns>
   public static bool IsPlayer(this Entity entity) {
-    return entity.Has<PlayerCharacter>() && !entity.Has<NameableInteractable>();
+    if (!entity.Exists() || !entity.Has<PlayerCharacter>()) return false;
+
+    var playerCharacter = entity.Read<PlayerCharacter>();
+    var userEntity = playerCharacter.UserEntity;
+
+    if (!userEntity.Exists() || !userEntity.Has<User>()) return false;
+
+    var user = userEntity.Read<User>();
+
+    if (user.PlatformId == 0) return false;
+
+    if (playerCharacter.Name.Value.StartsWith("[NPC]") || user.CharacterName.Value.StartsWith("[NPC]")) return false;
+
+    return true;
   }
 
   /// <summary>

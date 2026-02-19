@@ -67,7 +67,7 @@ public static class PlayerService {
 
         var user = entity.Read<User>();
 
-        if (user.CharacterName.Value.StartsWith("[NPC]")) continue;
+        if (user.PlatformId == 0 || user.CharacterName.Value.StartsWith("[NPC]")) continue;
         // Add each user to the cache system
         SetPlayerCache(entity, true);
       }

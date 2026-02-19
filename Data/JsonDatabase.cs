@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
@@ -49,7 +50,8 @@ public class JsonDatabase {
   /// </summary>
   private static readonly JsonSerializerOptions _jsonOptions = new() {
     WriteIndented = true,
-    ReferenceHandler = ReferenceHandler.IgnoreCycles
+    ReferenceHandler = ReferenceHandler.IgnoreCycles,
+    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
   };
   /// <summary>
   /// Initializes a new instance of the Database class

@@ -30,7 +30,7 @@ public struct Modifier(float value, UnitStatType statType, ModificationType modi
 /// Provides utility methods for applying, removing, and managing stat modifiers on entities using modifier buffs.
 /// </summary>
 public static class StatModifierService {
-  private static readonly Dictionary<Entity, ActionId> pendingActions = [];
+  private static readonly Dictionary<(Entity, PrefabGUID), ActionId> pendingActions = [];
   /// <summary>
   /// Applies an array of stat modifiers to a character entity using a specified modifier buff.
   /// Removes any existing modifier buff before applying the new one.
@@ -47,7 +47,7 @@ public static class StatModifierService {
     if (!character.Exists()) return;
 
     // Cancel any pending action for this character to prevent conflicts
-    if (pendingActions.Remove(character, out var existingActionId)) {
+    if (pendingActions.Remove((character, modifierBuff), out var existingActionId)) {
       ActionScheduler.CancelAction(existingActionId);
     }
 
@@ -56,7 +56,7 @@ public static class StatModifierService {
     // Delay to ensure buff is removed before reapplying otherwise it will throw an error. (I don't want to use a patch just for this)
     var actionId = ActionScheduler.DelayedFrames(() => {
       // Clean up the action tracking
-      pendingActions.Remove(character);
+      pendingActions.Remove((character, modifierBuff));
 
       if (!character.Exists()) return;
 
@@ -79,7 +79,7 @@ public static class StatModifierService {
     }, 5);
 
     // Track the pending action for this character
-    pendingActions[character] = actionId;
+    pendingActions[(character, modifierBuff)] = actionId;
   }
 
   /// <summary>

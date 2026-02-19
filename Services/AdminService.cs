@@ -17,6 +17,10 @@ public static class AdminService {
 
   internal static void Initialize() {
     EventManager.On(PlayerEvents.PlayerJoined, (PlayerData playerData) => {
+      if (playerData == null || Plugin.Database.Has($"auto_admin_{playerData.PlatformId}")) {
+        return;
+      }
+
       var autoAdmin = Plugin.Database.Get<bool>($"auto_admin_{playerData.PlatformId}");
 
       if (autoAdmin) {

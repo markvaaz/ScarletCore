@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using LiteDB;
@@ -258,7 +257,6 @@ public class Database : IDisposable {
       var entry = _collection.FindById(key);
 
       if (entry == null) {
-        Log.Warning($"[Database] Key '{key}' not found in database");
         return default;
       }
 
