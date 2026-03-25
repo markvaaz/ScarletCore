@@ -39,7 +39,7 @@ public static class RichTextFormatter {
   /// <summary>Warning highlight color</summary>
   public static readonly string HighlightWarningColor = "#ffff00";
   /// <summary>Default text color</summary>
-  public static readonly string TextColor = "#ffffff";
+  public static readonly string TextColor = "#e5d4ca";
   /// <summary>Success text color</summary>
   public static readonly string SuccessTextColor = "#9cff9c";
   /// <summary>Error text color</summary>

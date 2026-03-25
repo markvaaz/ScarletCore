@@ -57,10 +57,10 @@ public class Plugin : BasePlugin {
       .Add("PrefabLocalizationLanguage", Language.English, $"Language code for localization. Available languages: {string.Join(", ", Localizer.AvailableServerLanguages)}")
       .Add("DefaultPlayerLanguage", Language.English, $"Default language code for new players. Available languages: {string.Join(", ", Localizer.AvailableServerLanguages)}")
       .Add("DisableLanguageSelectionPrompt", false, "If true, players will not be prompted to select a language on first join.")
-      .Add("WelcomeMessage", "~Welcome to {ServerName}!~\n\nThis server uses ~ScarletMods~ to enhance your experience.\n\nTo get started, please set ~your preferred language~:\n\n{AvailableLanguages}\nUse: ~.language <language>~", "Welcome message shown to players who haven't set their language. Placeholders: {ServerName}, {AvailableLanguages}, {PlayerName}");
+      .Add("WelcomeMessage", "~Welcome to {ServerName}!~\n\nThis server uses ~ScarletMods~ to enhance your experience.\n\nTo get started, please set ~your preferred language~:\n\n{AvailableLanguages}\nUse: ~.language <language>~", "Welcome message shown to players who haven't set their language. Placeholders: {ServerName}, {AvailableLanguages}, {PlayerName}")
+      .Add("LanguageReminderMessage", "~Hey {PlayerName}!~ You haven't set your language yet.\n\nAvailable languages: {AvailableLanguages}\nUse: ~.language <language>~", "Reminder message sent every 10 minutes to online players who haven't set their language. Placeholders: {ServerName}, {AvailableLanguages}, {PlayerName}");
     Localizer.Initialize();
     CommandHandler.Initialize();
-    AdminService.Initialize();
   }
 
   /// <summary>

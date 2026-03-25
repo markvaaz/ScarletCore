@@ -8,6 +8,7 @@ using ScarletCore.Services;
 using ProjectM.Network;
 using ScarletCore.Events;
 using UnityEngine;
+using ScarletCore.Localization;
 
 namespace ScarletCore.Systems;
 
@@ -226,6 +227,8 @@ public static class GameSystems {
     RoleService.Initialize();
     MapService.Initialize();
     PlayerService.Initialize();
+    AdminService.Initialize();
+    ActionScheduler.Repeating(Localizer.NotifyPlayersWithoutLanguage, 600f);
   }
 
   /// <summary>

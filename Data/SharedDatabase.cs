@@ -13,7 +13,6 @@ namespace ScarletCore.Data;
 /// </summary>
 public static class SharedDatabase {
   private static readonly Database _database = new("ScarletCore_SharedData");
-  private static readonly object _lock = new();
 
   /// <summary>
   /// Gets or sets the maximum number of backups to keep (default: 50)
@@ -37,10 +36,8 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(key))
       throw new ArgumentException("Key cannot be null or empty", nameof(key));
 
-    lock (_lock) {
-      var fullKey = $"{databaseName}/{key}";
-      _database.Set(fullKey, data);
-    }
+    var fullKey = $"{databaseName}/{key}";
+    _database.Set(fullKey, data);
   }
 
   /// <summary>
@@ -57,10 +54,8 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(key))
       throw new ArgumentException("Key cannot be null or empty", nameof(key));
 
-    lock (_lock) {
-      var fullKey = $"{databaseName}/{key}";
-      return _database.Get<T>(fullKey);
-    }
+    var fullKey = $"{databaseName}/{key}";
+    return _database.Get<T>(fullKey);
   }
 
   /// <summary>
@@ -78,10 +73,8 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(key))
       throw new ArgumentException("Key cannot be null or empty", nameof(key));
 
-    lock (_lock) {
-      var fullKey = $"{databaseName}/{key}";
-      return _database.GetOrCreate(fullKey, factory);
-    }
+    var fullKey = $"{databaseName}/{key}";
+    return _database.GetOrCreate(fullKey, factory);
   }
 
   /// <summary>
@@ -101,10 +94,8 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(databaseName) || string.IsNullOrWhiteSpace(key))
       return false;
 
-    lock (_lock) {
-      var fullKey = $"{databaseName}/{key}";
-      return _database.Has(fullKey);
-    }
+    var fullKey = $"{databaseName}/{key}";
+    return _database.Has(fullKey);
   }
 
   /// <summary>
@@ -117,10 +108,8 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(databaseName) || string.IsNullOrWhiteSpace(key))
       return false;
 
-    lock (_lock) {
-      var fullKey = $"{databaseName}/{key}";
-      return _database.Delete(fullKey);
-    }
+    var fullKey = $"{databaseName}/{key}";
+    return _database.Delete(fullKey);
   }
 
   /// <summary>
@@ -132,10 +121,8 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(databaseName))
       return [];
 
-    lock (_lock) {
-      var prefix = $"{databaseName}/";
-      return [.. _database.GetKeysByPrefix(prefix).Select(k => k[prefix.Length..])];
-    }
+    var prefix = $"{databaseName}/";
+    return [.. _database.GetKeysByPrefix(prefix).Select(k => k[prefix.Length..])];
   }
 
   /// <summary>
@@ -148,14 +135,12 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(databaseName))
       return [];
 
-    lock (_lock) {
-      var fullPrefix = string.IsNullOrEmpty(keyPrefix)
-        ? $"{databaseName}/"
-        : $"{databaseName}/{keyPrefix}";
+    var fullPrefix = string.IsNullOrEmpty(keyPrefix)
+      ? $"{databaseName}/"
+      : $"{databaseName}/{keyPrefix}";
 
-      var dbPrefix = $"{databaseName}/";
-      return [.. _database.GetKeysByPrefix(fullPrefix).Select(k => k[dbPrefix.Length..])];
-    }
+    var dbPrefix = $"{databaseName}/";
+    return [.. _database.GetKeysByPrefix(fullPrefix).Select(k => k[dbPrefix.Length..])];
   }
 
   /// <summary>
@@ -169,30 +154,28 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(databaseName))
       return [];
 
-    lock (_lock) {
-      var dbPrefix = $"{databaseName}/";
+    var dbPrefix = $"{databaseName}/";
 
-      // Create a new predicate that includes the database prefix check
-      var param = Expression.Parameter(typeof(string), "fullKey");
-      var startsWithCall = Expression.Call(
-        param,
-        typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)]),
-        Expression.Constant(dbPrefix)
-      );
+    // Create a new predicate that includes the database prefix check
+    var param = Expression.Parameter(typeof(string), "fullKey");
+    var startsWithCall = Expression.Call(
+      param,
+      typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)]),
+      Expression.Constant(dbPrefix)
+    );
 
-      // Remove prefix for the user's predicate
-      var substringCall = Expression.Call(
-        param,
-        typeof(string).GetMethod(nameof(string.Substring), [typeof(int)]),
-        Expression.Constant(dbPrefix.Length)
-      );
+    // Remove prefix for the user's predicate
+    var substringCall = Expression.Call(
+      param,
+      typeof(string).GetMethod(nameof(string.Substring), [typeof(int)]),
+      Expression.Constant(dbPrefix.Length)
+    );
 
-      var userPredicateBody = Expression.Invoke(keyPredicate, substringCall);
-      var combinedPredicate = Expression.AndAlso(startsWithCall, userPredicateBody);
-      var lambda = Expression.Lambda<Func<string, bool>>(combinedPredicate, param);
+    var userPredicateBody = Expression.Invoke(keyPredicate, substringCall);
+    var combinedPredicate = Expression.AndAlso(startsWithCall, userPredicateBody);
+    var lambda = Expression.Lambda<Func<string, bool>>(combinedPredicate, param);
 
-      return _database.Query<T>(lambda);
-    }
+    return _database.Query<T>(lambda);
   }
 
   /// <summary>
@@ -206,36 +189,34 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(databaseName))
       return [];
 
-    lock (_lock) {
-      var dbPrefix = $"{databaseName}/";
+    var dbPrefix = $"{databaseName}/";
 
-      // Create a new predicate that includes the database prefix check
-      var param = Expression.Parameter(typeof(string), "fullKey");
-      var startsWithCall = Expression.Call(
-        param,
-        typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)]),
-        Expression.Constant(dbPrefix)
-      );
+    // Create a new predicate that includes the database prefix check
+    var param = Expression.Parameter(typeof(string), "fullKey");
+    var startsWithCall = Expression.Call(
+      param,
+      typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)]),
+      Expression.Constant(dbPrefix)
+    );
 
-      // Remove prefix for the user's predicate
-      var substringCall = Expression.Call(
-        param,
-        typeof(string).GetMethod(nameof(string.Substring), [typeof(int)]),
-        Expression.Constant(dbPrefix.Length)
-      );
+    // Remove prefix for the user's predicate
+    var substringCall = Expression.Call(
+      param,
+      typeof(string).GetMethod(nameof(string.Substring), [typeof(int)]),
+      Expression.Constant(dbPrefix.Length)
+    );
 
-      var userPredicateBody = Expression.Invoke(keyPredicate, substringCall);
-      var combinedPredicate = Expression.AndAlso(startsWithCall, userPredicateBody);
-      var lambda = Expression.Lambda<Func<string, bool>>(combinedPredicate, param);
+    var userPredicateBody = Expression.Invoke(keyPredicate, substringCall);
+    var combinedPredicate = Expression.AndAlso(startsWithCall, userPredicateBody);
+    var lambda = Expression.Lambda<Func<string, bool>>(combinedPredicate, param);
 
-      var allData = _database.QueryWithKeys<T>(lambda);
+    var allData = _database.QueryWithKeys<T>(lambda);
 
-      // Remove database prefix from keys
-      return allData.ToDictionary(
-        kvp => kvp.Key[dbPrefix.Length..],
-        kvp => kvp.Value
-      );
-    }
+    // Remove database prefix from keys
+    return allData.ToDictionary(
+      kvp => kvp.Key[dbPrefix.Length..],
+      kvp => kvp.Value
+    );
   }
 
   /// <summary>
@@ -248,11 +229,9 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(databaseName))
       return [];
 
-    lock (_lock) {
-      var dbPrefix = $"{databaseName}/";
-      var allData = _database.QueryWithKeys<T>(k => k.StartsWith(dbPrefix));
-      return [.. allData.Values];
-    }
+    var dbPrefix = $"{databaseName}/";
+    var allData = _database.QueryWithKeys<T>(k => k.StartsWith(dbPrefix));
+    return [.. allData.Values];
   }
 
   /// <summary>
@@ -276,20 +255,18 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(databaseName))
       return [];
 
-    lock (_lock) {
-      var fullPrefix = string.IsNullOrEmpty(keyPrefix)
-        ? $"{databaseName}/"
-        : $"{databaseName}/{keyPrefix}";
+    var fullPrefix = string.IsNullOrEmpty(keyPrefix)
+      ? $"{databaseName}/"
+      : $"{databaseName}/{keyPrefix}";
 
-      var dbPrefix = $"{databaseName}/";
-      var allData = _database.GetAllByPrefix<T>(fullPrefix);
+    var dbPrefix = $"{databaseName}/";
+    var allData = _database.GetAllByPrefix<T>(fullPrefix);
 
-      // Remove database prefix from keys
-      return allData.ToDictionary(
-        kvp => kvp.Key[dbPrefix.Length..],
-        kvp => kvp.Value
-      );
-    }
+    // Remove database prefix from keys
+    return allData.ToDictionary(
+      kvp => kvp.Key[dbPrefix.Length..],
+      kvp => kvp.Value
+    );
   }
 
   /// <summary>
@@ -301,18 +278,16 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(databaseName))
       return 0;
 
-    lock (_lock) {
-      var keys = GetAllKeys(databaseName);
-      int deleted = 0;
+    var keys = GetAllKeys(databaseName);
+    int deleted = 0;
 
-      foreach (var key in keys) {
-        if (Delete(databaseName, key))
-          deleted++;
-      }
-
-      Log.Message($"Cleared {deleted} entries from shared database '{databaseName}'");
-      return deleted;
+    foreach (var key in keys) {
+      if (Delete(databaseName, key))
+        deleted++;
     }
+
+    Log.Message($"Cleared {deleted} entries from shared database '{databaseName}'");
+    return deleted;
   }
 
   /// <summary>
@@ -324,18 +299,14 @@ public static class SharedDatabase {
     if (string.IsNullOrWhiteSpace(databaseName))
       return 0;
 
-    lock (_lock) {
-      return GetAllKeys(databaseName).Length;
-    }
+    return GetAllKeys(databaseName).Length;
   }
 
   /// <summary>
   /// Gets the total count of all entries across all databases
   /// </summary>
   public static int CountAll() {
-    lock (_lock) {
-      return _database.Count();
-    }
+    return _database.Count();
   }
 
   /// <summary>
@@ -343,20 +314,16 @@ public static class SharedDatabase {
   /// </summary>
   /// <returns>Array of unique database names</returns>
   public static string[] GetAllDatabaseNames() {
-    lock (_lock) {
-      return [.. _database.GetAllKeys()
-        .Select(k => k.Split('/')[0])
-        .Distinct()];
-    }
+    return [.. _database.GetAllKeys()
+      .Select(k => k.Split('/')[0])
+      .Distinct()];
   }
 
   /// <summary>
   /// Performs a checkpoint to ensure all data is written to disk
   /// </summary>
   public static void Checkpoint() {
-    lock (_lock) {
-      _database.Checkpoint();
-    }
+    _database.Checkpoint();
   }
 
   /// <summary>
@@ -364,18 +331,14 @@ public static class SharedDatabase {
   /// </summary>
   /// <param name="backupLocation">Optional custom backup location</param>
   public static void EnableAutoBackup(string backupLocation = null) {
-    lock (_lock) {
-      _database.EnableAutoBackup(backupLocation);
-    }
+    _database.EnableAutoBackup(backupLocation);
   }
 
   /// <summary>
   /// Disables automatic backups
   /// </summary>
   public static void DisableAutoBackup() {
-    lock (_lock) {
-      _database.DisableAutoBackup();
-    }
+    _database.DisableAutoBackup();
   }
 
   /// <summary>
@@ -403,8 +366,6 @@ public static class SharedDatabase {
   /// Internal cleanup method - should only be called when shutting down
   /// </summary>
   internal static void Shutdown() {
-    lock (_lock) {
-      _database.Dispose();
-    }
+    _database.Dispose();
   }
 }

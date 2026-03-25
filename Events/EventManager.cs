@@ -43,6 +43,7 @@ public static class EventManager {
   private static readonly Dictionary<PlayerEvents, List<PrioritizedHandler<Action<PlayerData>>>> _playerHandlers = [];
   private static readonly Dictionary<ServerEvents, List<PrioritizedHandler<Delegate>>> _serverHandlers = [];
   private static readonly Dictionary<CommandEvents, List<PrioritizedHandler<Delegate>>> _commandHandlers = [];
+  private static readonly Dictionary<RoleEvents, List<PrioritizedHandler<Action<PlayerData, Role>>>> _roleHandlers = [];
 
 
   /// <summary>
@@ -295,7 +296,7 @@ public static class EventManager {
   /// <param name="eventType">The command event type to subscribe to.</param>
   /// <param name="callback">The callback to invoke when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
-  internal static void On(CommandEvents eventType, Action<PlayerData, CommandInfo, string[]> callback) {
+  public static void On(CommandEvents eventType, Action<PlayerData, CommandInfo, string[]> callback) {
     if (callback == null) return;
     if (!_commandHandlers.TryGetValue(eventType, out var list)) {
       list = new List<PrioritizedHandler<Delegate>>(4);
@@ -314,7 +315,7 @@ public static class EventManager {
   /// <param name="callback">The callback to remove.</param>
   /// <returns>True if the callback was removed; otherwise, false.</returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
-  internal static bool Off(CommandEvents eventType, Action<PlayerData, CommandInfo, string[]> callback) {
+  public static bool Off(CommandEvents eventType, Action<PlayerData, CommandInfo, string[]> callback) {
     if (callback == null) return false;
     if (_commandHandlers.TryGetValue(eventType, out var list)) {
       int idx = list.FindIndex(h => AreDelegatesEqual(h.Handler, callback));
@@ -333,7 +334,7 @@ public static class EventManager {
   /// <param name="eventType">The command event type to subscribe to.</param>
   /// <param name="callback">The callback to invoke once when the event is emitted.</param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
-  internal static void Once(CommandEvents eventType, Action<PlayerData, CommandInfo, string[]> callback) {
+  public static void Once(CommandEvents eventType, Action<PlayerData, CommandInfo, string[]> callback) {
     if (callback == null) return;
     void wrapped(PlayerData player, CommandInfo info, string[] args) {
       try {
@@ -372,6 +373,77 @@ public static class EventManager {
   /// <returns>The number of subscribers.</returns>
   internal static int GetSubscriberCount(CommandEvents eventType) {
     return _commandHandlers.TryGetValue(eventType, out var list) ? list.Count : 0;
+  }
+
+  // --- Role event methods ---
+  /// <summary>
+  /// Subscribes a callback to a role event. Handlers are invoked when a player's role changes.
+  /// </summary>
+  /// <param name="eventType">The role event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke when the event is emitted. Receives the affected player and the role.</param>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void On(RoleEvents eventType, Action<PlayerData, Role> callback) {
+    if (callback == null) return;
+    if (!_roleHandlers.TryGetValue(eventType, out var list)) {
+      list = new List<PrioritizedHandler<Action<PlayerData, Role>>>(4);
+      _roleHandlers[eventType] = list;
+    }
+    var ph = new PrioritizedHandler<Action<PlayerData, Role>>(callback);
+    int idx = list.FindIndex(h => h.Priority < ph.Priority);
+    if (idx >= 0) list.Insert(idx, ph);
+    else list.Add(ph);
+  }
+
+  /// <summary>
+  /// Unsubscribes a callback from a role event.
+  /// </summary>
+  /// <param name="eventType">The role event type to unsubscribe from.</param>
+  /// <param name="callback">The callback to remove.</param>
+  /// <returns>True if the callback was removed; otherwise, false.</returns>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool Off(RoleEvents eventType, Action<PlayerData, Role> callback) {
+    if (callback == null) return false;
+    if (_roleHandlers.TryGetValue(eventType, out var list)) {
+      int idx = list.FindIndex(h => AreDelegatesEqual(h.Handler, callback));
+      if (idx >= 0) {
+        list.RemoveAt(idx);
+        if (list.Count == 0) _roleHandlers.Remove(eventType);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// <summary>
+  /// Subscribes a callback to a role event for a single invocation. The handler is automatically removed after being called once.
+  /// </summary>
+  /// <param name="eventType">The role event type to subscribe to.</param>
+  /// <param name="callback">The callback to invoke once when the event is emitted.</param>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static void Once(RoleEvents eventType, Action<PlayerData, Role> callback) {
+    if (callback == null) return;
+    void wrapped(PlayerData player, Role role) {
+      try {
+        callback(player, role);
+      } finally {
+        Off(eventType, wrapped);
+      }
+    }
+    On(eventType, wrapped);
+  }
+
+  /// <summary>
+  /// Emits a role event, invoking all registered handlers for the specified event type.
+  /// </summary>
+  /// <param name="eventType">The role event type to emit.</param>
+  /// <param name="player">The player whose role changed.</param>
+  /// <param name="role">The role that was added or removed.</param>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  internal static void Emit(RoleEvents eventType, PlayerData player, Role role) {
+    if (!_roleHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
+    for (int i = 0; i < handlers.Count; i++) {
+      try { handlers[i].Handler(player, role); } catch (Exception ex) { Log.Error($"EventManager: Error in role '{eventType}': {ex}"); }
+    }
   }
 
   /// <summary>

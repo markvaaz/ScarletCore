@@ -1019,7 +1019,7 @@ public static class CommandHandler {
   }
 
   private static void HelpCommandInternal(CommandContext ctx, Language targetLanguage, int page) {
-    const int commandsPerMessage = 4;
+    const int commandsPerMessage = 3;
     const int messagesPerPage = 8;
     const int commandsPerPage = commandsPerMessage * messagesPerPage;
 
@@ -1058,7 +1058,7 @@ public static class CommandHandler {
         messageBuilder.AppendLine(headerText.Bold());
 
         if (isCustomLanguage) {
-          messageBuilder.AppendLine($"~Language: {targetLanguage}~".WithColor("yellow"));
+          messageBuilder.AppendLine($"~Language: {targetLanguage}~");
         }
 
         messageBuilder.AppendLine();
@@ -1087,7 +1087,7 @@ public static class CommandHandler {
         messageBuilder.AppendLine();
 
         string nextPageText = Localizer.Get(ctx.Sender, LocalizationKey.HelpNextPage, CommandPrefix, page + 1);
-        messageBuilder.AppendLine(nextPageText.WithColor("white"));
+        messageBuilder.AppendLine(nextPageText);
       }
 
       ctx.Reply(messageBuilder.ToString());
@@ -1143,7 +1143,7 @@ public static class CommandHandler {
   }
 
   private static void HelpModCommandInternal(CommandContext ctx, string assemblyName, Language targetLanguage, int page) {
-    const int commandsPerMessage = 4;
+    const int commandsPerMessage = 3;
     const int messagesPerPage = 8;
     const int commandsPerPage = commandsPerMessage * messagesPerPage;
 
@@ -1191,7 +1191,7 @@ public static class CommandHandler {
         messageBuilder.AppendLine(headerText.Bold());
 
         if (isCustomLanguage) {
-          messageBuilder.AppendLine($"~Language: {targetLanguage}~".WithColor("yellow"));
+          messageBuilder.AppendLine($"~Language: {targetLanguage}~");
         }
 
         messageBuilder.AppendLine();
@@ -1207,7 +1207,7 @@ public static class CommandHandler {
         messageBuilder.AppendLine();
         string nextPageText = Localizer.Get(ctx.Sender, LocalizationKey.HelpModNextPage,
           CommandPrefix, assemblyName, page + 1);
-        messageBuilder.AppendLine(nextPageText.WithColor("white"));
+        messageBuilder.AppendLine(nextPageText);
       }
 
       ctx.Reply(messageBuilder.ToString());

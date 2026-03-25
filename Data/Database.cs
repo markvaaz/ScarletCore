@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using LiteDB;
 using ScarletCore.Utils;
@@ -25,6 +26,13 @@ public class Database : IDisposable {
 
   // Cache for reusable BsonMapper
   private static readonly BsonMapper SharedMapper = BsonMapper.Global;
+
+  // Thread synchronization for database operations
+  private readonly SemaphoreSlim _dbSemaphore = new(1, 1);
+  private const int MaxRetries = 3;
+  private const int BaseDelayMs = 50;
+  private const int MaxDelayMs = 500;
+  private const int SemaphoreTimeoutMs = 5000;
 
   /// <summary>
   /// Gets or sets the maximum number of backups to keep (default: 50)
@@ -66,6 +74,72 @@ public class Database : IDisposable {
 
     // Create index on Id to improve query performance
     _collection.EnsureIndex(x => x.Id);
+  }
+
+  /// <summary>
+  /// Executes a database operation with retry logic and thread synchronization
+  /// </summary>
+  private T ExecuteWithRetry<T>(Func<T> operation, string operationName) {
+    for (int attempt = 0; attempt < MaxRetries; attempt++) {
+      bool semaphoreAcquired = false;
+      try {
+        // Try to acquire semaphore with timeout to prevent deadlocks
+        semaphoreAcquired = _dbSemaphore.Wait(SemaphoreTimeoutMs);
+
+        if (!semaphoreAcquired) {
+          Log.Warning($"[Database] Semaphore timeout on {operationName}, attempt {attempt + 1}/{MaxRetries}");
+          if (attempt == MaxRetries - 1) {
+            throw new TimeoutException($"Database operation timed out after {MaxRetries} attempts");
+          }
+          Thread.Sleep(CalculateDelay(attempt));
+          continue;
+        }
+
+        return operation();
+      } catch (IOException ex) when (ex.Message.Contains("being used by another process")) {
+        if (attempt < MaxRetries - 1) {
+          var delay = CalculateDelay(attempt);
+          Log.Warning($"[Database] {operationName} retry {attempt + 1}/{MaxRetries}: File locked, waiting {delay}ms...");
+          Thread.Sleep(delay);
+        } else {
+          Log.Error($"[Database] {operationName} failed after {MaxRetries} attempts: {ex.Message}");
+          throw;
+        }
+      } catch (LiteException ex) when (ex.ErrorCode == LiteException.LOCK_TIMEOUT) {
+        if (attempt < MaxRetries - 1) {
+          var delay = CalculateDelay(attempt);
+          Log.Warning($"[Database] {operationName} retry {attempt + 1}/{MaxRetries}: Lock timeout, waiting {delay}ms...");
+          Thread.Sleep(delay);
+        } else {
+          Log.Error($"[Database] {operationName} failed after {MaxRetries} attempts: {ex.Message}");
+          throw;
+        }
+      } finally {
+        if (semaphoreAcquired) {
+          _dbSemaphore.Release();
+        }
+      }
+    }
+
+    throw new InvalidOperationException($"{operationName} failed after all retry attempts");
+  }
+
+  /// <summary>
+  /// Executes a database operation with retry logic (void return)
+  /// </summary>
+  private void ExecuteWithRetry(Action operation, string operationName) {
+    ExecuteWithRetry(() => {
+      operation();
+      return true;
+    }, operationName);
+  }
+
+  /// <summary>
+  /// Calculates exponential backoff delay
+  /// </summary>
+  private int CalculateDelay(int attempt) {
+    var delay = BaseDelayMs * (1 << attempt); // Exponential: 50, 100, 200...
+    return Math.Min(delay, MaxDelayMs);
   }
 
   /// <summary>
@@ -220,20 +294,22 @@ public class Database : IDisposable {
     }
 
     try {
-      var bsonData = SharedMapper.Serialize(data);
-      var now = DateTime.Now;
+      ExecuteWithRetry(() => {
+        var bsonData = SharedMapper.Serialize(data);
+        var now = DateTime.Now;
 
-      // Using FindById is faster than complex queries
-      var existing = _collection.FindById(key);
+        // Using FindById is faster than complex queries
+        var existing = _collection.FindById(key);
 
-      var entry = new DataEntry {
-        Id = key,
-        Data = bsonData,
-        CreatedAt = existing?.CreatedAt ?? now,
-        UpdatedAt = now
-      };
+        var entry = new DataEntry {
+          Id = key,
+          Data = bsonData,
+          CreatedAt = existing?.CreatedAt ?? now,
+          UpdatedAt = now
+        };
 
-      _collection.Upsert(entry);
+        _collection.Upsert(entry);
+      }, $"Set('{key}')");
     } catch (LiteException ex) when (ex.Message.Contains("circular") || ex.Message.Contains("reference")) {
       Log.Error($"Cannot save data with key '{key}': Circular reference detected during serialization");
       throw new InvalidOperationException("Circular reference detected during serialization", ex);
@@ -254,18 +330,20 @@ public class Database : IDisposable {
       throw new ArgumentException("Key cannot be null or empty", nameof(key));
 
     try {
-      var entry = _collection.FindById(key);
+      return ExecuteWithRetry(() => {
+        var entry = _collection.FindById(key);
 
-      if (entry == null) {
-        return default;
-      }
+        if (entry == null) {
+          return default;
+        }
 
-      if (entry.Data == null || entry.Data.IsNull) {
-        Log.Warning($"[Database] Key '{key}' has null data");
-        return default;
-      }
+        if (entry.Data == null || entry.Data.IsNull) {
+          Log.Warning($"[Database] Key '{key}' has null data");
+          return default;
+        }
 
-      return SharedMapper.Deserialize<T>(entry.Data);
+        return SharedMapper.Deserialize<T>(entry.Data);
+      }, $"Get('{key}')");
     } catch (Exception ex) {
       Log.Error($"Failed to load data with key '{key}': {ex.Message}");
       return default;
@@ -284,16 +362,36 @@ public class Database : IDisposable {
       throw new ArgumentException("Key cannot be null or empty", nameof(key));
 
     try {
-      var entry = _collection.FindById(key);
+      return ExecuteWithRetry(() => {
+        var entry = _collection.FindById(key);
 
-      if (entry != null && entry.Data != null && !entry.Data.IsNull) {
-        return SharedMapper.Deserialize<T>(entry.Data);
-      }
+        if (entry != null && entry.Data != null && !entry.Data.IsNull) {
+          return SharedMapper.Deserialize<T>(entry.Data);
+        }
 
-      // Key doesn't exist, create and save
-      var newData = factory();
-      Set(key, newData);
-      return newData;
+        // Key doesn't exist, create and save
+        var newData = factory();
+
+        // Check circular references before saving
+        var circularPath = DetectCircularReference(newData);
+        if (circularPath != null) {
+          Log.Error($"Cannot save data with key '{key}': Circular reference detected at path '{circularPath}'");
+          throw new InvalidOperationException($"Circular reference detected at: {circularPath}");
+        }
+
+        var bsonData = SharedMapper.Serialize(newData);
+        var now = DateTime.Now;
+
+        var newEntry = new DataEntry {
+          Id = key,
+          Data = bsonData,
+          CreatedAt = now,
+          UpdatedAt = now
+        };
+
+        _collection.Upsert(newEntry);
+        return newData;
+      }, $"GetOrCreate('{key}')");
     } catch {
       var newData = factory();
       Set(key, newData);
@@ -318,8 +416,10 @@ public class Database : IDisposable {
       return false;
 
     try {
-      // FindById is faster than Exists with a query
-      return _collection.FindById(key) != null;
+      return ExecuteWithRetry(() => {
+        // FindById is faster than Exists with a query
+        return _collection.FindById(key) != null;
+      }, $"Has('{key}')");
     } catch {
       return false;
     }
@@ -335,7 +435,9 @@ public class Database : IDisposable {
       return false;
 
     try {
-      return _collection.Delete(key);
+      return ExecuteWithRetry(() => {
+        return _collection.Delete(key);
+      }, $"Delete('{key}')");
     } catch (Exception ex) {
       Log.Error($"Failed to delete data with key '{key}': {ex.Message}");
       return false;
@@ -348,12 +450,14 @@ public class Database : IDisposable {
   /// <returns>Array of all keys</returns>
   public string[] GetAllKeys() {
     try {
-      // Use Query instead of FindAll for more efficient iteration
-      var keys = _collection.Query()
-        .Select(e => e.Id)
-        .ToArray();
+      return ExecuteWithRetry(() => {
+        // Use Query instead of FindAll for more efficient iteration
+        var keys = _collection.Query()
+          .Select(e => e.Id)
+          .ToArray();
 
-      return keys;
+        return keys;
+      }, "GetAllKeys()");
     } catch (Exception ex) {
       Log.Error($"Failed to get all keys: {ex.Message}");
       return Array.Empty<string>();
@@ -370,13 +474,15 @@ public class Database : IDisposable {
       return GetAllKeys();
 
     try {
-      // Using Query is more efficient
-      var keys = _collection.Query()
-        .Where(x => x.Id.StartsWith(prefix))
-        .Select(e => e.Id)
-        .ToArray();
+      return ExecuteWithRetry(() => {
+        // Using Query is more efficient
+        var keys = _collection.Query()
+          .Where(x => x.Id.StartsWith(prefix))
+          .Select(e => e.Id)
+          .ToArray();
 
-      return keys;
+        return keys;
+      }, $"GetKeysByPrefix('{prefix}')");
     } catch (Exception ex) {
       Log.Error($"Failed to get keys by prefix '{prefix}': {ex.Message}");
       return Array.Empty<string>();
@@ -391,28 +497,30 @@ public class Database : IDisposable {
   /// <returns>Dictionary of key-value pairs</returns>
   public Dictionary<string, T> GetAllByPrefix<T>(string prefix) {
     try {
-      IEnumerable<DataEntry> entries;
+      return ExecuteWithRetry(() => {
+        IEnumerable<DataEntry> entries;
 
-      if (string.IsNullOrEmpty(prefix)) {
-        entries = _collection.Query().ToEnumerable();
-      } else {
-        entries = _collection.Query()
-          .Where(x => x.Id.StartsWith(prefix))
-          .ToEnumerable();
-      }
-
-      var result = new Dictionary<string, T>();
-
-      foreach (var entry in entries) {
-        try {
-          var data = SharedMapper.Deserialize<T>(entry.Data);
-          result[entry.Id] = data;
-        } catch (Exception ex) {
-          Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+        if (string.IsNullOrEmpty(prefix)) {
+          entries = _collection.Query().ToEnumerable();
+        } else {
+          entries = _collection.Query()
+            .Where(x => x.Id.StartsWith(prefix))
+            .ToEnumerable();
         }
-      }
 
-      return result;
+        var result = new Dictionary<string, T>();
+
+        foreach (var entry in entries) {
+          try {
+            var data = SharedMapper.Deserialize<T>(entry.Data);
+            result[entry.Id] = data;
+          } catch (Exception ex) {
+            Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+          }
+        }
+
+        return result;
+      }, $"GetAllByPrefix('{prefix}')");
     } catch (Exception ex) {
       Log.Error($"Failed to get all data by prefix '{prefix}': {ex.Message}");
       return new Dictionary<string, T>();
@@ -424,7 +532,9 @@ public class Database : IDisposable {
   /// </summary>
   public void Clear() {
     try {
-      _collection.DeleteAll();
+      ExecuteWithRetry(() => {
+        _collection.DeleteAll();
+      }, "Clear()");
       Log.Message($"Database '{_pluginGuid}' cleared successfully");
     } catch (Exception ex) {
       Log.Error($"Failed to clear database: {ex.Message}");
@@ -436,7 +546,9 @@ public class Database : IDisposable {
   /// </summary>
   public int Count() {
     try {
-      return _collection.Count();
+      return ExecuteWithRetry(() => {
+        return _collection.Count();
+      }, "Count()");
     } catch {
       return 0;
     }
@@ -450,28 +562,30 @@ public class Database : IDisposable {
   /// <returns>List of matching data entries</returns>
   public List<T> Query<T>(Expression<Func<string, bool>> keyPredicate) {
     try {
-      // Convert string expression to DataEntry
-      var param = Expression.Parameter(typeof(DataEntry), "x");
-      var idProperty = Expression.Property(param, nameof(DataEntry.Id));
-      var body = Expression.Invoke(keyPredicate, idProperty);
-      var lambda = Expression.Lambda<Func<DataEntry, bool>>(body, param);
+      return ExecuteWithRetry(() => {
+        // Convert string expression to DataEntry
+        var param = Expression.Parameter(typeof(DataEntry), "x");
+        var idProperty = Expression.Property(param, nameof(DataEntry.Id));
+        var body = Expression.Invoke(keyPredicate, idProperty);
+        var lambda = Expression.Lambda<Func<DataEntry, bool>>(body, param);
 
-      var entries = _collection.Query()
-        .Where(lambda)
-        .ToEnumerable();
+        var entries = _collection.Query()
+          .Where(lambda)
+          .ToEnumerable();
 
-      var result = new List<T>();
+        var result = new List<T>();
 
-      foreach (var entry in entries) {
-        try {
-          var data = SharedMapper.Deserialize<T>(entry.Data);
-          result.Add(data);
-        } catch (Exception ex) {
-          Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+        foreach (var entry in entries) {
+          try {
+            var data = SharedMapper.Deserialize<T>(entry.Data);
+            result.Add(data);
+          } catch (Exception ex) {
+            Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+          }
         }
-      }
 
-      return result;
+        return result;
+      }, "Query()");
     } catch (Exception ex) {
       Log.Error($"Failed to query database: {ex.Message}");
       return new List<T>();
@@ -486,27 +600,29 @@ public class Database : IDisposable {
   /// <returns>Dictionary of key-value pairs</returns>
   public Dictionary<string, T> QueryWithKeys<T>(Expression<Func<string, bool>> keyPredicate) {
     try {
-      var param = Expression.Parameter(typeof(DataEntry), "x");
-      var idProperty = Expression.Property(param, nameof(DataEntry.Id));
-      var body = Expression.Invoke(keyPredicate, idProperty);
-      var lambda = Expression.Lambda<Func<DataEntry, bool>>(body, param);
+      return ExecuteWithRetry(() => {
+        var param = Expression.Parameter(typeof(DataEntry), "x");
+        var idProperty = Expression.Property(param, nameof(DataEntry.Id));
+        var body = Expression.Invoke(keyPredicate, idProperty);
+        var lambda = Expression.Lambda<Func<DataEntry, bool>>(body, param);
 
-      var entries = _collection.Query()
-        .Where(lambda)
-        .ToEnumerable();
+        var entries = _collection.Query()
+          .Where(lambda)
+          .ToEnumerable();
 
-      var result = new Dictionary<string, T>();
+        var result = new Dictionary<string, T>();
 
-      foreach (var entry in entries) {
-        try {
-          var data = SharedMapper.Deserialize<T>(entry.Data);
-          result[entry.Id] = data;
-        } catch (Exception ex) {
-          Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+        foreach (var entry in entries) {
+          try {
+            var data = SharedMapper.Deserialize<T>(entry.Data);
+            result[entry.Id] = data;
+          } catch (Exception ex) {
+            Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+          }
         }
-      }
 
-      return result;
+        return result;
+      }, "QueryWithKeys()");
     } catch (Exception ex) {
       Log.Error($"Failed to query database: {ex.Message}");
       return new Dictionary<string, T>();
@@ -520,19 +636,21 @@ public class Database : IDisposable {
   /// <returns>List of all data entries</returns>
   public List<T> GetAll<T>() {
     try {
-      var entries = _collection.Query().ToEnumerable();
-      var result = new List<T>();
+      return ExecuteWithRetry(() => {
+        var entries = _collection.Query().ToEnumerable();
+        var result = new List<T>();
 
-      foreach (var entry in entries) {
-        try {
-          var data = SharedMapper.Deserialize<T>(entry.Data);
-          result.Add(data);
-        } catch (Exception ex) {
-          Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+        foreach (var entry in entries) {
+          try {
+            var data = SharedMapper.Deserialize<T>(entry.Data);
+            result.Add(data);
+          } catch (Exception ex) {
+            Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+          }
         }
-      }
 
-      return result;
+        return result;
+      }, "GetAll()");
     } catch (Exception ex) {
       Log.Error($"Failed to get all data: {ex.Message}");
       return new List<T>();
@@ -546,19 +664,21 @@ public class Database : IDisposable {
   /// <returns>Dictionary of key-value pairs</returns>
   public Dictionary<string, T> GetAllWithKeys<T>() {
     try {
-      var entries = _collection.Query().ToEnumerable();
-      var result = new Dictionary<string, T>();
+      return ExecuteWithRetry(() => {
+        var entries = _collection.Query().ToEnumerable();
+        var result = new Dictionary<string, T>();
 
-      foreach (var entry in entries) {
-        try {
-          var data = SharedMapper.Deserialize<T>(entry.Data);
-          result[entry.Id] = data;
-        } catch (Exception ex) {
-          Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+        foreach (var entry in entries) {
+          try {
+            var data = SharedMapper.Deserialize<T>(entry.Data);
+            result[entry.Id] = data;
+          } catch (Exception ex) {
+            Log.Warning($"Failed to deserialize data for key '{entry.Id}': {ex.Message}");
+          }
         }
-      }
 
-      return result;
+        return result;
+      }, "GetAllWithKeys()");
     } catch (Exception ex) {
       Log.Error($"Failed to get all data: {ex.Message}");
       return new Dictionary<string, T>();
@@ -569,24 +689,12 @@ public class Database : IDisposable {
   /// Performs a checkpoint to ensure all data is written to disk
   /// </summary>
   public void Checkpoint() {
-    const int maxRetries = 3;
-    const int delayMs = 100;
-
-    for (int i = 0; i < maxRetries; i++) {
-      try {
+    try {
+      ExecuteWithRetry(() => {
         _db.Checkpoint();
-        return;
-      } catch (IOException ex) when (ex.Message.Contains("being used by another process")) {
-        if (i < maxRetries - 1) {
-          Log.Warning($"Checkpoint retry {i + 1}/{maxRetries}: File is locked, waiting {delayMs}ms...");
-          System.Threading.Thread.Sleep(delayMs);
-        } else {
-          Log.Error($"Failed to perform checkpoint after {maxRetries} attempts: {ex.Message}");
-        }
-      } catch (Exception ex) {
-        Log.Error($"Failed to perform checkpoint: {ex.Message}");
-        return;
-      }
+      }, "Checkpoint()");
+    } catch (Exception ex) {
+      Log.Error($"Failed to perform checkpoint: {ex.Message}");
     }
   }
 
@@ -775,6 +883,7 @@ public class Database : IDisposable {
       DisableAutoBackup();
       Checkpoint();
       _db?.Dispose();
+      _dbSemaphore?.Dispose();
     } catch (Exception ex) {
       Log.Warning($"Error during database disposal: {ex.Message}");
     } finally {

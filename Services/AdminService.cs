@@ -17,7 +17,7 @@ public static class AdminService {
 
   internal static void Initialize() {
     EventManager.On(PlayerEvents.PlayerJoined, (PlayerData playerData) => {
-      if (playerData == null || Plugin.Database.Has($"auto_admin_{playerData.PlatformId}")) {
+      if (playerData == null || !Plugin.Database.Has($"auto_admin_{playerData.PlatformId}")) {
         return;
       }
 
@@ -31,9 +31,10 @@ public static class AdminService {
 
   [Command("autoadmin", Language.English, adminOnly: true)]
   internal static void AutoAdminCommand(CommandContext context) {
-    var autoAdmin = Plugin.Database.Get<bool>($"auto_admin_{context.Sender.PlatformId}");
+    var playerData = context.Sender;
+    var autoAdmin = Plugin.Database.Get<bool>($"auto_admin_{playerData.PlatformId}");
     autoAdmin = !autoAdmin;
-    Plugin.Database.Set($"auto_admin_{context.Sender.PlatformId}", autoAdmin);
+    Plugin.Database.Set($"auto_admin_{playerData.PlatformId}", autoAdmin);
     var status = autoAdmin ? "enabled" : "disabled";
     context.ReplySuccess($"Auto admin has been ~{status}~ for you.");
   }

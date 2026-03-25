@@ -101,6 +101,20 @@ public enum PrefixEvents {
 }
 
 /// <summary>
+/// Defines events related to player role assignment changes.
+/// </summary>
+public enum RoleEvents {
+  /// <summary>
+  /// Triggered when a role is added to a player.
+  /// </summary>
+  RoleAdded,
+  /// <summary>
+  /// Triggered when a role is removed from a player.
+  /// </summary>
+  RoleRemoved
+}
+
+/// <summary>
 /// Defines postfix events that occur after core game logic, allowing for post-processing or monitoring.
 /// </summary>
 public enum PostfixEvents {

@@ -6,7 +6,9 @@ using System.Linq;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
+using Il2CppInterop.Runtime;
 using ScarletCore.Utils;
 using ScarletCore.Events;
 
@@ -97,16 +99,28 @@ public class JsonDatabase {
     DisableAutoBackup();
   }
 
-  // Instance handler used for auto-backups. Using `async void` because the
-  // event system expects an `Action<string>` and this is fire-and-forget.
+  // Instance handler used for auto-backups.
+  // Runs on a dedicated Thread attached to the IL2CPP domain so the GC
+  // knows about it, avoiding the "Collecting from unknown thread" crash
+  // while still not blocking the main server thread.
   [EventPriority(EventPriority.Last)]
-  private async void AutoBackupHandler(string saveName) {
-    try {
-      saveName = saveName.Replace(".save", ""); // Remove extension if present
-      await CreateBackup(_autoBackupLocation, saveName);
-    } catch (Exception ex) {
-      Log.Error($"Auto-backup failed for '{_databaseName}': {ex.Message}");
-    }
+  private void AutoBackupHandler(string saveName) {
+    saveName = saveName.Replace(".save", ""); // Remove extension if present
+    var location = _autoBackupLocation;
+    var dbName = _databaseName;
+    var thread = new Thread(() => {
+      // Attach to the IL2CPP domain so the GC registers this thread
+      var domain = IL2CPP.il2cpp_domain_get();
+      IL2CPP.il2cpp_thread_attach(domain);
+      try {
+        CreateBackup(location, saveName);
+      } catch (Exception ex) {
+        Log.Error($"Auto-backup failed for '{dbName}': {ex.Message}");
+      }
+    }) {
+      IsBackground = true
+    };
+    thread.Start();
   }
 
   /// <summary>
@@ -427,68 +441,66 @@ public class JsonDatabase {
   /// <param name="backupLocation">Optional custom backup location. If null, saves to the BepInEx config directory</param>
   /// <param name="saveName">Optional save name to include in the backup filename</param>
   /// <returns>Task that returns the path to the created backup file, or null if backup failed</returns>
-  public async Task<string> CreateBackup(string backupLocation = null, string saveName = null) {
-    return await Task.Run(() => {
-      try {
-        var configPath = GetConfigPath();
+  public Task<string> CreateBackup(string backupLocation = null, string saveName = null) {
+    try {
+      var configPath = GetConfigPath();
 
-        // Check if the database folder exists and has files
-        if (!Directory.Exists(configPath)) {
-          Log.Warning($"Database folder '{configPath}' does not exist. No backup created.");
-          return null;
-        }
-
-        var files = Directory.GetFiles(configPath, "*", SearchOption.AllDirectories);
-        if (files.Length == 0) {
-          Log.Warning($"Database folder '{configPath}' is empty. No backup created.");
-          return null;
-        }
-
-        // Generate backup filename with timestamp and optional save name (sanitized)
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-        string safeSaveName = null;
-        if (!string.IsNullOrWhiteSpace(saveName)) {
-          // Replace invalid filename chars with underscore and collapse runs
-          var parts = saveName.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries);
-          safeSaveName = string.Join("_", parts);
-        }
-
-        var backupFileName = safeSaveName == null
-          ? $"{_databaseName}_backup_{timestamp}.zip"
-          : $"{_databaseName}_backup_{safeSaveName}_{timestamp}.zip";
-
-        // Determine backup location
-        var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath;
-        var backupFolderPath = Path.Combine(backupPath, $"{_databaseName} Backups");
-        var fullBackupPath = Path.Combine(backupFolderPath, backupFileName);
-
-        // Create backup directory if it doesn't exist
-        Directory.CreateDirectory(backupFolderPath);
-
-        // Clean up old backups before creating new one
-        CleanupOldBackups(backupFolderPath, _maxBackups);
-
-        // Save all cached data before creating backup
-        SaveAll();
-
-        // Create ZIP archive
-        using (var archive = ZipFile.Open(fullBackupPath, ZipArchiveMode.Create)) {
-          foreach (var file in files) {
-            // Calculate relative path within the database folder
-            var relativePath = Path.GetRelativePath(configPath, file);
-
-            // Add file to archive
-            archive.CreateEntryFromFile(file, relativePath);
-          }
-        }
-
-        Log.Message($"Database backup created successfully for '{_databaseName}'");
-        return fullBackupPath;
-      } catch (Exception ex) {
-        Log.Error($"Failed to create database backup: {ex.Message}");
-        return null;
+      // Check if the database folder exists and has files
+      if (!Directory.Exists(configPath)) {
+        Log.Warning($"Database folder '{configPath}' does not exist. No backup created.");
+        return Task.FromResult<string>(null);
       }
-    });
+
+      var files = Directory.GetFiles(configPath, "*", SearchOption.AllDirectories);
+      if (files.Length == 0) {
+        Log.Warning($"Database folder '{configPath}' is empty. No backup created.");
+        return Task.FromResult<string>(null);
+      }
+
+      // Generate backup filename with timestamp and optional save name (sanitized)
+      var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+      string safeSaveName = null;
+      if (!string.IsNullOrWhiteSpace(saveName)) {
+        // Replace invalid filename chars with underscore and collapse runs
+        var parts = saveName.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries);
+        safeSaveName = string.Join("_", parts);
+      }
+
+      var backupFileName = safeSaveName == null
+        ? $"{_databaseName}_backup_{timestamp}.zip"
+        : $"{_databaseName}_backup_{safeSaveName}_{timestamp}.zip";
+
+      // Determine backup location
+      var backupPath = backupLocation ?? BepInEx.Paths.ConfigPath;
+      var backupFolderPath = Path.Combine(backupPath, $"{_databaseName} Backups");
+      var fullBackupPath = Path.Combine(backupFolderPath, backupFileName);
+
+      // Create backup directory if it doesn't exist
+      Directory.CreateDirectory(backupFolderPath);
+
+      // Clean up old backups before creating new one
+      CleanupOldBackups(backupFolderPath, _maxBackups);
+
+      // Save all cached data before creating backup
+      SaveAll();
+
+      // Create ZIP archive
+      using (var archive = ZipFile.Open(fullBackupPath, ZipArchiveMode.Create)) {
+        foreach (var file in files) {
+          // Calculate relative path within the database folder
+          var relativePath = Path.GetRelativePath(configPath, file);
+
+          // Add file to archive
+          archive.CreateEntryFromFile(file, relativePath);
+        }
+      }
+
+      Log.Message($"Database backup created successfully for '{_databaseName}'");
+      return Task.FromResult(fullBackupPath);
+    } catch (Exception ex) {
+      Log.Error($"Failed to create database backup: {ex.Message}");
+      return Task.FromResult<string>(null);
+    }
   }
 
   /// <summary>
@@ -497,51 +509,49 @@ public class JsonDatabase {
   /// <param name="backupFilePath">Path to the backup ZIP file</param>
   /// <param name="clearExisting">If true, clears existing data before restoring</param>
   /// <returns>Task that returns true if restoration was successful</returns>
-  public async Task<bool> RestoreFromBackup(string backupFilePath, bool clearExisting = false) {
-    return await Task.Run(() => {
-      try {
-        if (!File.Exists(backupFilePath)) {
-          Log.Error($"Backup file not found: {backupFilePath}");
-          return false;
-        }
-
-        var configPath = GetConfigPath();
-
-        // Clear existing data if requested
-        if (clearExisting && Directory.Exists(configPath)) {
-          Directory.Delete(configPath, true);
-          ClearCache(); // Clear memory cache as well
-        }
-
-        // Create config directory if it doesn't exist
-        Directory.CreateDirectory(configPath);
-
-        // Extract backup
-        using (var archive = ZipFile.OpenRead(backupFilePath)) {
-          foreach (var entry in archive.Entries) {
-            // Skip directories
-            if (string.IsNullOrEmpty(entry.Name)) continue;
-
-            var destinationPath = Path.Combine(configPath, entry.FullName);
-
-            // Create directory if needed
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath));
-
-            // Extract file
-            entry.ExtractToFile(destinationPath, true);
-          }
-        }
-
-        // Clear cache to force reload of restored data
-        ClearCache();
-
-        Log.Message($"Database restored successfully from: {backupFilePath}");
-        return true;
-      } catch (Exception ex) {
-        Log.Error($"Failed to restore database from backup: {ex.Message}");
-        return false;
+  public Task<bool> RestoreFromBackup(string backupFilePath, bool clearExisting = false) {
+    try {
+      if (!File.Exists(backupFilePath)) {
+        Log.Error($"Backup file not found: {backupFilePath}");
+        return Task.FromResult(false);
       }
-    });
+
+      var configPath = GetConfigPath();
+
+      // Clear existing data if requested
+      if (clearExisting && Directory.Exists(configPath)) {
+        Directory.Delete(configPath, true);
+        ClearCache(); // Clear memory cache as well
+      }
+
+      // Create config directory if it doesn't exist
+      Directory.CreateDirectory(configPath);
+
+      // Extract backup
+      using (var archive = ZipFile.OpenRead(backupFilePath)) {
+        foreach (var entry in archive.Entries) {
+          // Skip directories
+          if (string.IsNullOrEmpty(entry.Name)) continue;
+
+          var destinationPath = Path.Combine(configPath, entry.FullName);
+
+          // Create directory if needed
+          Directory.CreateDirectory(Path.GetDirectoryName(destinationPath));
+
+          // Extract file
+          entry.ExtractToFile(destinationPath, true);
+        }
+      }
+
+      // Clear cache to force reload of restored data
+      ClearCache();
+
+      Log.Message($"Database restored successfully from: {backupFilePath}");
+      return Task.FromResult(true);
+    } catch (Exception ex) {
+      Log.Error($"Failed to restore database from backup: {ex.Message}");
+      return Task.FromResult(false);
+    }
   }
 
   /// <summary>

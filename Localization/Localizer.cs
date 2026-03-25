@@ -10,6 +10,7 @@ using Stunlock.Core;
 using ScarletCore.Events;
 using ProjectM;
 using ScarletCore.Services;
+using ScarletCore.Systems;
 
 namespace ScarletCore.Localization;
 
@@ -143,9 +144,37 @@ public static class Localizer {
       AutoLoadFromLocalizationFolder();
       LoadPrefabMapping();
       EventManager.On(PlayerEvents.PlayerJoined, CheckLanguageOnJoin);
+      ActionScheduler.Repeating(NotifyPlayersWithoutLanguage, 600f);
       Log.Message($"Localizer initialized with {_allTranslations.Count} translation keys and {_prefabToGuid.Count} prefab mappings");
     } catch (Exception ex) {
       Log.Error($"[Localizer] Failed to initialize LocalizationService: {ex}");
+    }
+  }
+
+  internal static void NotifyPlayersWithoutLanguage() {
+    try {
+      if (Plugin.Settings.Get<bool>("DisableLanguageSelectionPrompt")) return;
+
+      var reminderMessage = Plugin.Settings.Get<string>("LanguageReminderMessage");
+      var serverName = SettingsManager.ServerHostSettings.Name ?? "the Server";
+      var availableLanguages = string.Join(", ", AvailableServerLanguages);
+
+      foreach (var player in PlayerService.AllPlayers) {
+        if (!player.IsOnline) continue;
+        if (GetPlayerLanguage(player) != Language.None) continue;
+
+        var personalizedMessage = reminderMessage
+          .Replace("{ServerName}", serverName)
+          .Replace("{AvailableLanguages}", availableLanguages.WithColor("#ffd93d"))
+          .Replace("{PlayerName}", player.Name);
+
+        var messages = personalizedMessage.Split("\n");
+        foreach (var line in messages) {
+          player.SendMessage(line.Trim());
+        }
+      }
+    } catch (Exception ex) {
+      Log.Error($"[Localizer] NotifyPlayersWithoutLanguage failed: {ex}");
     }
   }
 
