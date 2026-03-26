@@ -3,11 +3,10 @@ using System.Linq;
 using Unity.Entities;
 using ProjectM.Scripting;
 using ProjectM;
-using ProjectM.CastleBuilding;
 using ScarletCore.Services;
 using ProjectM.Network;
 using ScarletCore.Events;
-using UnityEngine;
+using ScarletCore.Interface;
 using ScarletCore.Localization;
 
 namespace ScarletCore.Systems;
@@ -228,6 +227,7 @@ public static class GameSystems {
     MapService.Initialize();
     PlayerService.Initialize();
     AdminService.Initialize();
+    PacketManager.Initialize();
     ActionScheduler.Repeating(Localizer.NotifyPlayersWithoutLanguage, 600f);
   }
 

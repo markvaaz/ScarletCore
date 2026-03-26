@@ -1,0 +1,583 @@
+﻿using System.Collections.Generic;
+using System.Globalization;
+using ScarletCore.Services;
+using ScarletCore.Interface.Models;
+
+namespace ScarletCore.Interface.Builders;
+
+/// <summary>Fluent builder for constructing and sending ScarletInterface UI packets to players.</summary>
+public class WindowBuilder {
+  readonly string _plugin;
+  readonly PlayerData _player; // null = send to all
+  string _windowId;
+  int _rowCounter;
+  // Per-row element counters so ElemId is stable across sends
+  readonly Dictionary<string, int> _elemCounters = new();
+  readonly Queue<ScarletPacket> _queue = new();
+  WindowAction _pendingAction = WindowAction.None;
+  string _lastElemId;
+
+  internal WindowBuilder(string plugin, PlayerData player = null) {
+    _plugin = plugin;
+    _player = player;
+  }
+
+  /// <summary>Sets the target window ID. Must be called before adding elements.</summary>
+  public WindowBuilder Window(string id) {
+    _windowId = id;
+    _rowCounter = 0;
+    _elemCounters.Clear();
+    return this;
+  }
+
+  // Internal: returns a monotonically-increasing element id for the given parent scope.
+  internal string NextElemId(string scope) {
+    _elemCounters.TryGetValue(scope, out int c);
+    _elemCounters[scope] = c + 1;
+    _lastElemId = $"{scope}_e{c}";
+    return _lastElemId;
+  }
+
+  // Window configuration
+  /// <summary>
+  /// Configures the window's layout and visual properties. Call before adding elements
+  /// to set the target window size, position, and appearance for subsequent packets.
+  /// </summary>
+  /// <param name="width">Window width (pixels or percentage string).</param>
+  /// <param name="height">Window height (pixels or percentage string).</param>
+  /// <param name="backgroundColor">Window background color.</param>
+  /// <param name="anchor">Parent anchor used to position the window.</param>
+  /// <param name="pivot">Internal pivot of the window (overrides default placement).</param>
+  /// <param name="x">X offset relative to the <paramref name="anchor"/>.</param>
+  /// <param name="y">Y offset relative to the <paramref name="anchor"/>.</param>
+  /// <param name="border">Optional border around the window.</param>
+  /// <param name="padding">Inner spacing between the border and child content.</param>
+  /// <param name="gap">Gap in pixels between rows inside the window.</param>
+  /// <param name="overflow">How overflowing child content is handled.</param>
+  /// <param name="scrollbarColor">Scrollbar thumb color.</param>
+  /// <param name="scrollbarBackgroundColor">Scrollbar track color.</param>
+  /// <param name="scrollbarWidth">Scrollbar width in pixels.</param>
+  /// <param name="draggable">Whether the player can drag the window.</param>
+  /// <param name="transparent">If true, renders the window background transparent.</param>
+  /// <param name="backgroundGradient">Optional background gradient string.</param>
+  /// <param name="nativeParent">Optional native UI parent identifier to attach to.</param>
+  public WindowBuilder SetWindow(
+    Position width = default, Position height = default,
+    UIColor? backgroundColor = null,
+    Anchor anchor = Anchor.MiddleCenter,
+    Pivot? pivot = null,
+    Position x = default, Position y = default,
+    Border? border = null,
+    Spacing? padding = null,
+    float gap = 0f,
+    OverflowMode overflow = OverflowMode.Visible,
+    UIColor? scrollbarColor = null,
+    UIColor? scrollbarBackgroundColor = null,
+    float scrollbarWidth = 8f,
+    bool draggable = true,
+    bool transparent = false,
+    UIGradient backgroundGradient = default,
+    string nativeParent = null) {
+    // Reset element counters when configuring a new window layout
+    _rowCounter = 0;
+    _elemCounters.Clear();
+    var data = new Dictionary<string, string> {
+      ["Anchor"] = anchor.ToString(),
+      ["Draggable"] = draggable.ToString().ToLower(),
+      ["Transparent"] = transparent.ToString().ToLower(),
+      ["Overflow"] = overflow.ToString(),
+    };
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
+    if (x.HasValue) data["PosX"] = x.Raw;
+    if (y.HasValue) data["PosY"] = y.Raw;
+    if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Padding", padding);
+    if (gap > 0f) data["Gap"] = gap.ToString(CultureInfo.InvariantCulture);
+    if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
+    if (scrollbarColor.HasValue) data["ScrollbarColor"] = scrollbarColor.Value;
+    if (scrollbarBackgroundColor.HasValue) data["ScrollbarBgColor"] = scrollbarBackgroundColor.Value;
+    if (scrollbarWidth != 8f) data["ScrollbarWidth"] = scrollbarWidth.ToString(CultureInfo.InvariantCulture);
+    if (nativeParent != null) data["NativeParent"] = nativeParent;
+    return Enqueue("SetWindow", data);
+  }
+
+  // Row
+  /// <summary>Adds a new horizontal row container to the window and returns a <see cref="RowBuilder"/> for populating it.</summary>
+  /// <param name="width">Row width (pixels or percentage string).</param>
+  /// <param name="height">Row height (pixels or percentage string).</param>
+  /// <param name="background">Optional background color for the row.</param>
+  /// <param name="anchor">If set, anchors the row to a parent point and allows position offsets.</param>
+  /// <param name="x">X offset when <paramref name="anchor"/> is provided.</param>
+  /// <param name="y">Y offset when <paramref name="anchor"/> is provided.</param>
+  /// <param name="pivot">Optional pivot for the row when anchored.</param>
+  /// <param name="border">Optional border around the row.</param>
+  /// <param name="padding">Inner spacing for the row's children.</param>
+  /// <param name="margin">Outer spacing around the row.</param>
+  /// <param name="gap">Gap between child elements inside the row.</param>
+  /// <param name="justifyContent">Horizontal distribution of row children.</param>
+  /// <param name="alignItems">Vertical alignment of row children.</param>
+  /// <param name="overflow">How overflowing content is handled for this row.</param>
+  /// <param name="scrollbarColor">Scrollbar thumb color for overflowed rows.</param>
+  /// <param name="scrollbarBackgroundColor">Scrollbar track color for overflowed rows.</param>
+  /// <param name="scrollbarWidth">Scrollbar width in pixels.</param>
+  public RowBuilder AddRow(
+    Position width = default, Position height = default,
+    UIColor? background = null,
+    Anchor? anchor = null,
+    Position x = default, Position y = default,
+    Pivot? pivot = null,
+    Border? border = null,
+    Spacing? padding = null,
+    Spacing? margin = null,
+    float gap = 0f,
+    JustifyContent justifyContent = JustifyContent.Start,
+    AlignItems alignItems = AlignItems.Start,
+    OverflowMode overflow = OverflowMode.Visible,
+    UIColor? scrollbarColor = null,
+    UIColor? scrollbarBackgroundColor = null,
+    float scrollbarWidth = 8f) {
+    string rowId = $"row_{_rowCounter++}";
+    _elemCounters[rowId] = 0; // initialize element counter for this row
+    var data = new Dictionary<string, string> {
+      ["RowId"] = rowId,
+      ["JustifyContent"] = justifyContent.ToString(),
+      ["AlignItems"] = alignItems.ToString(),
+      ["Overflow"] = overflow.ToString(),
+    };
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    if (background.HasValue) data["Background"] = background.Value;
+    if (anchor.HasValue) {
+      data["Anchor"] = anchor.Value.ToString();
+      if (x.HasValue) data["PosX"] = x.Raw;
+      if (y.HasValue) data["PosY"] = y.Raw;
+      if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
+    }
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Padding", padding);
+    ApplySpacing(data, "Margin", margin);
+    if (gap > 0f) data["Gap"] = gap.ToString(CultureInfo.InvariantCulture);
+    if (scrollbarColor.HasValue) data["ScrollbarColor"] = scrollbarColor.Value;
+    if (scrollbarBackgroundColor.HasValue) data["ScrollbarBgColor"] = scrollbarBackgroundColor.Value;
+    if (scrollbarWidth != 8f) data["ScrollbarWidth"] = scrollbarWidth.ToString(CultureInfo.InvariantCulture);
+    data["ElemId"] = rowId; // row's own ElemId equals its RowId
+    Enqueue("AddRow", data);
+    return new RowBuilder(this, rowId);
+  }
+
+  // Accordion
+  /// <summary>
+  /// Adds a collapsible accordion element. The header is always visible; clicking it toggles
+  /// the content area client-side with no server round-trip.
+  /// Use the returned <see cref="AccordionBuilder"/> to populate the content, then call
+  /// <see cref="AccordionBuilder.Done"/> to return here.
+  /// </summary>
+  public AccordionBuilder AddAccordion(
+      string title,
+      bool expanded = false,
+      Position width = default,
+      UIColor? headerBackgroundColor = null,
+      UIColor? headerTextColor = null,
+      UIColor? chevronColor = null,
+      UIColor? contentBackgroundColor = null,
+      float headerHeight = 32f,
+      float fontSize = 0f,
+      Border? border = null,
+      Spacing? padding = null,
+      float gap = 0f,
+      string chevronIcon = null,
+      bool showChevron = true) {
+    string accordionId = $"accordion_{_rowCounter++}";
+    _elemCounters[accordionId] = 0;
+    var data = new Dictionary<string, string> {
+      ["AccordionId"] = accordionId,
+      ["Title"] = title ?? string.Empty,
+      ["Expanded"] = expanded.ToString().ToLower(),
+      ["HeaderHeight"] = headerHeight.ToString(CultureInfo.InvariantCulture),
+      ["ElemId"] = accordionId,
+    };
+    if (width.HasValue) data["W"] = width.Raw;
+    if (headerBackgroundColor.HasValue) data["HeaderBgColor"] = headerBackgroundColor.Value;
+    if (headerTextColor.HasValue) data["HeaderTextColor"] = headerTextColor.Value;
+    if (chevronColor.HasValue) data["ChevronColor"] = chevronColor.Value;
+    if (chevronIcon != null) data["ChevronIcon"] = chevronIcon;
+    if (!showChevron) data["ShowChevron"] = "false";
+    if (contentBackgroundColor.HasValue) data["ContentBgColor"] = contentBackgroundColor.Value;
+    if (fontSize > 0f) data["FontSize"] = fontSize.ToString(CultureInfo.InvariantCulture);
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Padding", padding);
+    if (gap > 0f) data["Gap"] = gap.ToString(CultureInfo.InvariantCulture);
+    Enqueue("AddAccordion", data);
+    return new AccordionBuilder(this, accordionId);
+  }
+
+  // Standalone elements
+  /// <summary>Adds a standalone text element positioned relative to the window.</summary>
+  /// <param name="text">The text content to display (supports inline icons).</param>
+  /// <param name="width">Element width (pixels or percentage string).</param>
+  /// <param name="height">Element height (pixels or percentage string).</param>
+  /// <param name="color">Text color.</param>
+  /// <param name="backgroundColor">Background color behind the text.</param>
+  /// <param name="fontSize">Font size in pixels. 0 = inherit from window default.</param>
+  /// <param name="anchor">Anchor point on the parent used to position the element.</param>
+  /// <param name="x">X offset relative to the anchor.</param>
+  /// <param name="y">Y offset relative to the anchor.</param>
+  /// <param name="pivot">Element pivot controlling internal origin.</param>
+  /// <param name="border">Optional border around the text element.</param>
+  /// <param name="padding">Inner spacing between border and text.</param>
+  /// <param name="margin">Outer spacing around the element.</param>
+  /// <param name="textAlign">Horizontal text alignment.</param>
+  /// <param name="wrap">If true, wraps text to multiple lines when it exceeds width.</param>
+  /// <param name="backgroundGradient">Optional background gradient.</param>
+  public WindowBuilder AddText(string text,
+    Position width = default, Position height = default,
+    UIColor? color = null, UIColor? backgroundColor = null,
+    float fontSize = 0,
+    Anchor anchor = Anchor.TopLeft,
+    Position x = default, Position y = default,
+    Pivot? pivot = null,
+    Border? border = null,
+    Spacing? padding = null,
+    Spacing? margin = null,
+    TextAlignment textAlign = TextAlignment.Left,
+    bool wrap = false,
+    UIGradient backgroundGradient = default) {
+    var data = new Dictionary<string, string> {
+      ["Text"] = text,
+      ["Anchor"] = anchor.ToString(),
+      ["ElemId"] = NextElemId("_sa"),
+    };
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    if (x.HasValue) data["PosX"] = x.Raw;
+    if (y.HasValue) data["PosY"] = y.Raw;
+    if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
+    if (color.HasValue) data["Color"] = color.Value;
+    if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    if (fontSize > 0) data["FontSize"] = fontSize.ToString(CultureInfo.InvariantCulture);
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Padding", padding);
+    ApplySpacing(data, "Margin", margin);
+    if (textAlign != TextAlignment.Left) data["TextAlign"] = textAlign.ToString();
+    if (wrap) data["Wrap"] = "true";
+    if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
+    return Enqueue("AddText", data);
+  }
+
+  /// <summary>Adds a standalone button positioned relative to the window.</summary>
+  /// <param name="text">Button label text.</param>
+  /// <param name="cmd">Chat command sent when the button is clicked.</param>
+  /// <param name="width">Button width (pixels or percentage string).</param>
+  /// <param name="height">Button height (pixels or percentage string).</param>
+  /// <param name="backgroundColor">Background color for the button.</param>
+  /// <param name="textColor">Label color for the button.</param>
+  /// <param name="fontSize">Font size in pixels. 0 = inherit from window default.</param>
+  /// <param name="anchor">Anchor point on the parent used to position the element.</param>
+  /// <param name="x">X offset relative to the anchor.</param>
+  /// <param name="y">Y offset relative to the anchor.</param>
+  /// <param name="pivot">Element pivot controlling internal origin.</param>
+  /// <param name="border">Optional border around the button.</param>
+  /// <param name="padding">Inner spacing between border and label.</param>
+  /// <param name="margin">Outer spacing around the button.</param>
+  /// <param name="boxSizing">Whether padding is included in the declared size.</param>
+  /// <param name="backgroundGradient">Optional background gradient.</param>
+  public WindowBuilder AddButton(string text, string cmd,
+    Position width = default, Position height = default,
+    UIColor? backgroundColor = null, UIColor? textColor = null,
+    float fontSize = 0,
+    Anchor anchor = Anchor.TopLeft,
+    Position x = default, Position y = default,
+    Pivot? pivot = null,
+    Border? border = null,
+    Spacing? padding = null,
+    Spacing? margin = null,
+    BoxSizing boxSizing = BoxSizing.ContentBox,
+    UIGradient backgroundGradient = default) {
+    var data = new Dictionary<string, string> {
+      ["Text"] = text,
+      ["Cmd"] = cmd ?? string.Empty,
+      ["Anchor"] = anchor.ToString(),
+      ["ElemId"] = NextElemId("_sa"),
+    };
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    if (x.HasValue) data["PosX"] = x.Raw;
+    if (y.HasValue) data["PosY"] = y.Raw;
+    if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
+    if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    if (textColor.HasValue) data["TextColor"] = textColor.Value;
+    if (fontSize > 0) data["FontSize"] = fontSize.ToString(CultureInfo.InvariantCulture);
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Padding", padding);
+    ApplySpacing(data, "Margin", margin);
+    if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
+    if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
+    return Enqueue("AddButton", data);
+  }
+
+  /// <summary>
+  /// Adds a standalone input field positioned relative to the window. On submit, the
+  /// configured <paramref name="cmd"/> is sent with the <paramref name="id"/> token
+  /// replaced by the typed value.
+  /// </summary>
+  /// <param name="id">Unique identifier used as a placeholder token in <paramref name="cmd"/>.</param>
+  /// <param name="placeholder">Placeholder hint text shown when empty.</param>
+  /// <param name="cmd">Chat command template sent on submit (use <c>{id}</c> token).</param>
+  /// <param name="width">Input width (pixels or percentage string).</param>
+  /// <param name="height">Input height (pixels or percentage string).</param>
+  /// <param name="backgroundColor">Input background color.</param>
+  /// <param name="textColor">Typed text color.</param>
+  /// <param name="placeholderColor">Placeholder text color.</param>
+  /// <param name="fontSize">Font size in pixels. 0 = inherit from window default.</param>
+  /// <param name="anchor">Anchor point on the parent used to position the element.</param>
+  /// <param name="x">X offset relative to the anchor.</param>
+  /// <param name="y">Y offset relative to the anchor.</param>
+  /// <param name="pivot">Element pivot controlling internal origin.</param>
+  /// <param name="border">Optional border around the input.</param>
+  /// <param name="padding">Inner spacing between border and text.</param>
+  /// <param name="margin">Outer spacing around the input.</param>
+  /// <param name="boxSizing">Whether padding is included in the declared size.</param>
+  /// <param name="value">Optional pre-filled value.</param>
+  public WindowBuilder AddInput(string id, string placeholder, string cmd,
+    Position width = default, Position height = default,
+    UIColor? backgroundColor = null, UIColor? textColor = null,
+    UIColor? placeholderColor = null,
+    float fontSize = 0,
+    Anchor anchor = Anchor.TopLeft,
+    Position x = default, Position y = default,
+    Pivot? pivot = null,
+    Border? border = null,
+    Spacing? padding = null,
+    Spacing? margin = null,
+    BoxSizing boxSizing = BoxSizing.ContentBox,
+    string value = null) {
+    var data = new Dictionary<string, string> {
+      ["Id"] = id ?? string.Empty,
+      ["Placeholder"] = placeholder ?? string.Empty,
+      ["Cmd"] = cmd ?? string.Empty,
+      ["Anchor"] = anchor.ToString(),
+      ["ElemId"] = NextElemId("_sa"),
+    };
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    if (x.HasValue) data["PosX"] = x.Raw;
+    if (y.HasValue) data["PosY"] = y.Raw;
+    if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
+    if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    if (textColor.HasValue) data["TextColor"] = textColor.Value;
+    if (placeholderColor.HasValue) data["PlaceholderColor"] = placeholderColor.Value;
+    if (fontSize > 0) data["FontSize"] = fontSize.ToString(CultureInfo.InvariantCulture);
+    if (value != null) data["Value"] = value;
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Padding", padding);
+    ApplySpacing(data, "Margin", margin);
+    if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
+    return Enqueue("AddInput", data);
+  }
+
+  /// <summary>Adds a standalone horizontal progress bar positioned relative to the window.</summary>
+  /// <param name="value">Current progress value.</param>
+  /// <param name="min">Minimum of the value range.</param>
+  /// <param name="max">Maximum of the value range.</param>
+  /// <param name="width">Bar width (pixels or percentage string).</param>
+  /// <param name="height">Bar height (pixels or percentage string).</param>
+  /// <param name="barColor">Fill color for the progress portion.</param>
+  /// <param name="backgroundColor">Track/background color.</param>
+  /// <param name="anchor">Anchor point on the parent used to position the element.</param>
+  /// <param name="x">X offset relative to the anchor.</param>
+  /// <param name="y">Y offset relative to the anchor.</param>
+  /// <param name="pivot">Element pivot controlling internal origin.</param>
+  /// <param name="border">Optional border around the progress bar.</param>
+  /// <param name="margin">Outer spacing around the bar.</param>
+  public WindowBuilder AddProgressBar(float value, float min = 0f, float max = 100f,
+    Position width = default, Position height = default,
+    UIColor? barColor = null, UIColor? backgroundColor = null,
+    Anchor anchor = Anchor.TopLeft,
+    Position x = default, Position y = default,
+    Pivot? pivot = null,
+    Border? border = null,
+    Spacing? margin = null) {
+    var data = new Dictionary<string, string> {
+      ["Value"] = value.ToString(CultureInfo.InvariantCulture),
+      ["Min"] = min.ToString(CultureInfo.InvariantCulture),
+      ["Max"] = max.ToString(CultureInfo.InvariantCulture),
+      ["Anchor"] = anchor.ToString(),
+      ["ElemId"] = NextElemId("_sa"),
+    };
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    if (x.HasValue) data["PosX"] = x.Raw;
+    if (y.HasValue) data["PosY"] = y.Raw;
+    if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
+    if (barColor.HasValue) data["BarColor"] = barColor.Value;
+    if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Margin", margin);
+    return Enqueue("AddProgressBar", data);
+  }
+
+  /// <summary>
+  /// Adds an image element loaded from a URL (external or local server endpoint).
+  /// The client will fetch and render the image inside the UI.
+  /// </summary>
+  /// <param name="src">HTTP/HTTPS URL of the image to load.</param>
+  /// <param name="width">Image width (pixels or percentage string). Default: auto.</param>
+  /// <param name="height">Image height (pixels or percentage string). Default: auto.</param>
+  /// <param name="backgroundColor">Color displayed while the image is loading.</param>
+  /// <param name="anchor">Anchor point on the parent used to position the element.</param>
+  /// <param name="x">X offset relative to the anchor.</param>
+  /// <param name="y">Y offset relative to the anchor.</param>
+  /// <param name="pivot">Element pivot controlling internal origin.</param>
+  /// <param name="fit">How the image fits into the bounds (<see cref="ImageFit"/>).</param>
+  /// <param name="border">Optional border around the image.</param>
+  /// <param name="margin">Outer spacing around the image.</param>
+  public WindowBuilder AddImage(string src,
+    Position width = default, Position height = default,
+    UIColor? backgroundColor = null,
+    Anchor anchor = Anchor.TopLeft,
+    Position x = default, Position y = default,
+    Pivot? pivot = null,
+    ImageFit fit = ImageFit.Stretch,
+    Border? border = null,
+    Spacing? margin = null) {
+    var data = new Dictionary<string, string> {
+      ["Src"] = src ?? string.Empty,
+      ["Fit"] = fit.ToString(),
+      ["Anchor"] = anchor.ToString(),
+      ["ElemId"] = NextElemId("_sa"),
+    };
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    if (x.HasValue) data["PosX"] = x.Raw;
+    if (y.HasValue) data["PosY"] = y.Raw;
+    if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
+    if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Margin", margin);
+    return Enqueue("AddImage", data);
+  }
+
+  /// <summary>
+  /// Adds a pre-styled close button (×) that closes the window when clicked.
+  ///</summary>
+  /// <param name="backgroundColor">Button background color.</param>
+  /// <param name="textColor">Color of the × icon.</param>
+  /// <param name="padding">Inner spacing between the × icon and the button edge.</param>
+  /// <param name="fontSize">Font size in pixels. 0 = inherit from window default.</param>
+  /// <param name="anchor">Anchor point on the parent used to position the element.</param>
+  /// <param name="x">X offset relative to the anchor.</param>
+  /// <param name="y">Y offset relative to the anchor.</param>
+  /// <param name="pivot">Element pivot controlling internal origin.</param>
+  /// <param name="border">Optional border around the close button.</param>
+  /// <param name="margin">Outer spacing around the close button.</param>
+  public WindowBuilder AddCloseButton(
+    UIColor? backgroundColor = null, UIColor? textColor = null,
+    Spacing? padding = null, float fontSize = 0,
+    Anchor anchor = Anchor.TopRight,
+    Position x = default, Position y = default,
+    Pivot? pivot = null,
+    Border? border = null,
+    Spacing? margin = null) {
+    var data = new Dictionary<string, string> {
+      ["Anchor"] = anchor.ToString(),
+      ["ElemId"] = NextElemId("_sa"),
+    };
+    if (x.HasValue) data["PosX"] = x.Raw;
+    if (y.HasValue) data["PosY"] = y.Raw;
+    if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
+    if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    if (textColor.HasValue) data["TextColor"] = textColor.Value;
+    ApplySpacing(data, "Padding", padding);
+    if (fontSize > 0) data["FontSize"] = fontSize.ToString(CultureInfo.InvariantCulture);
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Margin", margin);
+    return Enqueue("AddCloseButton", data);
+  }
+
+  // Window control — these set a flag; the action packet is always sent LAST by Send(),
+  // regardless of call order. Use Send(WindowAction) to pass the action inline.
+  /// <summary>Mark the window to be opened when <see cref="Send"/> is called.</summary>
+  public WindowBuilder Open() { _pendingAction = WindowAction.Open; return this; }
+  /// <summary>Mark the window to be closed when <see cref="Send"/> is called.</summary>
+  public WindowBuilder Close() { _pendingAction = WindowAction.Close; return this; }
+  /// <summary>Mark the window to be cleared (remove elements) when <see cref="Send"/> is called.</summary>
+  public WindowBuilder Clear() { _pendingAction = WindowAction.Clear; return this; }
+  /// <summary>Mark the window to be reset (destroy and recreate) when <see cref="Send"/> is called.</summary>
+  public WindowBuilder Reset() { _pendingAction = WindowAction.Reset; return this; }
+
+  /// <summary>
+  /// Sends all queued element packets, then the lifecycle action packet (if any).
+  /// Pass <paramref name="action"/> to specify the action inline — it takes precedence over
+  /// any prior <see cref="Open"/>, <see cref="Close"/>, <see cref="Clear"/>, or <see cref="Reset"/> call.
+  /// </summary>
+  /// <param name="action">Optional action to perform on the window after sending elements.</param>
+  public void Send(WindowAction action = WindowAction.None) {
+    // Caller-supplied action wins; fall back to fluent flag.
+    var resolved = action != WindowAction.None ? action : _pendingAction;
+
+    // Send all element packets first (order guaranteed).
+    while (_queue.Count > 0) {
+      var packet = _queue.Dequeue();
+      if (_player != null) PacketManager.SendPacket(_player, packet);
+      else PacketManager.SendPacketToAll(packet);
+    }
+
+    // Action packet last � always after every element.
+    if (resolved != WindowAction.None) {
+      string typeName = resolved.ToString(); // "Open", "Close", etc.
+      var actionPacket = new ScarletPacket {
+        Type = typeName, Plugin = _plugin, Window = _windowId ?? string.Empty, Data = [],
+      };
+      if (_player != null) PacketManager.SendPacket(_player, actionPacket);
+      else PacketManager.SendPacketToAll(actionPacket);
+    }
+
+    _pendingAction = WindowAction.None;
+  }
+
+  // Internal
+  internal void EnqueuePacket(string type, Dictionary<string, string> data) =>
+    Enqueue(type, data);
+
+  /// <summary>
+  /// Attaches a tooltip to the last-added element. The tooltip is an existing window identified by
+  /// <paramref name="tooltipWindowId"/> that is shown on hover and hidden when the mouse leaves.
+  /// </summary>
+  /// <param name="tooltipWindowId">ID of the window to show as tooltip.</param>
+  public WindowBuilder WithTooltip(string tooltipWindowId) {
+    if (string.IsNullOrEmpty(_lastElemId)) return this;
+    var data = new Dictionary<string, string> {
+      ["TargetElemId"] = _lastElemId,
+      ["TooltipWindowId"] = tooltipWindowId ?? string.Empty,
+    };
+    return Enqueue("AddTooltip", data);
+  }
+
+  WindowBuilder Enqueue(string type, Dictionary<string, string> data) {
+    _queue.Enqueue(new ScarletPacket {
+      Type = type,
+      Plugin = _plugin,
+      Window = _windowId ?? string.Empty,
+      Data = data,
+    });
+    return this;
+  }
+
+  static void ApplyBorder(Dictionary<string, string> data, Border? border) {
+    if (!border.HasValue) return;
+    data["BorderColor"] = border.Value.Color;
+    data["BorderWidth"] = border.Value.Width.ToString(CultureInfo.InvariantCulture);
+    data["BorderRadius"] = border.Value.Radius.ToString(CultureInfo.InvariantCulture);
+  }
+
+  static void ApplySpacing(Dictionary<string, string> data, string prefix, Spacing? spacing) {
+    if (!spacing.HasValue) return;
+    data[$"{prefix}Top"] = spacing.Value.Top.ToString(CultureInfo.InvariantCulture);
+    data[$"{prefix}Right"] = spacing.Value.Right.ToString(CultureInfo.InvariantCulture);
+    data[$"{prefix}Bottom"] = spacing.Value.Bottom.ToString(CultureInfo.InvariantCulture);
+    data[$"{prefix}Left"] = spacing.Value.Left.ToString(CultureInfo.InvariantCulture);
+  }
+}

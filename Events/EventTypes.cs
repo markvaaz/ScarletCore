@@ -55,7 +55,11 @@ public enum PlayerEvents {
   /// <summary>
   /// Triggered when a player's character is renamed.
   /// </summary>
-  CharacterRenamed
+  CharacterRenamed,
+  /// <summary>
+  /// Triggered when a player's ScarletInterface client authenticates with the server.
+  /// </summary>
+  InterfaceAuth
 }
 
 /// <summary>
