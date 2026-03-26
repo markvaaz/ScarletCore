@@ -225,6 +225,64 @@ public sealed class RowBuilder {
     return Enqueue("AddCloseButton", data);
   }
 
+  /// <summary>
+  /// Adds a dropdown selector to this row. On selection, sends <paramref name="cmd"/> with
+  /// <c>{<paramref name="id"/>}</c> resolved to the chosen value.
+  /// </summary>
+  /// <param name="id">Unique identifier used as the placeholder token in <paramref name="cmd"/>.</param>
+  /// <param name="options">Pipe-separated option pairs: <c>"Label A:val1|Label B:val2"</c>. If no colon, label equals value.</param>
+  /// <param name="cmd">Chat command template sent on selection. <c>{id}</c> is replaced with the selected value.</param>
+  /// <param name="width">Dropdown header width (pixels or percentage string). Default: 150.</param>
+  /// <param name="height">Dropdown header height (pixels or percentage string). Default: 30.</param>
+  /// <param name="backgroundColor">Header background color.</param>
+  /// <param name="textColor">Header label color.</param>
+  /// <param name="dropdownBackgroundColor">Popup panel background color.</param>
+  /// <param name="dropdownTextColor">Option label color inside the popup.</param>
+  /// <param name="dropdownHoverColor">Option highlight color on hover.</param>
+  /// <param name="maxHeight">Maximum popup panel height in pixels before scrolling. Default: 200.</param>
+  /// <param name="fontSize">Font size in pixels. 0 = inherit from window default.</param>
+  /// <param name="border">Optional border around the header.</param>
+  /// <param name="padding">Inner spacing between header border and label.</param>
+  /// <param name="margin">Outer spacing around the header.</param>
+  /// <param name="boxSizing">Whether padding is included in or added to the declared size.</param>
+  /// <param name="placeholder">Text shown when no value is selected.</param>
+  /// <param name="value">Pre-selected value. Default: empty (shows placeholder).</param>
+  public RowBuilder AddDropdown(string id, string options, string cmd,
+      Position width = default, Position height = default,
+      UIColor? backgroundColor = null, UIColor? textColor = null,
+      UIColor? dropdownBackgroundColor = null, UIColor? dropdownTextColor = null,
+      UIColor? dropdownHoverColor = null,
+      float maxHeight = 200f,
+      float fontSize = 0,
+      Border? border = null,
+      Spacing? padding = null,
+      Spacing? margin = null,
+      BoxSizing boxSizing = BoxSizing.ContentBox,
+      string placeholder = "Select...",
+      string value = null) {
+    var data = StartData();
+    data["Id"] = id ?? string.Empty;
+    data["Options"] = options ?? string.Empty;
+    data["Cmd"] = cmd ?? string.Empty;
+    data["ElemId"] = _window.NextElemId(_rowId);
+    data["Placeholder"] = placeholder ?? "Select...";
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    if (textColor.HasValue) data["TextColor"] = textColor.Value;
+    if (dropdownBackgroundColor.HasValue) data["DropdownBgColor"] = dropdownBackgroundColor.Value;
+    if (dropdownTextColor.HasValue) data["DropdownTextColor"] = dropdownTextColor.Value;
+    if (dropdownHoverColor.HasValue) data["DropdownHoverColor"] = dropdownHoverColor.Value;
+    if (maxHeight != 200f) data["MaxH"] = maxHeight.ToString(CultureInfo.InvariantCulture);
+    if (fontSize > 0) data["FontSize"] = fontSize.ToString(CultureInfo.InvariantCulture);
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Padding", padding);
+    ApplySpacing(data, "Margin", margin);
+    if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
+    if (value != null) data["Value"] = value;
+    return Enqueue("AddDropdown", data);
+  }
+
   // ─── Tooltip ─────────────────────────────────────────────────────────────
 
   /// <summary>

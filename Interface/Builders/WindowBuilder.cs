@@ -378,6 +378,76 @@ public class WindowBuilder {
     return Enqueue("AddInput", data);
   }
 
+  /// <summary>
+  /// Adds a standalone dropdown selector positioned relative to the window. On selection,
+  /// <paramref name="cmd"/> is sent with <c>{<paramref name="id"/>}</c> resolved to the chosen value.
+  /// </summary>
+  /// <param name="id">Unique identifier used as the placeholder token in <paramref name="cmd"/>.</param>
+  /// <param name="options">Pipe-separated option pairs: <c>"Label A:val1|Label B:val2"</c>. If no colon, label equals value.</param>
+  /// <param name="cmd">Chat command sent on selection. <c>{id}</c> is replaced with the selected value.</param>
+  /// <param name="width">Dropdown header width.</param>
+  /// <param name="height">Dropdown header height.</param>
+  /// <param name="backgroundColor">Header background color.</param>
+  /// <param name="textColor">Header label color.</param>
+  /// <param name="dropdownBackgroundColor">Popup panel background color.</param>
+  /// <param name="dropdownTextColor">Option label color inside the popup.</param>
+  /// <param name="dropdownHoverColor">Option highlight color on hover.</param>
+  /// <param name="maxHeight">Maximum popup panel height before scrolling. Default: 200.</param>
+  /// <param name="fontSize">Font size in pixels. 0 = inherit from window default.</param>
+  /// <param name="anchor">Anchor point on the parent used to position the element.</param>
+  /// <param name="x">X offset relative to the anchor.</param>
+  /// <param name="y">Y offset relative to the anchor.</param>
+  /// <param name="pivot">Element pivot controlling internal origin.</param>
+  /// <param name="border">Optional border around the header.</param>
+  /// <param name="padding">Inner spacing between header border and label.</param>
+  /// <param name="margin">Outer spacing around the header.</param>
+  /// <param name="boxSizing">Whether padding is included in or added to the declared size.</param>
+  /// <param name="placeholder">Text shown when no value is selected.</param>
+  /// <param name="value">Pre-selected value.</param>
+  public WindowBuilder AddDropdown(string id, string options, string cmd,
+    Position width = default, Position height = default,
+    UIColor? backgroundColor = null, UIColor? textColor = null,
+    UIColor? dropdownBackgroundColor = null, UIColor? dropdownTextColor = null,
+    UIColor? dropdownHoverColor = null,
+    float maxHeight = 200f,
+    float fontSize = 0,
+    Anchor anchor = Anchor.TopLeft,
+    Position x = default, Position y = default,
+    Pivot? pivot = null,
+    Border? border = null,
+    Spacing? padding = null,
+    Spacing? margin = null,
+    BoxSizing boxSizing = BoxSizing.ContentBox,
+    string placeholder = "Select...",
+    string value = null) {
+    var data = new Dictionary<string, string> {
+      ["Id"] = id ?? string.Empty,
+      ["Options"] = options ?? string.Empty,
+      ["Cmd"] = cmd ?? string.Empty,
+      ["Anchor"] = anchor.ToString(),
+      ["ElemId"] = NextElemId("_sa"),
+      ["Placeholder"] = placeholder ?? "Select...",
+    };
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    if (x.HasValue) data["PosX"] = x.Raw;
+    if (y.HasValue) data["PosY"] = y.Raw;
+    if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
+    if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    if (textColor.HasValue) data["TextColor"] = textColor.Value;
+    if (dropdownBackgroundColor.HasValue) data["DropdownBgColor"] = dropdownBackgroundColor.Value;
+    if (dropdownTextColor.HasValue) data["DropdownTextColor"] = dropdownTextColor.Value;
+    if (dropdownHoverColor.HasValue) data["DropdownHoverColor"] = dropdownHoverColor.Value;
+    if (maxHeight != 200f) data["MaxH"] = maxHeight.ToString(CultureInfo.InvariantCulture);
+    if (fontSize > 0) data["FontSize"] = fontSize.ToString(CultureInfo.InvariantCulture);
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Padding", padding);
+    ApplySpacing(data, "Margin", margin);
+    if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
+    if (value != null) data["Value"] = value;
+    return Enqueue("AddDropdown", data);
+  }
+
   /// <summary>Adds a standalone horizontal progress bar positioned relative to the window.</summary>
   /// <param name="value">Current progress value.</param>
   /// <param name="min">Minimum of the value range.</param>
