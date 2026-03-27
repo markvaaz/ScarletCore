@@ -62,6 +62,7 @@ public class WindowBuilder {
   /// <param name="backgroundGradient">Optional background gradient string.</param>
   /// <param name="nativeParent">Optional native UI parent identifier to attach to.</param>
   /// <param name="rotation">Rotation in degrees applied to the window; 0 = no rotation.</param>
+  /// <param name="hideOnMenuOpen">If true, this window is hidden when any in-game menu opens (inventory, map, etc.).</param>
   public WindowBuilder SetWindow(
     Position width = default, Position height = default,
     UIColor? backgroundColor = null,
@@ -79,7 +80,8 @@ public class WindowBuilder {
     bool transparent = false,
     UIGradient backgroundGradient = default,
     string nativeParent = null,
-    float rotation = 0f) {
+    float rotation = 0f,
+    bool hideOnMenuOpen = true) {
     // Reset element counters when configuring a new window layout
     _rowCounter = 0;
     _elemCounters.Clear();
@@ -104,6 +106,7 @@ public class WindowBuilder {
     if (scrollbarWidth != 8f) data["ScrollbarWidth"] = scrollbarWidth.ToString(CultureInfo.InvariantCulture);
     if (nativeParent != null) data["NativeParent"] = nativeParent;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (hideOnMenuOpen) data["HideOnMenuOpen"] = "true";
     return Enqueue("SetWindow", data);
   }
 
@@ -610,10 +613,10 @@ public class WindowBuilder {
   /// Pass <paramref name="action"/> to specify the action inline — it takes precedence over
   /// any prior <see cref="Open"/>, <see cref="Close"/>, <see cref="Clear"/>, or <see cref="Reset"/> call.
   /// </summary>
-  /// <param name="action">Optional action to perform on the window after sending elements.</param>
-  public void Send(WindowAction action = WindowAction.None) {
-    // Caller-supplied action wins; fall back to fluent flag.
-    var resolved = action != WindowAction.None ? action : _pendingAction;
+  /// <param name="action">Action to perform after sending elements. Defaults to <see cref="WindowAction.Open"/>. Overridden by any prior fluent call (<see cref="Open"/>, <see cref="Close"/>, etc.).</param>
+  public void Send(WindowAction action = WindowAction.Open) {
+    // Fluent flag wins when set; fall back to caller-supplied action.
+    var resolved = _pendingAction != WindowAction.None ? _pendingAction : action;
 
     // Send all element packets first (order guaranteed).
     while (_queue.Count > 0) {

@@ -177,7 +177,7 @@ public readonly struct Border {
   /// <summary>Corner radius in pixels (default 6).</summary>
   public readonly float Radius;
   /// <summary>Creates a border with the given color, thickness, and optional corner radius.</summary>
-  public Border(UIColor color, float width, float radius = 6f) { Color = color; Width = width; Radius = radius; }
+  public Border(UIColor color, float width, float radius = 0f) { Color = color; Width = width; Radius = radius; }
 }
 
 /// <summary>
