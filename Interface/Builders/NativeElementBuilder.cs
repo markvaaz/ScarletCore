@@ -140,6 +140,15 @@ public class NativeElementBuilder {
     _data["Rotation"] = F(degrees); return this;
   }
 
+  /// <summary>
+  /// Sets the Canvas sorting order on this element, controlling render layering.
+  /// Adds a <c>Canvas</c> component (with <c>overrideSorting = true</c>) if not already present.
+  /// Higher values render on top of lower values.
+  /// </summary>
+  public NativeElementBuilder SetZIndex(int zIndex) {
+    _data["ZIndex"] = zIndex.ToString(CultureInfo.InvariantCulture); return this;
+  }
+
   // ── Individual size setters ────────────────────────────────────────────────
 
   /// <summary>Sets only the width component of the RectTransform sizeDelta.</summary>

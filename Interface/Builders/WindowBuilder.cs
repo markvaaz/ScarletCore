@@ -63,6 +63,7 @@ public class WindowBuilder {
   /// <param name="nativeParent">Optional native UI parent identifier to attach to.</param>
   /// <param name="rotation">Rotation in degrees applied to the window; 0 = no rotation.</param>
   /// <param name="hideOnMenuOpen">If true, this window is hidden when any in-game menu opens (inventory, map, etc.).</param>
+  /// <param name="zIndex">Canvas sorting order used to layer this window above or below others. Higher values render on top.</param>
   public WindowBuilder SetWindow(
     Position width = default, Position height = default,
     UIColor? backgroundColor = null,
@@ -81,7 +82,8 @@ public class WindowBuilder {
     UIGradient backgroundGradient = default,
     string nativeParent = null,
     float rotation = 0f,
-    bool hideOnMenuOpen = true) {
+    bool hideOnMenuOpen = true,
+    int zIndex = 0) {
     // Reset element counters when configuring a new window layout
     _rowCounter = 0;
     _elemCounters.Clear();
@@ -107,6 +109,7 @@ public class WindowBuilder {
     if (nativeParent != null) data["NativeParent"] = nativeParent;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     if (hideOnMenuOpen) data["HideOnMenuOpen"] = "true";
+    if (zIndex != 0) data["ZIndex"] = zIndex.ToString(CultureInfo.InvariantCulture);
     return Enqueue("SetWindow", data);
   }
 
