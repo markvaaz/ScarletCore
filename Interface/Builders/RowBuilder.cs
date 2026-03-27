@@ -31,6 +31,9 @@ public sealed class RowBuilder {
   /// <param name="textAlign">Horizontal text alignment. Default: Left.</param>
   /// <param name="wrap">Wrap text onto multiple lines when it exceeds the element width. Default: false.</param>
   /// <param name="backgroundGradient">Gradient applied to the background. Overrides <paramref name="backgroundColor"/> when set.</param>
+  /// <param name="textGradient">Optional vertex-color gradient applied directly to text characters.</param>
+  /// <param name="textShadow">Optional drop shadow rendered behind the text.</param>
+  /// <param name="textOutline">Optional outline around each glyph.</param>
   /// <param name="rotation">Rotation in degrees applied to the element. Default: 0.</param>
   public RowBuilder AddText(string text,
       Position width = default, Position height = default,
@@ -42,6 +45,9 @@ public sealed class RowBuilder {
       TextAlignment textAlign = TextAlignment.Left,
       bool wrap = false,
       UIGradient backgroundGradient = default,
+      UITextGradient textGradient = default,
+      UITextShadow? textShadow = null,
+      UITextOutline? textOutline = null,
       float rotation = 0f) {
     var data = StartData();
     data["Text"] = text;
@@ -57,6 +63,9 @@ public sealed class RowBuilder {
     if (textAlign != TextAlignment.Left) data["TextAlign"] = textAlign.ToString();
     if (wrap) data["Wrap"] = "true";
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
+    if (textGradient.HasValue) data["TextGradient"] = textGradient.Raw;
+    if (textShadow.HasValue) data["TextShadow"] = textShadow.Value.Raw;
+    if (textOutline.HasValue) data["TextOutline"] = textOutline.Value.Raw;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     return Enqueue("AddText", data);
   }
@@ -161,12 +170,16 @@ public sealed class RowBuilder {
   /// <param name="height">Bar height (pixels or percentage string). Default: auto.</param>
   /// <param name="barColor">Fill color. Default: blue.</param>
   /// <param name="backgroundColor">Track (background) color. Default: dark grey.</param>
+  /// <param name="barGradient">Gradient applied to the fill portion. Overrides <paramref name="barColor"/> when set.</param>
+  /// <param name="backgroundGradient">Gradient applied to the track. Overrides <paramref name="backgroundColor"/> when set.</param>
   /// <param name="border">Optional border around the progress bar.</param>
   /// <param name="margin">Outer spacing around the progress bar.</param>
   /// <param name="rotation">Rotation in degrees applied to the progress bar. Default: 0.</param>
   public RowBuilder AddProgressBar(float value, float min = 0f, float max = 100f,
       Position width = default, Position height = default,
       UIColor? barColor = null, UIColor? backgroundColor = null,
+      UIGradient barGradient = default,
+      UIGradient backgroundGradient = default,
       Border? border = null,
       Spacing? margin = null,
       float rotation = 0f) {
@@ -179,6 +192,8 @@ public sealed class RowBuilder {
     if (height.HasValue) data["H"] = height.Raw;
     if (barColor.HasValue) data["BarColor"] = barColor.Value;
     if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    if (barGradient.HasValue) data["BarGradient"] = barGradient.Raw;
+    if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);

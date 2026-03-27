@@ -78,6 +78,51 @@ public readonly struct UIGradient {
     new($"radial|{cx.ToString(CultureInfo.InvariantCulture)}|{cy.ToString(CultureInfo.InvariantCulture)}|{(string)c1}|{(string)c2}|{(string)c3}");
 }
 
+// ─── Text Styling ─────────────────────────────────────────────────────────────
+
+/// <summary>A vertex-color gradient applied directly to text characters (not the background).</summary>
+public readonly struct UITextGradient {
+  readonly string _raw;
+  UITextGradient(string v) => _raw = v;
+  internal bool HasValue => !string.IsNullOrEmpty(_raw);
+  internal string Raw => _raw;
+
+  /// <summary>Gradient from <paramref name="top"/> to <paramref name="bottom"/> across the glyph height.</summary>
+  public static UITextGradient Vertical(UIColor top, UIColor bottom) =>
+    new($"{(string)top}|{(string)top}|{(string)bottom}|{(string)bottom}");
+
+  /// <summary>Gradient from <paramref name="left"/> to <paramref name="right"/> across the glyph width.</summary>
+  public static UITextGradient Horizontal(UIColor left, UIColor right) =>
+    new($"{(string)left}|{(string)right}|{(string)left}|{(string)right}");
+
+  /// <summary>Full four-corner gradient: <paramref name="topLeft"/>, <paramref name="topRight"/>, <paramref name="bottomLeft"/>, <paramref name="bottomRight"/>.</summary>
+  public static UITextGradient FourCorner(UIColor topLeft, UIColor topRight, UIColor bottomLeft, UIColor bottomRight) =>
+    new($"{(string)topLeft}|{(string)topRight}|{(string)bottomLeft}|{(string)bottomRight}");
+}
+
+/// <summary>A drop shadow rendered behind text characters.</summary>
+public readonly struct UITextShadow {
+  internal readonly string Raw;
+
+  /// <summary>Creates a drop shadow.</summary>
+  /// <param name="color">Shadow color (usually dark, semi-transparent).</param>
+  /// <param name="offsetX">Horizontal offset in pixels. Positive = right.</param>
+  /// <param name="offsetY">Vertical offset in pixels. Positive = down.</param>
+  public UITextShadow(UIColor color, float offsetX = 2f, float offsetY = 2f) =>
+    Raw = string.Format(CultureInfo.InvariantCulture, "{0}|{1}|{2}", (string)color, offsetX, offsetY);
+}
+
+/// <summary>An outline drawn around each text glyph using TMP's SDF rendering.</summary>
+public readonly struct UITextOutline {
+  internal readonly string Raw;
+
+  /// <summary>Creates a text outline.</summary>
+  /// <param name="color">Outline color.</param>
+  /// <param name="width">Outline thickness in pixels (typically 1–4).</param>
+  public UITextOutline(UIColor color, float width = 1f) =>
+    Raw = string.Format(CultureInfo.InvariantCulture, "{0}|{1}", (string)color, width);
+}
+
 // ─── Icon helper ──────────────────────────────────────────────────────────────
 
 /// <summary>Utility for embedding item icons inside text strings sent to ScarletInterface.</summary>

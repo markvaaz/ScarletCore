@@ -244,6 +244,9 @@ public class WindowBuilder {
   /// <param name="textAlign">Horizontal text alignment.</param>
   /// <param name="wrap">If true, wraps text to multiple lines when it exceeds width.</param>
   /// <param name="backgroundGradient">Optional background gradient.</param>
+  /// <param name="textGradient">Optional vertex-color gradient applied directly to text characters.</param>
+  /// <param name="textShadow">Optional drop shadow rendered behind the text.</param>
+  /// <param name="textOutline">Optional outline around each glyph.</param>
   /// <param name="rotation">Rotation in degrees applied to the element; 0 = no rotation.</param>
   public WindowBuilder AddText(string text,
     Position width = default, Position height = default,
@@ -258,6 +261,9 @@ public class WindowBuilder {
     TextAlignment textAlign = TextAlignment.Left,
     bool wrap = false,
     UIGradient backgroundGradient = default,
+    UITextGradient textGradient = default,
+    UITextShadow? textShadow = null,
+    UITextOutline? textOutline = null,
     float rotation = 0f) {
     var data = new Dictionary<string, string> {
       ["Text"] = text,
@@ -278,6 +284,9 @@ public class WindowBuilder {
     if (textAlign != TextAlignment.Left) data["TextAlign"] = textAlign.ToString();
     if (wrap) data["Wrap"] = "true";
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
+    if (textGradient.HasValue) data["TextGradient"] = textGradient.Raw;
+    if (textShadow.HasValue) data["TextShadow"] = textShadow.Value.Raw;
+    if (textOutline.HasValue) data["TextOutline"] = textOutline.Value.Raw;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     return Enqueue("AddText", data);
   }
@@ -480,6 +489,8 @@ public class WindowBuilder {
   /// <param name="height">Bar height (pixels or percentage string).</param>
   /// <param name="barColor">Fill color for the progress portion.</param>
   /// <param name="backgroundColor">Track/background color.</param>
+  /// <param name="barGradient">Gradient applied to the fill portion. Overrides <paramref name="barColor"/> when set.</param>
+  /// <param name="backgroundGradient">Gradient applied to the track. Overrides <paramref name="backgroundColor"/> when set.</param>
   /// <param name="anchor">Anchor point on the parent used to position the element.</param>
   /// <param name="x">X offset relative to the anchor.</param>
   /// <param name="y">Y offset relative to the anchor.</param>
@@ -490,6 +501,8 @@ public class WindowBuilder {
   public WindowBuilder AddProgressBar(float value, float min = 0f, float max = 100f,
     Position width = default, Position height = default,
     UIColor? barColor = null, UIColor? backgroundColor = null,
+    UIGradient barGradient = default,
+    UIGradient backgroundGradient = default,
     Anchor anchor = Anchor.TopLeft,
     Position x = default, Position y = default,
     Pivot? pivot = null,
@@ -510,6 +523,8 @@ public class WindowBuilder {
     if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
     if (barColor.HasValue) data["BarColor"] = barColor.Value;
     if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    if (barGradient.HasValue) data["BarGradient"] = barGradient.Raw;
+    if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
