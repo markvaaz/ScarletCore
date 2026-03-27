@@ -141,6 +141,19 @@ public class NativeElementBuilder {
   }
 
   /// <summary>
+  /// Applies a color tint to the <c>Graphic</c> components (Image, RawImage, etc.) on this element.
+  /// The tint is multiplicative: white-based sprites will take on the exact color provided,
+  /// while already-colored sprites will blend with it.
+  /// </summary>
+  /// <param name="color">Target tint color.</param>
+  /// <param name="deep">If <c>true</c>, the tint is also applied to all descendant Graphic components.</param>
+  public NativeElementBuilder SetColorTint(UIColor color, bool deep = false) {
+    _data["ColorTint"] = color;
+    if (deep) _data["ColorTintDeep"] = "true";
+    return this;
+  }
+
+  /// <summary>
   /// Sets the Canvas sorting order on this element, controlling render layering.
   /// Adds a <c>Canvas</c> component (with <c>overrideSorting = true</c>) if not already present.
   /// Higher values render on top of lower values.
