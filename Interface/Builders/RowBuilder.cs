@@ -31,6 +31,7 @@ public sealed class RowBuilder {
   /// <param name="textAlign">Horizontal text alignment. Default: Left.</param>
   /// <param name="wrap">Wrap text onto multiple lines when it exceeds the element width. Default: false.</param>
   /// <param name="backgroundGradient">Gradient applied to the background. Overrides <paramref name="backgroundColor"/> when set.</param>
+  /// <param name="rotation">Rotation in degrees applied to the element. Default: 0.</param>
   public RowBuilder AddText(string text,
       Position width = default, Position height = default,
       UIColor? color = null, UIColor? backgroundColor = null,
@@ -73,6 +74,7 @@ public sealed class RowBuilder {
   /// <param name="margin">Outer spacing around the button.</param>
   /// <param name="boxSizing">Whether padding is included in or added to the declared size.</param>
   /// <param name="backgroundGradient">Gradient applied to the background. Overrides <paramref name="backgroundColor"/> when set.</param>
+  /// <param name="rotation">Rotation in degrees applied to the button. Default: 0.</param>
   public RowBuilder AddButton(string text, string cmd,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -119,6 +121,7 @@ public sealed class RowBuilder {
   /// <param name="margin">Outer spacing around the input.</param>
   /// <param name="boxSizing">Whether padding is included in or added to the declared size.</param>
   /// <param name="value">Pre-filled text value. Default: empty.</param>
+  /// <param name="rotation">Rotation in degrees applied to the input element. Default: 0.</param>
   public RowBuilder AddInput(string id, string placeholder, string cmd,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -160,6 +163,7 @@ public sealed class RowBuilder {
   /// <param name="backgroundColor">Track (background) color. Default: dark grey.</param>
   /// <param name="border">Optional border around the progress bar.</param>
   /// <param name="margin">Outer spacing around the progress bar.</param>
+  /// <param name="rotation">Rotation in degrees applied to the progress bar. Default: 0.</param>
   public RowBuilder AddProgressBar(float value, float min = 0f, float max = 100f,
       Position width = default, Position height = default,
       UIColor? barColor = null, UIColor? backgroundColor = null,
@@ -192,6 +196,7 @@ public sealed class RowBuilder {
   /// </param>
   /// <param name="border">Optional border around the image.</param>
   /// <param name="margin">Outer spacing around the image.</param>
+  /// <param name="rotation">Rotation in degrees applied to the image. Default: 0.</param>
   public RowBuilder AddImage(string src,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null,
@@ -219,6 +224,7 @@ public sealed class RowBuilder {
   /// <param name="fontSize">Font size in pixels. 0 = inherit from window default.</param>
   /// <param name="border">Optional border around the close button.</param>
   /// <param name="margin">Outer spacing around the close button.</param>
+  /// <param name="rotation">Rotation in degrees applied to the close button. Default: 0.</param>
   public RowBuilder AddCloseButton(
       UIColor? backgroundColor = null, UIColor? textColor = null,
       Spacing? padding = null, float fontSize = 0,
@@ -259,6 +265,7 @@ public sealed class RowBuilder {
   /// <param name="boxSizing">Whether padding is included in or added to the declared size.</param>
   /// <param name="placeholder">Text shown when no value is selected.</param>
   /// <param name="value">Pre-selected value. Default: empty (shows placeholder).</param>
+  /// <param name="rotation">Rotation in degrees applied to the dropdown header. Default: 0.</param>
   public RowBuilder AddDropdown(string id, string options, string cmd,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null, UIColor? textColor = null,
