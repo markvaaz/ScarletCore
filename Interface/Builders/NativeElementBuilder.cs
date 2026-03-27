@@ -106,6 +106,63 @@ public class NativeElementBuilder {
     _data["DisableLayout"] = disable ? "true" : "false"; return this;
   }
 
+  // ── Anchor / screen-relative positioning ─────────────────────────────────
+
+  /// <summary>
+  /// Positions the element relative to a named anchor point of its parent (or screen
+  /// when the parent is the canvas root).<br/>
+  /// Equivalent to the <c>anchor</c> + <c>x</c>/<c>y</c> parameters in
+  /// <see cref="WindowBuilder.SetWindow"/>.<br/>
+  /// Example — pin to screen top-left with a 10 px offset:<br/>
+  ///   <code>.SetAnchor(Anchor.TopLeft, x: 10f, y: -10f)</code>
+  /// </summary>
+  public NativeElementBuilder SetAnchor(Anchor anchor, Position x = default, Position y = default, Pivot? pivot = null) {
+    _data["Anchor"] = anchor.ToString();
+    if (x.HasValue) _data["PosX"] = x.Raw;
+    if (y.HasValue) _data["PosY"] = y.Raw;
+    if (pivot.HasValue) _data["Pivot"] = pivot.Value.ToString();
+    return this;
+  }
+
+  // ── Opacity ───────────────────────────────────────────────────────────────
+
+  /// <summary>
+  /// Sets the opacity of the element and all its children via a <c>CanvasGroup</c> component.
+  /// A value of <c>0</c> is fully transparent; <c>1</c> is fully opaque.
+  /// A <c>CanvasGroup</c> is added automatically if the target does not already have one.
+  /// </summary>
+  public NativeElementBuilder SetOpacity(float alpha) {
+    _data["Opacity"] = F(alpha); return this;
+  }
+
+  // ── Individual size setters ────────────────────────────────────────────────
+
+  /// <summary>Sets only the width component of the RectTransform sizeDelta.</summary>
+  public NativeElementBuilder SetWidth(float w) {
+    _data["SizeDeltaW"] = F(w); return this;
+  }
+
+  /// <summary>Sets only the height component of the RectTransform sizeDelta.</summary>
+  public NativeElementBuilder SetHeight(float h) {
+    _data["SizeDeltaH"] = F(h); return this;
+  }
+
+  // ── Hierarchy / parenting ────────────────────────────────────────────────
+
+  /// <summary>
+  /// Reparents the target element to another existing native UI element path.
+  /// Example:
+  /// <code>.ChangeParent("HUDCanvas/BottomBarCanvas/BottomBar/Content/")</code>
+  /// </summary>
+  /// <param name="newParentPath">
+  /// Normalized hierarchy path of the new parent.
+  /// Trailing slashes are accepted and ignored.
+  /// </param>
+  public NativeElementBuilder ChangeParent(string newParentPath) {
+    _data["ChangeParentPath"] = newParentPath;
+    return this;
+  }
+
   // ── Child elements ────────────────────────────────────────────────────────
 
   int _childCount;
@@ -212,6 +269,52 @@ public class ChildElementBuilder {
   /// <summary>Shows or hides the child GO.</summary>
   public ChildElementBuilder SetActive(bool active) {
     Set("Active", active ? "true" : "false"); return this;
+  }
+
+  // ── Anchor / screen-relative positioning ─────────────────────────────────
+
+  /// <summary>
+  /// Positions the child element relative to a named anchor point of its parent.
+  /// See <see cref="NativeElementBuilder.SetAnchor"/> for full documentation.
+  /// </summary>
+  public ChildElementBuilder SetAnchor(Anchor anchor, Position x = default, Position y = default, Pivot? pivot = null) {
+    Set("Anchor", anchor.ToString());
+    if (x.HasValue) Set("PosX", x.Raw);
+    if (y.HasValue) Set("PosY", y.Raw);
+    if (pivot.HasValue) Set("Pivot", pivot.Value.ToString());
+    return this;
+  }
+
+  // ── Opacity ───────────────────────────────────────────────────────────────
+
+  /// <summary>
+  /// Sets the opacity of the child element and all its children via a <c>CanvasGroup</c>.
+  /// Range 0 (fully transparent) to 1 (fully opaque).
+  /// </summary>
+  public ChildElementBuilder SetOpacity(float alpha) {
+    Set("Opacity", F(alpha)); return this;
+  }
+
+  // ── Individual size setters ────────────────────────────────────────────────
+
+  /// <summary>Sets only the width component of the child's RectTransform sizeDelta.</summary>
+  public ChildElementBuilder SetWidth(float w) {
+    Set("SizeDeltaW", F(w)); return this;
+  }
+
+  /// <summary>Sets only the height component of the child's RectTransform sizeDelta.</summary>
+  public ChildElementBuilder SetHeight(float h) {
+    Set("SizeDeltaH", F(h)); return this;
+  }
+
+  // ── Hierarchy / parenting ────────────────────────────────────────────────
+
+  /// <summary>
+  /// Reparents this child element to another existing native UI element path.
+  /// </summary>
+  public ChildElementBuilder ChangeParent(string newParentPath) {
+    Set("ChangeParentPath", newParentPath);
+    return this;
   }
 
   // ── TextMeshPro ────────────────────────────────────────────────────────────
