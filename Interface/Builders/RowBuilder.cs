@@ -40,7 +40,8 @@ public sealed class RowBuilder {
       Spacing? margin = null,
       TextAlignment textAlign = TextAlignment.Left,
       bool wrap = false,
-      UIGradient backgroundGradient = default) {
+      UIGradient backgroundGradient = default,
+      float rotation = 0f) {
     var data = StartData();
     data["Text"] = text;
     data["ElemId"] = _window.NextElemId(_rowId);
@@ -55,6 +56,7 @@ public sealed class RowBuilder {
     if (textAlign != TextAlignment.Left) data["TextAlign"] = textAlign.ToString();
     if (wrap) data["Wrap"] = "true";
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
+    if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     return Enqueue("AddText", data);
   }
 
@@ -79,7 +81,8 @@ public sealed class RowBuilder {
       Spacing? padding = null,
       Spacing? margin = null,
       BoxSizing boxSizing = BoxSizing.ContentBox,
-      UIGradient backgroundGradient = default) {
+      UIGradient backgroundGradient = default,
+      float rotation = 0f) {
     var data = StartData();
     data["Text"] = text;
     data["Cmd"] = cmd ?? string.Empty;
@@ -94,6 +97,7 @@ public sealed class RowBuilder {
     ApplySpacing(data, "Margin", margin);
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
+    if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     return Enqueue("AddButton", data);
   }
 
@@ -124,7 +128,8 @@ public sealed class RowBuilder {
       Spacing? padding = null,
       Spacing? margin = null,
       BoxSizing boxSizing = BoxSizing.ContentBox,
-      string value = null) {
+      string value = null,
+      float rotation = 0f) {
     var data = StartData();
     data["Id"] = id ?? string.Empty;
     data["Placeholder"] = placeholder ?? string.Empty;
@@ -141,6 +146,7 @@ public sealed class RowBuilder {
     ApplySpacing(data, "Padding", padding);
     ApplySpacing(data, "Margin", margin);
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
+    if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     return Enqueue("AddInput", data);
   }
 
@@ -158,7 +164,8 @@ public sealed class RowBuilder {
       Position width = default, Position height = default,
       UIColor? barColor = null, UIColor? backgroundColor = null,
       Border? border = null,
-      Spacing? margin = null) {
+      Spacing? margin = null,
+      float rotation = 0f) {
     var data = StartData();
     data["Value"] = value.ToString(CultureInfo.InvariantCulture);
     data["Min"] = min.ToString(CultureInfo.InvariantCulture);
@@ -170,6 +177,7 @@ public sealed class RowBuilder {
     if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
+    if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     return Enqueue("AddProgressBar", data);
   }
 
@@ -189,7 +197,8 @@ public sealed class RowBuilder {
       UIColor? backgroundColor = null,
       ImageFit fit = ImageFit.Stretch,
       Border? border = null,
-      Spacing? margin = null) {
+      Spacing? margin = null,
+      float rotation = 0f) {
     var data = StartData();
     data["Src"] = src ?? string.Empty;
     data["Fit"] = fit.ToString();
@@ -199,6 +208,7 @@ public sealed class RowBuilder {
     if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
+    if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     return Enqueue("AddImage", data);
   }
 
@@ -213,7 +223,8 @@ public sealed class RowBuilder {
       UIColor? backgroundColor = null, UIColor? textColor = null,
       Spacing? padding = null, float fontSize = 0,
       Border? border = null,
-      Spacing? margin = null) {
+      Spacing? margin = null,
+      float rotation = 0f) {
     var data = StartData();
     data["ElemId"] = _window.NextElemId(_rowId);
     if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
@@ -222,6 +233,7 @@ public sealed class RowBuilder {
     if (fontSize > 0) data["FontSize"] = fontSize.ToString(CultureInfo.InvariantCulture);
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
+    if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     return Enqueue("AddCloseButton", data);
   }
 
@@ -259,7 +271,8 @@ public sealed class RowBuilder {
       Spacing? margin = null,
       BoxSizing boxSizing = BoxSizing.ContentBox,
       string placeholder = "Select...",
-      string value = null) {
+      string value = null,
+      float rotation = 0f) {
     var data = StartData();
     data["Id"] = id ?? string.Empty;
     data["Options"] = options ?? string.Empty;
@@ -280,6 +293,7 @@ public sealed class RowBuilder {
     ApplySpacing(data, "Margin", margin);
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (value != null) data["Value"] = value;
+    if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     return Enqueue("AddDropdown", data);
   }
 

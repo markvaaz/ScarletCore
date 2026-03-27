@@ -135,6 +135,11 @@ public class NativeElementBuilder {
     _data["Opacity"] = F(alpha); return this;
   }
 
+  /// <summary>Rotates the element around its pivot. Accepts -360 to 360 degrees.</summary>
+  public NativeElementBuilder SetRotation(float degrees) {
+    _data["Rotation"] = F(degrees); return this;
+  }
+
   // ── Individual size setters ────────────────────────────────────────────────
 
   /// <summary>Sets only the width component of the RectTransform sizeDelta.</summary>
@@ -293,6 +298,11 @@ public class ChildElementBuilder {
   /// </summary>
   public ChildElementBuilder SetOpacity(float alpha) {
     Set("Opacity", F(alpha)); return this;
+  }
+
+  /// <summary>Rotates the child element around its pivot. Accepts -360 to 360 degrees.</summary>
+  public ChildElementBuilder SetRotation(float degrees) {
+    Set("Rotation", F(degrees)); return this;
   }
 
   // ── Individual size setters ────────────────────────────────────────────────
