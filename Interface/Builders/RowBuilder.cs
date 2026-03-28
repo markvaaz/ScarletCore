@@ -35,6 +35,7 @@ public sealed class RowBuilder {
   /// <param name="textShadow">Optional drop shadow rendered behind the text.</param>
   /// <param name="textOutline">Optional outline around each glyph.</param>
   /// <param name="rotation">Rotation in degrees applied to the element. Default: 0.</param>
+  /// <param name="boxShadow">Optional shadow around the element.</param>
   public RowBuilder AddText(string text,
       Position width = default, Position height = default,
       UIColor? color = null, UIColor? backgroundColor = null,
@@ -48,7 +49,8 @@ public sealed class RowBuilder {
       UITextGradient textGradient = default,
       UITextShadow? textShadow = null,
       UITextOutline? textOutline = null,
-      float rotation = 0f) {
+      float rotation = 0f,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Text"] = text;
     data["ElemId"] = _window.NextElemId(_rowId);
@@ -67,6 +69,7 @@ public sealed class RowBuilder {
     if (textShadow.HasValue) data["TextShadow"] = textShadow.Value.Raw;
     if (textOutline.HasValue) data["TextOutline"] = textOutline.Value.Raw;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddText", data);
   }
 
@@ -84,6 +87,7 @@ public sealed class RowBuilder {
   /// <param name="boxSizing">Whether padding is included in or added to the declared size.</param>
   /// <param name="backgroundGradient">Gradient applied to the background. Overrides <paramref name="backgroundColor"/> when set.</param>
   /// <param name="rotation">Rotation in degrees applied to the button. Default: 0.</param>
+  /// <param name="boxShadow">Optional shadow around the button.</param>
   public RowBuilder AddButton(string text, string cmd,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -93,7 +97,8 @@ public sealed class RowBuilder {
       Spacing? margin = null,
       BoxSizing boxSizing = BoxSizing.ContentBox,
       UIGradient backgroundGradient = default,
-      float rotation = 0f) {
+      float rotation = 0f,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Text"] = text;
     data["Cmd"] = cmd ?? string.Empty;
@@ -109,6 +114,7 @@ public sealed class RowBuilder {
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddButton", data);
   }
 
@@ -131,6 +137,7 @@ public sealed class RowBuilder {
   /// <param name="boxSizing">Whether padding is included in or added to the declared size.</param>
   /// <param name="value">Pre-filled text value. Default: empty.</param>
   /// <param name="rotation">Rotation in degrees applied to the input element. Default: 0.</param>
+  /// <param name="boxShadow">Optional shadow around the input element.</param>
   public RowBuilder AddInput(string id, string placeholder, string cmd,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -141,7 +148,8 @@ public sealed class RowBuilder {
       Spacing? margin = null,
       BoxSizing boxSizing = BoxSizing.ContentBox,
       string value = null,
-      float rotation = 0f) {
+      float rotation = 0f,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Id"] = id ?? string.Empty;
     data["Placeholder"] = placeholder ?? string.Empty;
@@ -159,6 +167,7 @@ public sealed class RowBuilder {
     ApplySpacing(data, "Margin", margin);
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddInput", data);
   }
 
@@ -175,6 +184,7 @@ public sealed class RowBuilder {
   /// <param name="border">Optional border around the progress bar.</param>
   /// <param name="margin">Outer spacing around the progress bar.</param>
   /// <param name="rotation">Rotation in degrees applied to the progress bar. Default: 0.</param>
+  /// <param name="boxShadow">Optional shadow around the progress bar.</param>
   public RowBuilder AddProgressBar(float value, float min = 0f, float max = 100f,
       Position width = default, Position height = default,
       UIColor? barColor = null, UIColor? backgroundColor = null,
@@ -182,7 +192,8 @@ public sealed class RowBuilder {
       UIGradient backgroundGradient = default,
       Border? border = null,
       Spacing? margin = null,
-      float rotation = 0f) {
+      float rotation = 0f,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Value"] = value.ToString(CultureInfo.InvariantCulture);
     data["Min"] = min.ToString(CultureInfo.InvariantCulture);
@@ -197,6 +208,7 @@ public sealed class RowBuilder {
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddProgressBar", data);
   }
 
@@ -212,13 +224,15 @@ public sealed class RowBuilder {
   /// <param name="border">Optional border around the image.</param>
   /// <param name="margin">Outer spacing around the image.</param>
   /// <param name="rotation">Rotation in degrees applied to the image. Default: 0.</param>
+  /// <param name="boxShadow">Optional shadow around the image.</param>
   public RowBuilder AddImage(string src,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null,
       ImageFit fit = ImageFit.Stretch,
       Border? border = null,
       Spacing? margin = null,
-      float rotation = 0f) {
+      float rotation = 0f,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Src"] = src ?? string.Empty;
     data["Fit"] = fit.ToString();
@@ -229,6 +243,7 @@ public sealed class RowBuilder {
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddImage", data);
   }
 
@@ -240,12 +255,14 @@ public sealed class RowBuilder {
   /// <param name="border">Optional border around the close button.</param>
   /// <param name="margin">Outer spacing around the close button.</param>
   /// <param name="rotation">Rotation in degrees applied to the close button. Default: 0.</param>
+  /// <param name="boxShadow">Optional shadow around the close button.</param>
   public RowBuilder AddCloseButton(
       UIColor? backgroundColor = null, UIColor? textColor = null,
       Spacing? padding = null, float fontSize = 0,
       Border? border = null,
       Spacing? margin = null,
-      float rotation = 0f) {
+      float rotation = 0f,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["ElemId"] = _window.NextElemId(_rowId);
     if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
@@ -255,6 +272,7 @@ public sealed class RowBuilder {
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddCloseButton", data);
   }
 
@@ -281,6 +299,7 @@ public sealed class RowBuilder {
   /// <param name="placeholder">Text shown when no value is selected.</param>
   /// <param name="value">Pre-selected value. Default: empty (shows placeholder).</param>
   /// <param name="rotation">Rotation in degrees applied to the dropdown header. Default: 0.</param>
+  /// <param name="boxShadow">Optional shadow around the dropdown header.</param>
   public RowBuilder AddDropdown(string id, string options, string cmd,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -294,7 +313,8 @@ public sealed class RowBuilder {
       BoxSizing boxSizing = BoxSizing.ContentBox,
       string placeholder = "Select...",
       string value = null,
-      float rotation = 0f) {
+      float rotation = 0f,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Id"] = id ?? string.Empty;
     data["Options"] = options ?? string.Empty;
@@ -316,6 +336,7 @@ public sealed class RowBuilder {
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (value != null) data["Value"] = value;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddDropdown", data);
   }
 

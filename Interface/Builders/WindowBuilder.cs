@@ -64,6 +64,7 @@ public class WindowBuilder {
   /// <param name="rotation">Rotation in degrees applied to the window; 0 = no rotation.</param>
   /// <param name="hideOnMenuOpen">If true, this window is hidden when any in-game menu opens (inventory, map, etc.).</param>
   /// <param name="zIndex">Canvas sorting order used to layer this window above or below others. Higher values render on top.</param>
+  /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
   public WindowBuilder SetWindow(
     Position width = default, Position height = default,
     UIColor? backgroundColor = null,
@@ -83,7 +84,8 @@ public class WindowBuilder {
     string nativeParent = null,
     float rotation = 0f,
     bool hideOnMenuOpen = true,
-    int zIndex = 0) {
+    int zIndex = 0,
+    BoxShadow? boxShadow = null) {
     // Reset element counters when configuring a new window layout
     _rowCounter = 0;
     _elemCounters.Clear();
@@ -110,6 +112,7 @@ public class WindowBuilder {
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     if (hideOnMenuOpen) data["HideOnMenuOpen"] = "true";
     if (zIndex != 0) data["ZIndex"] = zIndex.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("SetWindow", data);
   }
 
@@ -133,6 +136,7 @@ public class WindowBuilder {
   /// <param name="scrollbarBackgroundColor">Scrollbar track color for overflowed rows.</param>
   /// <param name="scrollbarWidth">Scrollbar width in pixels.</param>
   /// <param name="rotation">Rotation in degrees applied to the row container; 0 = no rotation.</param>
+  /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
   public RowBuilder AddRow(
     Position width = default, Position height = default,
     UIColor? background = null,
@@ -149,7 +153,8 @@ public class WindowBuilder {
     UIColor? scrollbarColor = null,
     UIColor? scrollbarBackgroundColor = null,
     float scrollbarWidth = 8f,
-    float rotation = 0f) {
+    float rotation = 0f,
+    BoxShadow? boxShadow = null) {
     string rowId = $"row_{_rowCounter++}";
     _elemCounters[rowId] = 0; // initialize element counter for this row
     var data = new Dictionary<string, string> {
@@ -175,6 +180,7 @@ public class WindowBuilder {
     if (scrollbarBackgroundColor.HasValue) data["ScrollbarBgColor"] = scrollbarBackgroundColor.Value;
     if (scrollbarWidth != 8f) data["ScrollbarWidth"] = scrollbarWidth.ToString(CultureInfo.InvariantCulture);
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     data["ElemId"] = rowId; // row's own ElemId equals its RowId
     Enqueue("AddRow", data);
     return new RowBuilder(this, rowId);
@@ -248,6 +254,7 @@ public class WindowBuilder {
   /// <param name="textShadow">Optional drop shadow rendered behind the text.</param>
   /// <param name="textOutline">Optional outline around each glyph.</param>
   /// <param name="rotation">Rotation in degrees applied to the element; 0 = no rotation.</param>
+  /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
   public WindowBuilder AddText(string text,
     Position width = default, Position height = default,
     UIColor? color = null, UIColor? backgroundColor = null,
@@ -264,7 +271,8 @@ public class WindowBuilder {
     UITextGradient textGradient = default,
     UITextShadow? textShadow = null,
     UITextOutline? textOutline = null,
-    float rotation = 0f) {
+    float rotation = 0f,
+    BoxShadow? boxShadow = null) {
     var data = new Dictionary<string, string> {
       ["Text"] = text,
       ["Anchor"] = anchor.ToString(),
@@ -288,6 +296,7 @@ public class WindowBuilder {
     if (textShadow.HasValue) data["TextShadow"] = textShadow.Value.Raw;
     if (textOutline.HasValue) data["TextOutline"] = textOutline.Value.Raw;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddText", data);
   }
 
@@ -309,6 +318,7 @@ public class WindowBuilder {
   /// <param name="boxSizing">Whether padding is included in the declared size.</param>
   /// <param name="backgroundGradient">Optional background gradient.</param>
   /// <param name="rotation">Rotation in degrees applied to the element; 0 = no rotation.</param>
+  /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
   public WindowBuilder AddButton(string text, string cmd,
     Position width = default, Position height = default,
     UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -321,7 +331,8 @@ public class WindowBuilder {
     Spacing? margin = null,
     BoxSizing boxSizing = BoxSizing.ContentBox,
     UIGradient backgroundGradient = default,
-    float rotation = 0f) {
+    float rotation = 0f,
+    BoxShadow? boxShadow = null) {
     var data = new Dictionary<string, string> {
       ["Text"] = text,
       ["Cmd"] = cmd ?? string.Empty,
@@ -342,6 +353,7 @@ public class WindowBuilder {
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddButton", data);
   }
 
@@ -369,6 +381,7 @@ public class WindowBuilder {
   /// <param name="boxSizing">Whether padding is included in the declared size.</param>
   /// <param name="value">Optional pre-filled value.</param>
   /// <param name="rotation">Rotation in degrees applied to the element; 0 = no rotation.</param>
+  /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
   public WindowBuilder AddInput(string id, string placeholder, string cmd,
     Position width = default, Position height = default,
     UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -382,7 +395,8 @@ public class WindowBuilder {
     Spacing? margin = null,
     BoxSizing boxSizing = BoxSizing.ContentBox,
     string value = null,
-    float rotation = 0f) {
+    float rotation = 0f,
+    BoxShadow? boxShadow = null) {
     var data = new Dictionary<string, string> {
       ["Id"] = id ?? string.Empty,
       ["Placeholder"] = placeholder ?? string.Empty,
@@ -405,6 +419,7 @@ public class WindowBuilder {
     ApplySpacing(data, "Margin", margin);
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddInput", data);
   }
 
@@ -435,6 +450,7 @@ public class WindowBuilder {
   /// <param name="placeholder">Text shown when no value is selected.</param>
   /// <param name="value">Pre-selected value.</param>
   /// <param name="rotation">Rotation in degrees applied to the element; 0 = no rotation.</param>
+  /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
   public WindowBuilder AddDropdown(string id, string options, string cmd,
     Position width = default, Position height = default,
     UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -451,7 +467,8 @@ public class WindowBuilder {
     BoxSizing boxSizing = BoxSizing.ContentBox,
     string placeholder = "Select...",
     string value = null,
-    float rotation = 0f) {
+    float rotation = 0f,
+    BoxShadow? boxShadow = null) {
     var data = new Dictionary<string, string> {
       ["Id"] = id ?? string.Empty,
       ["Options"] = options ?? string.Empty,
@@ -478,6 +495,7 @@ public class WindowBuilder {
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (value != null) data["Value"] = value;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddDropdown", data);
   }
 
@@ -498,6 +516,7 @@ public class WindowBuilder {
   /// <param name="border">Optional border around the progress bar.</param>
   /// <param name="margin">Outer spacing around the bar.</param>
   /// <param name="rotation">Rotation in degrees applied to the element; 0 = no rotation.</param>
+  /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
   public WindowBuilder AddProgressBar(float value, float min = 0f, float max = 100f,
     Position width = default, Position height = default,
     UIColor? barColor = null, UIColor? backgroundColor = null,
@@ -508,7 +527,8 @@ public class WindowBuilder {
     Pivot? pivot = null,
     Border? border = null,
     Spacing? margin = null,
-    float rotation = 0f) {
+    float rotation = 0f,
+    BoxShadow? boxShadow = null) {
     var data = new Dictionary<string, string> {
       ["Value"] = value.ToString(CultureInfo.InvariantCulture),
       ["Min"] = min.ToString(CultureInfo.InvariantCulture),
@@ -528,6 +548,7 @@ public class WindowBuilder {
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddProgressBar", data);
   }
 
@@ -547,6 +568,7 @@ public class WindowBuilder {
   /// <param name="border">Optional border around the image.</param>
   /// <param name="margin">Outer spacing around the image.</param>
   /// <param name="rotation">Rotation in degrees applied to the element; 0 = no rotation.</param>
+  /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
   public WindowBuilder AddImage(string src,
     Position width = default, Position height = default,
     UIColor? backgroundColor = null,
@@ -556,7 +578,8 @@ public class WindowBuilder {
     ImageFit fit = ImageFit.Stretch,
     Border? border = null,
     Spacing? margin = null,
-    float rotation = 0f) {
+    float rotation = 0f,
+    BoxShadow? boxShadow = null) {
     var data = new Dictionary<string, string> {
       ["Src"] = src ?? string.Empty,
       ["Fit"] = fit.ToString(),
@@ -572,6 +595,7 @@ public class WindowBuilder {
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddImage", data);
   }
 
@@ -589,6 +613,7 @@ public class WindowBuilder {
   /// <param name="border">Optional border around the close button.</param>
   /// <param name="margin">Outer spacing around the close button.</param>
   /// <param name="rotation">Rotation in degrees applied to the element; 0 = no rotation.</param>
+  /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
   public WindowBuilder AddCloseButton(
     UIColor? backgroundColor = null, UIColor? textColor = null,
     Spacing? padding = null, float fontSize = 0,
@@ -597,7 +622,8 @@ public class WindowBuilder {
     Pivot? pivot = null,
     Border? border = null,
     Spacing? margin = null,
-    float rotation = 0f) {
+    float rotation = 0f,
+    BoxShadow? boxShadow = null) {
     var data = new Dictionary<string, string> {
       ["Anchor"] = anchor.ToString(),
       ["ElemId"] = NextElemId("_sa"),
@@ -612,6 +638,7 @@ public class WindowBuilder {
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddCloseButton", data);
   }
 

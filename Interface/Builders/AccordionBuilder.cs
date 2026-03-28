@@ -28,7 +28,8 @@ public sealed class AccordionBuilder {
       Spacing? margin = null,
       TextAlignment textAlign = TextAlignment.Left,
       bool wrap = false,
-      UIGradient backgroundGradient = default) {
+      UIGradient backgroundGradient = default,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Text"] = text;
     data["ElemId"] = _window.NextElemId(_accordionId);
@@ -43,6 +44,7 @@ public sealed class AccordionBuilder {
     if (textAlign != TextAlignment.Left) data["TextAlign"] = textAlign.ToString();
     if (wrap) data["Wrap"] = "true";
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddText", data);
   }
 
@@ -55,7 +57,8 @@ public sealed class AccordionBuilder {
       Spacing? padding = null,
       Spacing? margin = null,
       BoxSizing boxSizing = BoxSizing.ContentBox,
-      UIGradient backgroundGradient = default) {
+      UIGradient backgroundGradient = default,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Text"] = text;
     data["Cmd"] = cmd ?? string.Empty;
@@ -70,6 +73,7 @@ public sealed class AccordionBuilder {
     ApplySpacing(data, "Margin", margin);
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddButton", data);
   }
 
@@ -86,7 +90,8 @@ public sealed class AccordionBuilder {
       Spacing? padding = null,
       Spacing? margin = null,
       BoxSizing boxSizing = BoxSizing.ContentBox,
-      string value = null) {
+      string value = null,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Id"] = id ?? string.Empty;
     data["Placeholder"] = placeholder ?? string.Empty;
@@ -103,6 +108,7 @@ public sealed class AccordionBuilder {
     ApplySpacing(data, "Padding", padding);
     ApplySpacing(data, "Margin", margin);
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddInput", data);
   }
 
@@ -111,7 +117,8 @@ public sealed class AccordionBuilder {
       Position width = default, Position height = default,
       UIColor? barColor = null, UIColor? backgroundColor = null,
       Border? border = null,
-      Spacing? margin = null) {
+      Spacing? margin = null,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Value"] = value.ToString(CultureInfo.InvariantCulture);
     data["Min"] = min.ToString(CultureInfo.InvariantCulture);
@@ -123,6 +130,7 @@ public sealed class AccordionBuilder {
     if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddProgressBar", data);
   }
 
@@ -148,6 +156,7 @@ public sealed class AccordionBuilder {
   /// <param name="boxSizing">Whether padding is included in or added to the declared size.</param>
   /// <param name="placeholder">Text shown when no value is selected.</param>
   /// <param name="value">Pre-selected value.</param>
+  /// <param name="boxShadow">Optional shadow around the header.</param>
   public AccordionBuilder AddDropdown(string id, string options, string cmd,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -160,7 +169,8 @@ public sealed class AccordionBuilder {
       Spacing? margin = null,
       BoxSizing boxSizing = BoxSizing.ContentBox,
       string placeholder = "Select...",
-      string value = null) {
+      string value = null,
+      BoxShadow? boxShadow = null) {
     var data = StartData();
     data["Id"] = id ?? string.Empty;
     data["Options"] = options ?? string.Empty;
@@ -181,6 +191,7 @@ public sealed class AccordionBuilder {
     ApplySpacing(data, "Margin", margin);
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (value != null) data["Value"] = value;
+    if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
     return Enqueue("AddDropdown", data);
   }
 
