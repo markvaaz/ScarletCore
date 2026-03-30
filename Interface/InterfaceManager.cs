@@ -64,6 +64,26 @@ public static class InterfaceManager {
     NativeAll(plugin, path).Clear();
 
   /// <summary>
+  /// Creates a <see cref="SpriteReplaceBuilder"/> that replaces every <c>Image</c> component
+  /// whose <c>sprite.name</c> equals <paramref name="spriteName"/> with a texture from a URL,
+  /// for a specific player.
+  /// </summary>
+  /// <example>
+  /// InterfaceManager.ReplaceSprite(player, "myplugin", "StatBG")
+  ///   .WithUrl("https://example.com/my-bg.png")
+  ///   .Send();
+  /// </example>
+  public static SpriteReplaceBuilder ReplaceSprite(PlayerData player, string plugin, string spriteName) =>
+    new(plugin, player, spriteName);
+
+  /// <summary>
+  /// Creates a <see cref="SpriteReplaceBuilder"/> that broadcasts the sprite replacement
+  /// to all connected players.
+  /// </summary>
+  public static SpriteReplaceBuilder ReplaceSpriteAll(string plugin, string spriteName) =>
+    new(plugin, null, spriteName);
+
+  /// <summary>
   /// Registers a callback invoked when a player sends a raw chat message starting with <paramref name="prefix"/>.
   /// Useful for handling button commands that don't use the ScarletCore command system.
   /// </summary>

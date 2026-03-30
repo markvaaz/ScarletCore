@@ -58,7 +58,14 @@ public sealed class AccordionBuilder {
       Spacing? margin = null,
       BoxSizing boxSizing = BoxSizing.ContentBox,
       UIGradient backgroundGradient = default,
-      BoxShadow? boxShadow = null) {
+      BoxShadow? boxShadow = null,
+      string backgroundImage = null,
+      string backgroundSprite = null,
+      ImageFit backgroundImageFit = ImageFit.Stretch,
+      string backgroundImageHover = null,
+      string backgroundSpriteHover = null,
+      string backgroundImagePressed = null,
+      string backgroundSpritePressed = null) {
     var data = StartData();
     data["Text"] = text;
     data["Cmd"] = cmd ?? string.Empty;
@@ -74,6 +81,14 @@ public sealed class AccordionBuilder {
     if (boxSizing != BoxSizing.ContentBox) data["BoxSizing"] = boxSizing.ToString();
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
     if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
+    if (backgroundImage != null) data["BgImage"] = backgroundImage;
+    if (backgroundSprite != null) data["BgSprite"] = backgroundSprite;
+    if (backgroundImage != null || backgroundSprite != null || backgroundImageFit != ImageFit.Stretch)
+      data["BgImageFit"] = backgroundImageFit.ToString();
+    if (backgroundImageHover != null) data["BgImageHover"] = backgroundImageHover;
+    if (backgroundSpriteHover != null) data["BgSpriteHover"] = backgroundSpriteHover;
+    if (backgroundImagePressed != null) data["BgImagePressed"] = backgroundImagePressed;
+    if (backgroundSpritePressed != null) data["BgSpritePressed"] = backgroundSpritePressed;
     return Enqueue("AddButton", data);
   }
 

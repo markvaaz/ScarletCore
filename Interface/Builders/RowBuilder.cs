@@ -88,6 +88,13 @@ public sealed class RowBuilder {
   /// <param name="backgroundGradient">Gradient applied to the background. Overrides <paramref name="backgroundColor"/> when set.</param>
   /// <param name="rotation">Rotation in degrees applied to the button. Default: 0.</param>
   /// <param name="boxShadow">Optional shadow around the button.</param>
+  /// <param name="backgroundImage">URL of a remote image to use as button background. Overrides <paramref name="backgroundColor"/>.</param>
+  /// <param name="backgroundSprite">Name of a game sprite (e.g. "Poneti_Icon_Blacksmith_01_stick") to use as button background. Overrides <paramref name="backgroundColor"/>.</param>
+  /// <param name="backgroundImageFit">How the background image/sprite is sized inside the button. Default: Stretch.</param>
+  /// <param name="backgroundImageHover">URL of the image shown when the cursor hovers over the button.</param>
+  /// <param name="backgroundSpriteHover">Sprite name shown when the cursor hovers over the button.</param>
+  /// <param name="backgroundImagePressed">URL of the image shown while the button is pressed.</param>
+  /// <param name="backgroundSpritePressed">Sprite name shown while the button is pressed.</param>
   public RowBuilder AddButton(string text, string cmd,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -98,7 +105,14 @@ public sealed class RowBuilder {
       BoxSizing boxSizing = BoxSizing.ContentBox,
       UIGradient backgroundGradient = default,
       float rotation = 0f,
-      BoxShadow? boxShadow = null) {
+      BoxShadow? boxShadow = null,
+      string backgroundImage = null,
+      string backgroundSprite = null,
+      ImageFit backgroundImageFit = ImageFit.Stretch,
+      string backgroundImageHover = null,
+      string backgroundSpriteHover = null,
+      string backgroundImagePressed = null,
+      string backgroundSpritePressed = null) {
     var data = StartData();
     data["Text"] = text;
     data["Cmd"] = cmd ?? string.Empty;
@@ -115,6 +129,14 @@ public sealed class RowBuilder {
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
+    if (backgroundImage != null) data["BgImage"] = backgroundImage;
+    if (backgroundSprite != null) data["BgSprite"] = backgroundSprite;
+    if (backgroundImage != null || backgroundSprite != null || backgroundImageFit != ImageFit.Stretch)
+      data["BgImageFit"] = backgroundImageFit.ToString();
+    if (backgroundImageHover != null) data["BgImageHover"] = backgroundImageHover;
+    if (backgroundSpriteHover != null) data["BgSpriteHover"] = backgroundSpriteHover;
+    if (backgroundImagePressed != null) data["BgImagePressed"] = backgroundImagePressed;
+    if (backgroundSpritePressed != null) data["BgSpritePressed"] = backgroundSpritePressed;
     return Enqueue("AddButton", data);
   }
 

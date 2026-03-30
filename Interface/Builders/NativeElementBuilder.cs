@@ -154,6 +154,15 @@ public class NativeElementBuilder {
   }
 
   /// <summary>
+  /// Replaces the sprite on this element's <c>Image</c> component (or sets the texture
+  /// on a <c>RawImage</c> if no <c>Image</c> is present) with an image downloaded from
+  /// <paramref name="url"/>. The texture is cached for the session.
+  /// </summary>
+  public NativeElementBuilder SetSpriteUrl(string url) {
+    _data["SpriteUrl"] = url; return this;
+  }
+
+  /// <summary>
   /// Sets the Canvas sorting order on this element, controlling render layering.
   /// Adds a <c>Canvas</c> component (with <c>overrideSorting = true</c>) if not already present.
   /// Higher values render on top of lower values.
@@ -325,6 +334,15 @@ public class ChildElementBuilder {
   /// <summary>Rotates the child element around its pivot. Accepts -360 to 360 degrees.</summary>
   public ChildElementBuilder SetRotation(float degrees) {
     Set("Rotation", F(degrees)); return this;
+  }
+
+  /// <summary>
+  /// Replaces the sprite on this child's <c>Image</c> component (or sets the texture
+  /// on a <c>RawImage</c> if no <c>Image</c> is present) with an image downloaded from
+  /// <paramref name="url"/>. The texture is cached for the session.
+  /// </summary>
+  public ChildElementBuilder SetSpriteUrl(string url) {
+    Set("SpriteUrl", url); return this;
   }
 
   // ── Individual size setters ────────────────────────────────────────────────

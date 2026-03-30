@@ -319,6 +319,13 @@ public class WindowBuilder {
   /// <param name="backgroundGradient">Optional background gradient.</param>
   /// <param name="rotation">Rotation in degrees applied to the element; 0 = no rotation.</param>
   /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
+  /// <param name="backgroundImage">URL of a remote image to use as button background. Overrides <paramref name="backgroundColor"/>.</param>
+  /// <param name="backgroundSprite">Name of a game sprite (e.g. "Poneti_Icon_Blacksmith_01_stick") to use as button background. Overrides <paramref name="backgroundColor"/>.</param>
+  /// <param name="backgroundImageFit">How the background image/sprite is sized inside the button. Default: Stretch.</param>
+  /// <param name="backgroundImageHover">URL of the image shown when the cursor hovers over the button.</param>
+  /// <param name="backgroundSpriteHover">Sprite name shown when the cursor hovers over the button.</param>
+  /// <param name="backgroundImagePressed">URL of the image shown while the button is pressed.</param>
+  /// <param name="backgroundSpritePressed">Sprite name shown while the button is pressed.</param>
   public WindowBuilder AddButton(string text, string cmd,
     Position width = default, Position height = default,
     UIColor? backgroundColor = null, UIColor? textColor = null,
@@ -332,7 +339,14 @@ public class WindowBuilder {
     BoxSizing boxSizing = BoxSizing.ContentBox,
     UIGradient backgroundGradient = default,
     float rotation = 0f,
-    BoxShadow? boxShadow = null) {
+    BoxShadow? boxShadow = null,
+    string backgroundImage = null,
+    string backgroundSprite = null,
+    ImageFit backgroundImageFit = ImageFit.Stretch,
+    string backgroundImageHover = null,
+    string backgroundSpriteHover = null,
+    string backgroundImagePressed = null,
+    string backgroundSpritePressed = null) {
     var data = new Dictionary<string, string> {
       ["Text"] = text,
       ["Cmd"] = cmd ?? string.Empty,
@@ -354,6 +368,14 @@ public class WindowBuilder {
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
+    if (backgroundImage != null) data["BgImage"] = backgroundImage;
+    if (backgroundSprite != null) data["BgSprite"] = backgroundSprite;
+    if (backgroundImage != null || backgroundSprite != null || backgroundImageFit != ImageFit.Stretch)
+      data["BgImageFit"] = backgroundImageFit.ToString();
+    if (backgroundImageHover != null) data["BgImageHover"] = backgroundImageHover;
+    if (backgroundSpriteHover != null) data["BgSpriteHover"] = backgroundSpriteHover;
+    if (backgroundImagePressed != null) data["BgImagePressed"] = backgroundImagePressed;
+    if (backgroundSpritePressed != null) data["BgSpritePressed"] = backgroundSpritePressed;
     return Enqueue("AddButton", data);
   }
 
@@ -681,6 +703,58 @@ public class WindowBuilder {
     }
 
     _pendingAction = WindowAction.None;
+  }
+
+  /// <summary>
+  /// Sets a 9-piece tiled image frame on the window (4 corners, 4 borders, background).
+  /// Pieces that overflow their allocated area are clipped; borders and background are
+  /// tiled (pixel-perfect at 1920×1080) instead of stretched to preserve texture quality.
+  /// Calling this method with all parameters null removes an existing frame.
+  /// </summary>
+  /// <param name="topLeftCorner">URL for the top-left corner image.</param>
+  /// <param name="topRightCorner">URL for the top-right corner image.</param>
+  /// <param name="bottomLeftCorner">URL for the bottom-left corner image.</param>
+  /// <param name="bottomRightCorner">URL for the bottom-right corner image.</param>
+  /// <param name="topBorder">URL for the top edge image (tiled horizontally).</param>
+  /// <param name="bottomBorder">URL for the bottom edge image (tiled horizontally).</param>
+  /// <param name="leftBorder">URL for the left edge image (tiled vertically).</param>
+  /// <param name="rightBorder">URL for the right edge image (tiled vertically).</param>
+  /// <param name="background">URL for the center background image.</param>
+  /// <param name="backgroundRepeat">If <c>true</c>, the background image tiles to fill the area.
+  /// If <c>false</c> (default), it is stretched to fill the area as a single image.</param>
+  /// <param name="cornerSize">Width and height of each corner in canvas units (default 32).</param>
+  /// <param name="frameExpand">Pixels to expand the frame beyond the window boundary on each side.
+  /// Use this when your sprite images have built-in transparent bleed space around the artwork:
+  /// setting frameExpand to the bleed width pushes the transparent area outside the window
+  /// background so the visible border aligns flush with the window edge (default 0).</param>
+  public WindowBuilder AddCustomTexture(
+    string topLeftCorner = null,
+    string topRightCorner = null,
+    string bottomLeftCorner = null,
+    string bottomRightCorner = null,
+    string topBorder = null,
+    string bottomBorder = null,
+    string leftBorder = null,
+    string rightBorder = null,
+    string background = null,
+    bool backgroundRepeat = false,
+    int cornerSize = 32,
+    int frameExpand = 0) {
+    var data = new Dictionary<string, string> {
+      ["CornerSize"] = cornerSize.ToString(CultureInfo.InvariantCulture),
+    };
+    if (topLeftCorner != null) data["TLCorner"] = topLeftCorner;
+    if (topRightCorner != null) data["TRCorner"] = topRightCorner;
+    if (bottomLeftCorner != null) data["BLCorner"] = bottomLeftCorner;
+    if (bottomRightCorner != null) data["BRCorner"] = bottomRightCorner;
+    if (topBorder != null) data["TopBorder"] = topBorder;
+    if (bottomBorder != null) data["BottomBorder"] = bottomBorder;
+    if (leftBorder != null) data["LeftBorder"] = leftBorder;
+    if (rightBorder != null) data["RightBorder"] = rightBorder;
+    if (background != null) data["BgImage"] = background;
+    if (backgroundRepeat) data["BgRepeat"] = "true";
+    if (frameExpand != 0) data["FrameExpand"] = frameExpand.ToString(CultureInfo.InvariantCulture);
+    return Enqueue("SetWindowTexture", data);
   }
 
   // Internal
