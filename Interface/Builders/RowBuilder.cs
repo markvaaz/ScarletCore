@@ -270,43 +270,52 @@ public sealed class RowBuilder {
   }
 
   /// <summary>
-  /// Adds a portrait camera element to this row that displays the local character's face camera feed.
+  /// Adds a portrait camera element to this row that displays the local character's camera feed.
   /// Requires the ScarletInterface client mod.
   /// </summary>
   /// <param name="width">Element width in pixels. Default: 200.</param>
   /// <param name="height">Element height in pixels. Default: 200.</param>
-  /// <param name="fov">Camera field of view in degrees. Default: 60.</param>
-  /// <param name="orbitAngle">Orbit angle in degrees — rotates the camera around the head's vertical axis while always pointing at the head. At 0° the camera is at its default calibration position. Positive = clockwise when viewed from above. Default: 0.</param>
-  /// <param name="bgUrl">URL of the background texture rendered behind the character.</param>
-  /// <param name="bgColor">Solid tint applied to the background quad. Applied even without a URL.</param>
-  /// <param name="bgUvX">UV offset X (0–1) for panning within the background texture. Default: 0.</param>
-  /// <param name="bgUvY">UV offset Y (0–1) for panning within the background texture. Default: 0.</param>
-  /// <param name="bgUvW">UV scale X (0–1) for zooming within the background texture. Default: 1.</param>
-  /// <param name="bgUvH">UV scale Y (0–1) for zooming within the background texture. Default: 1.</param>
+  /// <param name="fieldOfView">Camera field of view in degrees. Default: 60.</param>
+  /// <param name="orbitAngle">Orbit angle in degrees — rotates the camera around the anchor bone's vertical axis while always pointing at it. At 0° the camera is at its default calibration position. Positive = clockwise when viewed from above. Default: 0.</param>
+  /// <param name="distance">Physical distance multiplier from the anchor bone. 1.0 = default calibration distance. Values greater than 1 move the camera farther away. Default: 1.</param>
+  /// <param name="anchorBone">Name of the character bone the camera is attached to. Defaults to "Head_JNT".</param>
+  /// <param name="backgroundUrl">URL of the background texture rendered behind the character.</param>
+  /// <param name="backgroundColor">Solid tint applied to the background quad. Applied even without a URL.</param>
+  /// <param name="backgroundSize">World-space size (metres) of the background quad. 1.6 = default. Larger values widen the visible background.</param>
+  /// <param name="backgroundOffsetX">UV offset X (0–1) for panning within the background texture. Default: 0.</param>
+  /// <param name="backgroundOffsetY">UV offset Y (0–1) for panning within the background texture. Default: 0.</param>
+  /// <param name="backgroundScaleX">UV scale X (0–1) for zooming within the background texture. Default: 1.</param>
+  /// <param name="backgroundScaleY">UV scale Y (0–1) for zooming within the background texture. Default: 1.</param>
   /// <param name="border">Optional border around the camera feed.</param>
   /// <param name="margin">Outer spacing around the element.</param>
   public RowBuilder AddPortraitCamera(
       Position width = default, Position height = default,
-      float fov = 60f,
+      float fieldOfView = 60f,
       float orbitAngle = 0f,
-      string bgUrl = null,
-      UIColor? bgColor = null,
-      float bgUvX = 0f, float bgUvY = 0f,
-      float bgUvW = 1f, float bgUvH = 1f,
+      float distance = 1f,
+      string anchorBone = null,
+      string backgroundUrl = null,
+      UIColor? backgroundColor = null,
+      float backgroundSize = 1.6f,
+      float backgroundOffsetX = 0f, float backgroundOffsetY = 0f,
+      float backgroundScaleX = 1f, float backgroundScaleY = 1f,
       Border? border = null,
       Spacing? margin = null) {
     var data = StartData();
-    data["FOV"] = fov.ToString(CultureInfo.InvariantCulture);
+    data["FOV"] = fieldOfView.ToString(CultureInfo.InvariantCulture);
     data["ElemId"] = _window.NextElemId(_rowId);
     if (width.HasValue) data["W"] = width.Raw;
     if (height.HasValue) data["H"] = height.Raw;
     data["Orbit"] = orbitAngle.ToString(CultureInfo.InvariantCulture);
-    if (bgUrl != null) data["BgUrl"] = bgUrl;
-    if (bgColor.HasValue) data["BgColor"] = bgColor.Value;
-    if (bgUvX != 0f) data["BgUvX"] = bgUvX.ToString(CultureInfo.InvariantCulture);
-    if (bgUvY != 0f) data["BgUvY"] = bgUvY.ToString(CultureInfo.InvariantCulture);
-    if (bgUvW != 1f) data["BgUvW"] = bgUvW.ToString(CultureInfo.InvariantCulture);
-    if (bgUvH != 1f) data["BgUvH"] = bgUvH.ToString(CultureInfo.InvariantCulture);
+    if (distance != 1f) data["Distance"] = distance.ToString(CultureInfo.InvariantCulture);
+    if (anchorBone != null) data["AnchorBone"] = anchorBone;
+    if (backgroundUrl != null) data["BgUrl"] = backgroundUrl;
+    if (backgroundColor.HasValue) data["BgColor"] = backgroundColor.Value;
+    if (backgroundSize != 1.6f) data["BgSize"] = backgroundSize.ToString(CultureInfo.InvariantCulture);
+    if (backgroundOffsetX != 0f) data["BgUvX"] = backgroundOffsetX.ToString(CultureInfo.InvariantCulture);
+    if (backgroundOffsetY != 0f) data["BgUvY"] = backgroundOffsetY.ToString(CultureInfo.InvariantCulture);
+    if (backgroundScaleX != 1f) data["BgUvW"] = backgroundScaleX.ToString(CultureInfo.InvariantCulture);
+    if (backgroundScaleY != 1f) data["BgUvH"] = backgroundScaleY.ToString(CultureInfo.InvariantCulture);
     ApplyBorder(data, border);
     ApplySpacing(data, "Margin", margin);
     return Enqueue("AddPortraitCamera", data);
