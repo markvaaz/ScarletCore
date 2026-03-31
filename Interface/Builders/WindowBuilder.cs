@@ -622,6 +622,64 @@ public class WindowBuilder {
   }
 
   /// <summary>
+  /// Adds a portrait camera element that displays the local character's face camera feed.
+  /// Requires the ScarletInterface client mod.
+  /// </summary>
+  /// <param name="width">Element width in pixels. Default: 200.</param>
+  /// <param name="height">Element height in pixels. Default: 200.</param>
+  /// <param name="fov">Camera field of view in degrees. Default: 60.</param>
+  /// <param name="orbitAngle">Orbit angle in degrees — rotates the camera around the head's vertical axis while always pointing at the head. At 0° the camera is at its default calibration position. Positive = clockwise when viewed from above. Default: 0.</param>
+  /// <param name="bgUrl">URL of the background texture rendered behind the character.</param>
+  /// <param name="bgColor">Solid tint applied to the background quad. Applied even without a URL.</param>
+  /// <param name="bgUvX">UV offset X (0–1) for panning within the background texture. Default: 0.</param>
+  /// <param name="bgUvY">UV offset Y (0–1) for panning within the background texture. Default: 0.</param>
+  /// <param name="bgUvW">UV scale X (0–1) for zooming within the background texture. Default: 1.</param>
+  /// <param name="bgUvH">UV scale Y (0–1) for zooming within the background texture. Default: 1.</param>
+  /// <param name="anchor">Anchor point on the parent used to position the element.</param>
+  /// <param name="x">X offset relative to the anchor.</param>
+  /// <param name="y">Y offset relative to the anchor.</param>
+  /// <param name="pivot">Element pivot controlling internal origin.</param>
+  /// <param name="border">Optional border around the camera feed.</param>
+  /// <param name="margin">Outer spacing around the element.</param>
+  /// <param name="zIndex">Canvas sorting order. Higher = rendered on top.</param>
+  public WindowBuilder AddPortraitCamera(
+    Position width = default, Position height = default,
+    float fov = 60f,
+    float orbitAngle = 0f,
+    string bgUrl = null,
+    UIColor? bgColor = null,
+    float bgUvX = 0f, float bgUvY = 0f,
+    float bgUvW = 1f, float bgUvH = 1f,
+    Anchor anchor = Anchor.TopLeft,
+    Position x = default, Position y = default,
+    Pivot? pivot = null,
+    Border? border = null,
+    Spacing? margin = null,
+    int zIndex = 0) {
+    var data = new Dictionary<string, string> {
+      ["FOV"] = fov.ToString(CultureInfo.InvariantCulture),
+      ["Anchor"] = anchor.ToString(),
+      ["ElemId"] = NextElemId("_sa"),
+    };
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    if (x.HasValue) data["PosX"] = x.Raw;
+    if (y.HasValue) data["PosY"] = y.Raw;
+    if (pivot.HasValue) data["Pivot"] = pivot.Value.ToString();
+    data["Orbit"] = orbitAngle.ToString(CultureInfo.InvariantCulture);
+    if (bgUrl != null) data["BgUrl"] = bgUrl;
+    if (bgColor.HasValue) data["BgColor"] = bgColor.Value;
+    if (bgUvX != 0f) data["BgUvX"] = bgUvX.ToString(CultureInfo.InvariantCulture);
+    if (bgUvY != 0f) data["BgUvY"] = bgUvY.ToString(CultureInfo.InvariantCulture);
+    if (bgUvW != 1f) data["BgUvW"] = bgUvW.ToString(CultureInfo.InvariantCulture);
+    if (bgUvH != 1f) data["BgUvH"] = bgUvH.ToString(CultureInfo.InvariantCulture);
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Margin", margin);
+    if (zIndex != 0) data["ZIndex"] = zIndex.ToString(CultureInfo.InvariantCulture);
+    return Enqueue("AddPortraitCamera", data);
+  }
+
+  /// <summary>
   /// Adds a pre-styled close button (×) that closes the window when clicked.
   ///</summary>
   /// <param name="backgroundColor">Button background color.</param>

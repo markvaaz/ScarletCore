@@ -269,6 +269,49 @@ public sealed class RowBuilder {
     return Enqueue("AddImage", data);
   }
 
+  /// <summary>
+  /// Adds a portrait camera element to this row that displays the local character's face camera feed.
+  /// Requires the ScarletInterface client mod.
+  /// </summary>
+  /// <param name="width">Element width in pixels. Default: 200.</param>
+  /// <param name="height">Element height in pixels. Default: 200.</param>
+  /// <param name="fov">Camera field of view in degrees. Default: 60.</param>
+  /// <param name="orbitAngle">Orbit angle in degrees — rotates the camera around the head's vertical axis while always pointing at the head. At 0° the camera is at its default calibration position. Positive = clockwise when viewed from above. Default: 0.</param>
+  /// <param name="bgUrl">URL of the background texture rendered behind the character.</param>
+  /// <param name="bgColor">Solid tint applied to the background quad. Applied even without a URL.</param>
+  /// <param name="bgUvX">UV offset X (0–1) for panning within the background texture. Default: 0.</param>
+  /// <param name="bgUvY">UV offset Y (0–1) for panning within the background texture. Default: 0.</param>
+  /// <param name="bgUvW">UV scale X (0–1) for zooming within the background texture. Default: 1.</param>
+  /// <param name="bgUvH">UV scale Y (0–1) for zooming within the background texture. Default: 1.</param>
+  /// <param name="border">Optional border around the camera feed.</param>
+  /// <param name="margin">Outer spacing around the element.</param>
+  public RowBuilder AddPortraitCamera(
+      Position width = default, Position height = default,
+      float fov = 60f,
+      float orbitAngle = 0f,
+      string bgUrl = null,
+      UIColor? bgColor = null,
+      float bgUvX = 0f, float bgUvY = 0f,
+      float bgUvW = 1f, float bgUvH = 1f,
+      Border? border = null,
+      Spacing? margin = null) {
+    var data = StartData();
+    data["FOV"] = fov.ToString(CultureInfo.InvariantCulture);
+    data["ElemId"] = _window.NextElemId(_rowId);
+    if (width.HasValue) data["W"] = width.Raw;
+    if (height.HasValue) data["H"] = height.Raw;
+    data["Orbit"] = orbitAngle.ToString(CultureInfo.InvariantCulture);
+    if (bgUrl != null) data["BgUrl"] = bgUrl;
+    if (bgColor.HasValue) data["BgColor"] = bgColor.Value;
+    if (bgUvX != 0f) data["BgUvX"] = bgUvX.ToString(CultureInfo.InvariantCulture);
+    if (bgUvY != 0f) data["BgUvY"] = bgUvY.ToString(CultureInfo.InvariantCulture);
+    if (bgUvW != 1f) data["BgUvW"] = bgUvW.ToString(CultureInfo.InvariantCulture);
+    if (bgUvH != 1f) data["BgUvH"] = bgUvH.ToString(CultureInfo.InvariantCulture);
+    ApplyBorder(data, border);
+    ApplySpacing(data, "Margin", margin);
+    return Enqueue("AddPortraitCamera", data);
+  }
+
   /// <summary>Adds a pre-styled close button (×) that closes the window when clicked.</summary>
   /// <param name="backgroundColor">Button background color.</param>
   /// <param name="textColor">Color of the × icon.</param>
