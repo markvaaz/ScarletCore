@@ -1,6 +1,7 @@
 using System;
 using ScarletCore.Services;
 using ScarletCore.Interface.Builders;
+using ScarletCore.Interface.Models;
 
 namespace ScarletCore.Interface;
 
@@ -82,6 +83,37 @@ public static class InterfaceManager {
   /// </summary>
   public static SpriteReplaceBuilder ReplaceSpriteAll(string plugin, string spriteName) =>
     new(plugin, null, spriteName);
+
+  /// <summary>
+  /// Sends a list of image URLs to be pre-cached on disk on every connected player's client.
+  /// Images are stored per-server and reused across sessions; outdated images (size changed) are re-downloaded automatically.
+  /// Call this once at load time, before sending any windows that reference these URLs.
+  /// </summary>
+  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
+  /// <param name="urls">The URLs to pre-cache.</param>
+  public static void PreCacheImages(string plugin, string[] urls) =>
+    PacketManager.SendPacketToAll(new ScarletPacket {
+      Type = "PreCacheImages",
+      Plugin = plugin,
+      Window = "$precache",
+      Data = new() { ["Urls"] = string.Join("\n", urls) }
+    });
+
+  /// <summary>
+  /// Sends a list of image URLs to be pre-cached on disk for a specific player's client.
+  /// Images are stored per-server and reused across sessions; outdated images (size changed) are re-downloaded automatically.
+  /// Call this once at load time, before sending any windows that reference these URLs.
+  /// </summary>
+  /// <param name="player">The player to send the pre-cache request to.</param>
+  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
+  /// <param name="urls">The URLs to pre-cache.</param>
+  public static void PreCacheImages(PlayerData player, string plugin, string[] urls) =>
+    PacketManager.SendPacket(player, new ScarletPacket {
+      Type = "PreCacheImages",
+      Plugin = plugin,
+      Window = "$precache",
+      Data = new() { ["Urls"] = string.Join("\n", urls) }
+    });
 
   /// <summary>
   /// Registers a callback invoked when a player sends a raw chat message starting with <paramref name="prefix"/>.
