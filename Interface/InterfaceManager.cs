@@ -85,6 +85,38 @@ public static class InterfaceManager {
     new(plugin, null, spriteName);
 
   /// <summary>
+  /// Sends a font bundle URL to all connected players with ScarletInterface installed.
+  /// The client downloads the <c>fonts.bin</c> file, creates TMP font assets from the
+  /// embedded TTFs, and makes them available by name via <c>font=</c> in AddText.
+  /// Call once at plugin load time; results are cached on disk per server.
+  /// </summary>
+  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
+  /// <param name="url">The URL of the <c>fonts.bin</c> file to load.</param>
+  public static void LoadFontBundleAll(string plugin, string url) =>
+    PacketManager.SendPacketToAll(new ScarletPacket {
+      Type = "LoadFontBundle",
+      Plugin = plugin,
+      Window = "$fonts",
+      Data = new() { ["Url"] = url }
+    });
+
+  /// <summary>
+  /// Sends a font bundle URL to a specific player.
+  /// The client downloads the <c>fonts.bin</c> file, creates TMP font assets from the
+  /// embedded TTFs, and makes them available by name via <c>font=</c> in AddText.
+  /// </summary>
+  /// <param name="player">The target player.</param>
+  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
+  /// <param name="url">The URL of the <c>fonts.bin</c> file to load.</param>
+  public static void LoadFontBundle(PlayerData player, string plugin, string url) =>
+    PacketManager.SendPacket(player, new ScarletPacket {
+      Type = "LoadFontBundle",
+      Plugin = plugin,
+      Window = "$fonts",
+      Data = new() { ["Url"] = url }
+    });
+
+  /// <summary>
   /// Sends a list of image URLs to be pre-cached on disk on every connected player's client.
   /// Images are stored per-server and reused across sessions; outdated images (size changed) are re-downloaded automatically.
   /// Call this once at load time, before sending any windows that reference these URLs.

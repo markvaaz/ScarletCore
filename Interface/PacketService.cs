@@ -95,6 +95,8 @@ internal static class PacketManager {
       if (!player.HasRole("interface-user")) {
         if (!RoleService.RoleExists("interface-user"))
           RoleService.CreateRole("interface-user");
+
+        RoleService.AddPermissionToRole("interface-user", "interface.access");
         player.AddRole("interface-user");
         FlushPendingPackets(player);
         SyncUnitModService.SendUnitMods(player);

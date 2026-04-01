@@ -29,7 +29,8 @@ public sealed class AccordionBuilder {
       TextAlignment textAlign = TextAlignment.Left,
       bool wrap = false,
       UIGradient backgroundGradient = default,
-      BoxShadow? boxShadow = null) {
+      BoxShadow? boxShadow = null,
+      string font = null) {
     var data = StartData();
     data["Text"] = text;
     data["ElemId"] = _window.NextElemId(_accordionId);
@@ -45,6 +46,7 @@ public sealed class AccordionBuilder {
     if (wrap) data["Wrap"] = "true";
     if (backgroundGradient.HasValue) data["BgGradient"] = backgroundGradient.Raw;
     if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
+    if (font != null) data["Font"] = font;
     return Enqueue("AddText", data);
   }
 
@@ -65,7 +67,8 @@ public sealed class AccordionBuilder {
       string backgroundImageHover = null,
       string backgroundSpriteHover = null,
       string backgroundImagePressed = null,
-      string backgroundSpritePressed = null) {
+      string backgroundSpritePressed = null,
+      string font = null) {
     var data = StartData();
     data["Text"] = text;
     data["Cmd"] = cmd ?? string.Empty;
@@ -89,6 +92,7 @@ public sealed class AccordionBuilder {
     if (backgroundSpriteHover != null) data["BgSpriteHover"] = backgroundSpriteHover;
     if (backgroundImagePressed != null) data["BgImagePressed"] = backgroundImagePressed;
     if (backgroundSpritePressed != null) data["BgSpritePressed"] = backgroundSpritePressed;
+    if (font != null) data["Font"] = font;
     return Enqueue("AddButton", data);
   }
 

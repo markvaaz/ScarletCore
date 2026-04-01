@@ -255,6 +255,7 @@ public class WindowBuilder {
   /// <param name="textOutline">Optional outline around each glyph.</param>
   /// <param name="rotation">Rotation in degrees applied to the element; 0 = no rotation.</param>
   /// <param name="boxShadow">Optional box shadow rendered behind the element.</param>
+  /// <param name="font">TMP font asset name, e.g. "BORUTTA GROUP - Nocturne Serif Regular SDF". Default: game default.</param>
   public WindowBuilder AddText(string text,
     Position width = default, Position height = default,
     UIColor? color = null, UIColor? backgroundColor = null,
@@ -272,7 +273,8 @@ public class WindowBuilder {
     UITextShadow? textShadow = null,
     UITextOutline? textOutline = null,
     float rotation = 0f,
-    BoxShadow? boxShadow = null) {
+    BoxShadow? boxShadow = null,
+    string font = null) {
     var data = new Dictionary<string, string> {
       ["Text"] = text,
       ["Anchor"] = anchor.ToString(),
@@ -297,6 +299,7 @@ public class WindowBuilder {
     if (textOutline.HasValue) data["TextOutline"] = textOutline.Value.Raw;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
+    if (font != null) data["Font"] = font;
     return Enqueue("AddText", data);
   }
 
@@ -346,7 +349,8 @@ public class WindowBuilder {
     string backgroundImageHover = null,
     string backgroundSpriteHover = null,
     string backgroundImagePressed = null,
-    string backgroundSpritePressed = null) {
+    string backgroundSpritePressed = null,
+    string font = null) {
     var data = new Dictionary<string, string> {
       ["Text"] = text,
       ["Cmd"] = cmd ?? string.Empty,
@@ -376,6 +380,7 @@ public class WindowBuilder {
     if (backgroundSpriteHover != null) data["BgSpriteHover"] = backgroundSpriteHover;
     if (backgroundImagePressed != null) data["BgImagePressed"] = backgroundImagePressed;
     if (backgroundSpritePressed != null) data["BgSpritePressed"] = backgroundSpritePressed;
+    if (font != null) data["Font"] = font;
     return Enqueue("AddButton", data);
   }
 

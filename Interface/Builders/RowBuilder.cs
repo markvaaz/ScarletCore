@@ -36,6 +36,7 @@ public sealed class RowBuilder {
   /// <param name="textOutline">Optional outline around each glyph.</param>
   /// <param name="rotation">Rotation in degrees applied to the element. Default: 0.</param>
   /// <param name="boxShadow">Optional shadow around the element.</param>
+  /// <param name="font">TMP font asset name, e.g. "BORUTTA GROUP - Nocturne Serif Regular SDF". Default: game default.</param>
   public RowBuilder AddText(string text,
       Position width = default, Position height = default,
       UIColor? color = null, UIColor? backgroundColor = null,
@@ -50,7 +51,8 @@ public sealed class RowBuilder {
       UITextShadow? textShadow = null,
       UITextOutline? textOutline = null,
       float rotation = 0f,
-      BoxShadow? boxShadow = null) {
+      BoxShadow? boxShadow = null,
+      string font = null) {
     var data = StartData();
     data["Text"] = text;
     data["ElemId"] = _window.NextElemId(_rowId);
@@ -70,6 +72,7 @@ public sealed class RowBuilder {
     if (textOutline.HasValue) data["TextOutline"] = textOutline.Value.Raw;
     if (rotation != 0f) data["Rotation"] = rotation.ToString(CultureInfo.InvariantCulture);
     if (boxShadow.HasValue) data["BoxShadow"] = boxShadow.Value.Raw;
+    if (font != null) data["Font"] = font;
     return Enqueue("AddText", data);
   }
 
@@ -112,7 +115,8 @@ public sealed class RowBuilder {
       string backgroundImageHover = null,
       string backgroundSpriteHover = null,
       string backgroundImagePressed = null,
-      string backgroundSpritePressed = null) {
+      string backgroundSpritePressed = null,
+      string font = null) {
     var data = StartData();
     data["Text"] = text;
     data["Cmd"] = cmd ?? string.Empty;
@@ -137,6 +141,7 @@ public sealed class RowBuilder {
     if (backgroundSpriteHover != null) data["BgSpriteHover"] = backgroundSpriteHover;
     if (backgroundImagePressed != null) data["BgImagePressed"] = backgroundImagePressed;
     if (backgroundSpritePressed != null) data["BgSpritePressed"] = backgroundSpritePressed;
+    if (font != null) data["Font"] = font;
     return Enqueue("AddButton", data);
   }
 
