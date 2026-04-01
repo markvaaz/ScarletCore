@@ -98,6 +98,7 @@ public sealed class RowBuilder {
   /// <param name="backgroundSpriteHover">Sprite name shown when the cursor hovers over the button.</param>
   /// <param name="backgroundImagePressed">URL of the image shown while the button is pressed.</param>
   /// <param name="backgroundSpritePressed">Sprite name shown while the button is pressed.</param>
+  /// <param name="font">TMP font asset name, e.g. "BORUTTA GROUP - Nocturne Serif Regular SDF". Default: game default.</param>
   public RowBuilder AddButton(string text, string cmd,
       Position width = default, Position height = default,
       UIColor? backgroundColor = null, UIColor? textColor = null,
