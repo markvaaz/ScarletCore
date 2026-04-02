@@ -111,12 +111,10 @@ public class NativeElementBuilder {
   /// <summary>
   /// Positions the element relative to a named anchor point of its parent (or screen
   /// when the parent is the canvas root).<br/>
-  /// Equivalent to the <c>anchor</c> + <c>x</c>/<c>y</c> parameters in
-  /// <see cref="WindowBuilder.SetWindow"/>.<br/>
   /// Example — pin to screen top-left with a 10 px offset:<br/>
   ///   <code>.SetAnchor(Anchor.TopLeft, x: 10f, y: -10f)</code>
   /// </summary>
-  public NativeElementBuilder SetAnchor(Anchor anchor, Position x = default, Position y = default, Pivot? pivot = null) {
+  public NativeElementBuilder SetAnchor(Anchor anchor, Dimension x = default, Dimension y = default, Pivot? pivot = null) {
     _data["Anchor"] = anchor.ToString();
     if (x.HasValue) _data["PosX"] = x.Raw;
     if (y.HasValue) _data["PosY"] = y.Raw;
@@ -313,7 +311,7 @@ public class ChildElementBuilder {
   /// Positions the child element relative to a named anchor point of its parent.
   /// See <see cref="NativeElementBuilder.SetAnchor"/> for full documentation.
   /// </summary>
-  public ChildElementBuilder SetAnchor(Anchor anchor, Position x = default, Position y = default, Pivot? pivot = null) {
+  public ChildElementBuilder SetAnchor(Anchor anchor, Dimension x = default, Dimension y = default, Pivot? pivot = null) {
     Set("Anchor", anchor.ToString());
     if (x.HasValue) Set("PosX", x.Raw);
     if (y.HasValue) Set("PosY", y.Raw);

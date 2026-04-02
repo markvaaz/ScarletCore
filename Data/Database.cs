@@ -87,7 +87,7 @@ public class Database : IDisposable {
         semaphoreAcquired = _dbSemaphore.Wait(SemaphoreTimeoutMs);
 
         if (!semaphoreAcquired) {
-          Log.Warning($"[Database] Semaphore timeout on {operationName}, attempt {attempt + 1}/{MaxRetries}");
+          Log.Warning($"[Database - {_pluginGuid}] Semaphore timeout on {operationName}, attempt {attempt + 1}/{MaxRetries}");
           if (attempt == MaxRetries - 1) {
             throw new TimeoutException($"Database operation timed out after {MaxRetries} attempts");
           }
@@ -99,19 +99,19 @@ public class Database : IDisposable {
       } catch (IOException ex) when (ex.Message.Contains("being used by another process")) {
         if (attempt < MaxRetries - 1) {
           var delay = CalculateDelay(attempt);
-          Log.Warning($"[Database] {operationName} retry {attempt + 1}/{MaxRetries}: File locked, waiting {delay}ms...");
+          Log.Warning($"[Database - {_pluginGuid}] {operationName} retry {attempt + 1}/{MaxRetries}: File locked, waiting {delay}ms...");
           Thread.Sleep(delay);
         } else {
-          Log.Error($"[Database] {operationName} failed after {MaxRetries} attempts: {ex.Message}");
+          Log.Error($"[Database - {_pluginGuid}] {operationName} failed after {MaxRetries} attempts: {ex.Message}");
           throw;
         }
       } catch (LiteException ex) when (ex.ErrorCode == LiteException.LOCK_TIMEOUT) {
         if (attempt < MaxRetries - 1) {
           var delay = CalculateDelay(attempt);
-          Log.Warning($"[Database] {operationName} retry {attempt + 1}/{MaxRetries}: Lock timeout, waiting {delay}ms...");
+          Log.Warning($"[Database - {_pluginGuid}] {operationName} retry {attempt + 1}/{MaxRetries}: Lock timeout, waiting {delay}ms...");
           Thread.Sleep(delay);
         } else {
-          Log.Error($"[Database] {operationName} failed after {MaxRetries} attempts: {ex.Message}");
+          Log.Error($"[Database - {_pluginGuid}] {operationName} failed after {MaxRetries} attempts: {ex.Message}");
           throw;
         }
       } finally {
@@ -338,7 +338,7 @@ public class Database : IDisposable {
         }
 
         if (entry.Data == null || entry.Data.IsNull) {
-          Log.Warning($"[Database] Key '{key}' has null data");
+          Log.Warning($"[Database - {_pluginGuid}] Key '{key}' has null data");
           return default;
         }
 

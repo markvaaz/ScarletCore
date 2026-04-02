@@ -7,30 +7,14 @@ namespace ScarletCore.Interface;
 
 /// <summary>
 /// Main entry point for the ScarletInterface server-side API.
-/// Use <see cref="For"/> or <see cref="ForAll"/> to start building a UI window.
+/// Build windows directly with <c>new Window(player, plugin, id) { ... }.Send();</c>.
 /// </summary>
 public static class InterfaceManager {
   /// <summary>
-  /// Creates a <see cref="WindowBuilder"/> targeting a specific player.
-  /// </summary>
-  /// <param name="player">The player to send the UI to.</param>
-  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
-  public static WindowBuilder For(PlayerData player, string plugin) => new(plugin, player);
-
-  /// <summary>
-  /// Creates a <see cref="WindowBuilder"/> that broadcasts the UI to all connected players.
-  /// </summary>
-  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
-  public static WindowBuilder ForAll(string plugin) => new(plugin);
-
-  /// <summary>
   /// Closes the specified window for a player.
   /// </summary>
-  /// <param name="player">The player whose window should be closed.</param>
-  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
-  /// <param name="windowId">The ID of the window to close.</param>
   public static void CloseWindow(PlayerData player, string plugin, string windowId) =>
-    new WindowBuilder(plugin, player).Window(windowId).Send(WindowAction.Close);
+    new Window(player, plugin, windowId).Send(WindowAction.Close);
 
   /// <summary>
   /// Creates a <see cref="NativeElementBuilder"/> targeting an existing game GameObject
