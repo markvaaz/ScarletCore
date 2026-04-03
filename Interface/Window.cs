@@ -176,11 +176,11 @@ public class Window : IEnumerable<UIElement> {
     // Action packet last (short type tokens)
     if (action != WindowAction.None) {
       string typeToken = action switch {
-        WindowAction.Open  => "OP",
+        WindowAction.Open => "OP",
         WindowAction.Close => "CL",
         WindowAction.Clear => "CR",
         WindowAction.Reset => "RS",
-        _                  => action.ToString(),
+        _ => action.ToString(),
       };
       packets.Add(new ScarletPacket {
         Type = typeToken,
@@ -199,6 +199,77 @@ public class Window : IEnumerable<UIElement> {
   }
 
   // ─── IEnumerable ─────────────────────────────────────────────────────────
+
+  /// <summary>
+  /// Sends a targeted update for a single element already present in this window on the client.
+  /// Only a player-targeted window (<see cref="Window(PlayerData,string,string)"/>) can send
+  /// element updates — broadcast windows are silently ignored.
+  /// <para>
+  /// The client will locate the element by <paramref name="elemId"/> and DiffPatch only the
+  /// changed properties. If the window is not open or the element ID is not found, the packet
+  /// is silently discarded by the client with no side effects.
+  /// </para>
+  /// </summary>
+  /// <param name="elemId">The <see cref="UIElement.ElemId"/> used when the window was first sent.</param>
+  /// <param name="elem">A new element instance carrying the updated property values.</param>
+  public void SendUpdate(string elemId, UIElement elem) {
+    if (_player == null) return;
+    var packet = ElementSerializer.SerializeElement(_plugin, _id, elem, elemId);
+    PacketManager.SendPacket(_player, packet);
+  }
+
+  /// <summary>
+  /// Removes a single element by ID from this window on the client.
+  /// Only works on player-targeted windows — broadcast windows are silently ignored.
+  /// <para>
+  /// The client destroys the element's GameObject and clears all associated tracking state.
+  /// If the window is not open or the element ID is not found, the packet is discarded silently.
+  /// </para>
+  /// </summary>
+  /// <param name="elemId">The <see cref="UIElement.ElemId"/> of the element to remove.</param>
+  public void SendDelete(string elemId) {
+    if (_player == null) return;
+    PacketManager.SendPacket(_player, ElementSerializer.SerializeDeleteElement(_plugin, _id, elemId));
+  }
+
+  /// <summary>
+  /// Static shorthand: sends a targeted update for a single element without constructing a
+  /// <see cref="Window"/> instance. Useful when only the player, plugin, window ID, and element
+  /// are known at the call site.
+  /// <para>
+  /// The client will locate the element by <paramref name="elemId"/> and DiffPatch only the
+  /// changed properties. If the element type differs from the original, the existing element is
+  /// destroyed and recreated in-place with the new type.
+  /// If the window is not open or the element ID is not found, the packet is silently discarded.
+  /// </para>
+  /// </summary>
+  /// <param name="player">Target player. Null is ignored silently.</param>
+  /// <param name="plugin">Plugin identifier used when the window was created.</param>
+  /// <param name="windowId">ID of the window that contains the element.</param>
+  /// <param name="elemId">The <see cref="UIElement.ElemId"/> used when the window was first sent.</param>
+  /// <param name="elem">A new element instance carrying the updated property values.</param>
+  public static void SendUpdate(PlayerData player, string plugin, string windowId, string elemId, UIElement elem) {
+    if (player == null) return;
+    var packet = ElementSerializer.SerializeElement(plugin, windowId, elem, elemId);
+    PacketManager.SendPacket(player, packet);
+  }
+
+  /// <summary>
+  /// Static shorthand: removes a single element by ID from a window without constructing a
+  /// <see cref="Window"/> instance.
+  /// <para>
+  /// The client destroys the element's GameObject and clears all associated tracking state.
+  /// If the window is not open or the element ID is not found, the packet is silently discarded.
+  /// </para>
+  /// </summary>
+  /// <param name="player">Target player. Null is ignored silently.</param>
+  /// <param name="plugin">Plugin identifier used when the window was created.</param>
+  /// <param name="windowId">ID of the window that contains the element.</param>
+  /// <param name="elemId">The <see cref="UIElement.ElemId"/> of the element to remove.</param>
+  public static void SendDelete(PlayerData player, string plugin, string windowId, string elemId) {
+    if (player == null) return;
+    PacketManager.SendPacket(player, ElementSerializer.SerializeDeleteElement(plugin, windowId, elemId));
+  }
 
   public IEnumerator<UIElement> GetEnumerator() => Children.GetEnumerator();
   IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();

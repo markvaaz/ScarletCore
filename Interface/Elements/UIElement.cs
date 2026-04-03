@@ -69,6 +69,14 @@ public abstract class UIElement {
   // ─── Interaction ─────────────────────────────────────────────────────────
 
   /// <summary>
+  /// Optional stable identifier for this element within its window.
+  /// When set, allows targeted partial updates via <see cref="Window.SendUpdate"/>
+  /// without re-sending the full window. Must be unique within a window.
+  /// IDs are scoped per window — the same ID can be reused across different windows.
+  /// </summary>
+  public string ElemId { get; set; }
+
+  /// <summary>
   /// ID of a window to show as a tooltip when the mouse hovers this element.
   /// </summary>
   public string Tooltip { get; set; }

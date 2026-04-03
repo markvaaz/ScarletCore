@@ -159,7 +159,7 @@ internal static class ElementSerializer {
 
   static void SerializeStandaloneElement(List<ScarletPacket> packets, string plugin,
       string windowId, UIElement elem, Dictionary<string, int> elemCounters) {
-    string elemId = NextElemId(elemCounters, "_sa");
+    string elemId = elem.ElemId ?? NextElemId(elemCounters, "_sa");
     var (type, d) = BuildElementData(elem, elemId);
     // Standalone elements always emit anchor/position
     d["an"] = (elem.Anchor ?? Anchor.TopLeft).ToString();
@@ -171,7 +171,7 @@ internal static class ElementSerializer {
 
   static void SerializeRowElement(List<ScarletPacket> packets, string plugin,
       string windowId, UIElement elem, string parentId, Dictionary<string, int> elemCounters) {
-    string elemId = NextElemId(elemCounters, parentId);
+    string elemId = elem.ElemId ?? NextElemId(elemCounters, parentId);
     var (type, d) = BuildElementData(elem, elemId);
     d["pa"] = parentId;
     packets.Add(Packet(plugin, windowId, type, d));
@@ -376,6 +376,15 @@ internal static class ElementSerializer {
     counters[scope] = c + 1;
     return $"{scope}_e{c}";
   }
+
+  internal static ScarletPacket SerializeElement(string plugin, string windowId, UIElement elem, string elemId) {
+    var (type, d) = BuildElementData(elem, elemId);
+    d["ue"] = "1";
+    return Packet(plugin, windowId, type, d);
+  }
+
+  internal static ScarletPacket SerializeDeleteElement(string plugin, string windowId, string elemId) =>
+    Packet(plugin, windowId, "DE", new Dictionary<string, string> { ["ei"] = elemId });
 
   static string F(float v) => v.ToString(IC);
 
