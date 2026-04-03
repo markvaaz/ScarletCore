@@ -248,6 +248,19 @@ internal static class ElementSerializer {
         if (pb.AnimationDuration != 0.3f) d["AnimDuration"] = F(pb.AnimationDuration);
         return ("AddProgressBar", d);
 
+      case AnimatedSheet anim:
+        var animFrames = anim.FrameUrls is { Length: > 0 } ? anim.FrameUrls : anim.FrameSprites;
+        d["Frames"] = animFrames != null ? string.Join("\n", animFrames) : string.Empty;
+        d["FrameType"] = anim.FrameUrls is { Length: > 0 } ? "Url" : "Sprite";
+        d["Trigger"] = ((int)anim.Trigger).ToString(IC);
+        d["Duration"] = F(anim.Duration);
+        if (anim.Fit != ImageFit.Stretch) d["Fit"] = anim.Fit.ToString();
+        if (anim.LoopType != AnimationLoopType.Loop) d["LoopType"] = anim.LoopType.ToString();
+        if (anim.LoopCount != 0) d["LoopCount"] = anim.LoopCount.ToString(IC);
+        if (anim.ReleaseMode != AnimationReleaseMode.Pause) d["ReleaseMode"] = anim.ReleaseMode.ToString();
+        if (!anim.Playing) d["Playing"] = "false";
+        return ("AddAnimatedSheet", d);
+
       case Image img:
         d["Src"] = img.Src ?? string.Empty;
         d["Fit"] = img.Fit.ToString();
@@ -333,17 +346,15 @@ internal static class ElementSerializer {
     if (pos.Value.ZIndex != 0) d["ZIndex"] = pos.Value.ZIndex.ToString(IC);
   }
 
-  /// <summary>Serializes button hover/pressed backgrounds into data keys.</summary>
+  /// <summary>
+  /// Serializes button hover/pressed backgrounds into data keys using consistent prefixes.
+  /// Prefix "HoverBg" → HoverBgImage, HoverBgSprite, HoverBgFrames, HoverBgAnimTrigger, etc.
+  /// Prefix "PressedBg" → PressedBgImage, PressedBgSprite, etc.
+  /// </summary>
   static void SerializeHoverBackground(Dictionary<string, string> d,
       UIBackground? hover, UIBackground? pressed) {
-    if (hover.HasValue && hover.Value.HasValue) {
-      if (hover.Value.ImageUrl != null) d["BgImageHover"] = hover.Value.ImageUrl;
-      if (hover.Value.SpriteName != null) d["BgSpriteHover"] = hover.Value.SpriteName;
-    }
-    if (pressed.HasValue && pressed.Value.HasValue) {
-      if (pressed.Value.ImageUrl != null) d["BgImagePressed"] = pressed.Value.ImageUrl;
-      if (pressed.Value.SpriteName != null) d["BgSpritePressed"] = pressed.Value.SpriteName;
-    }
+    if (hover.HasValue && hover.Value.HasValue) hover.Value.Apply(d, "HoverBg");
+    if (pressed.HasValue && pressed.Value.HasValue) pressed.Value.Apply(d, "PressedBg");
   }
 
   /// <summary>Serializes a tooltip if present.</summary>

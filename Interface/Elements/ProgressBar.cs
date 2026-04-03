@@ -11,11 +11,6 @@ public class ProgressBar : UIElement {
   /// <summary>Maximum value of the progress range. Default: 100.</summary>
   public float Max { get; set; } = 100f;
   /// <summary>
-  /// Track (background) visual — solid color, gradient, remote image, or native sprite.
-  /// Rendered behind the fill bar.
-  /// </summary>
-  public new UIBackground? Background { get; set; }
-  /// <summary>
   /// Fill portion visual — solid color, gradient, remote image, or native sprite.
   /// Clipped by the progress percentage.
   /// </summary>
