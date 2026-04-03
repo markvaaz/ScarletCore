@@ -70,7 +70,7 @@ public abstract class UIElement {
 
   /// <summary>
   /// Optional stable identifier for this element within its window.
-  /// When set, allows targeted partial updates via <see cref="Window.SendUpdate"/>
+  /// When set, allows targeted partial updates via <see cref="Window.SendUpdate(string, UIElement)"/>
   /// without re-sending the full window. Must be unique within a window.
   /// IDs are scoped per window — the same ID can be reused across different windows.
   /// </summary>
