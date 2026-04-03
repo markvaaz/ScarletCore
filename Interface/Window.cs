@@ -173,10 +173,17 @@ public class Window : IEnumerable<UIElement> {
   public void Send(WindowAction action = WindowAction.Open) {
     var packets = ElementSerializer.Serialize(this, _plugin, _id);
 
-    // Action packet last
+    // Action packet last (short type tokens)
     if (action != WindowAction.None) {
+      string typeToken = action switch {
+        WindowAction.Open  => "OP",
+        WindowAction.Close => "CL",
+        WindowAction.Clear => "CR",
+        WindowAction.Reset => "RS",
+        _                  => action.ToString(),
+      };
       packets.Add(new ScarletPacket {
-        Type = action.ToString(),
+        Type = typeToken,
         Plugin = _plugin,
         Window = _id,
         Data = [],

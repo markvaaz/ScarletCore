@@ -92,18 +92,22 @@ public readonly struct UIBackground {
 
   // ── Serialization ─────────────────────────────────────────────────────────
 
-  /// <summary>Writes the relevant data keys into the packet dictionary using default "Bg" prefix.</summary>
-  internal void Apply(Dictionary<string, string> data) => Apply(data, "Bg");
+  /// <summary>Writes the relevant data keys using default short-token prefix "b" (= Bg).</summary>
+  internal void Apply(Dictionary<string, string> data) => Apply(data, "b");
 
-  /// <summary>Writes the relevant data keys into the packet dictionary using a custom prefix.</summary>
+  /// <summary>
+  /// Writes the relevant data keys using a short-token prefix (e.g. "b"=Bg, "h"=HoverBg,
+  /// "q"=PressedBg, "r"=Bar, "d"=HeaderBg, "j"=ContentBg, "f"=FocusBg).
+  /// Suffixes: cl=Color, gr=Gradient, im=Image, sp=Sprite, if=ImageFit.
+  /// </summary>
   internal void Apply(Dictionary<string, string> data, string prefix) {
-    if (Color.HasValue) data[$"{prefix}Color"] = Color.Value;
-    if (Gradient.HasValue && Gradient.Value.HasValue) data[$"{prefix}Gradient"] = Gradient.Value.Raw;
-    if (ImageUrl != null) data[$"{prefix}Image"] = ImageUrl;
-    if (SpriteName != null) data[$"{prefix}Sprite"] = SpriteName;
+    if (Color.HasValue) data[$"{prefix}cl"] = Color.Value;
+    if (Gradient.HasValue && Gradient.Value.HasValue) data[$"{prefix}gr"] = Gradient.Value.Raw;
+    if (ImageUrl != null) data[$"{prefix}im"] = ImageUrl;
+    if (SpriteName != null) data[$"{prefix}sp"] = SpriteName;
     if (Fit.HasValue && (Fit.Value != ImageFit.Stretch) &&
         (ImageUrl != null || SpriteName != null || Animation.HasValue))
-      data[$"{prefix}ImageFit"] = Fit.Value.ToString();
+      data[$"{prefix}if"] = Fit.Value.ToString();
     if (Animation.HasValue)
       Animation.Value.Apply(data, prefix);
   }

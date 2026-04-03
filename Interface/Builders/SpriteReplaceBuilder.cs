@@ -34,10 +34,10 @@ public class SpriteReplaceBuilder {
   /// </summary>
   public void Send() {
     var packet = new ScarletPacket {
-      Type = "SpriteReplace",
+      Type = "SR",
       Plugin = _plugin,
       Window = _spriteName,
-      Data = new Dictionary<string, string> { ["SpriteUrl"] = _url ?? "" },
+      Data = new Dictionary<string, string> { ["su"] = _url ?? "" },
     };
 
     if (_player != null)
@@ -52,7 +52,7 @@ public class SpriteReplaceBuilder {
   /// </summary>
   public void Clear() {
     var packet = new ScarletPacket {
-      Type = "SpriteReplaceClear",
+      Type = "XC",
       Plugin = _plugin,
       Window = _spriteName,
       Data = new Dictionary<string, string>(),

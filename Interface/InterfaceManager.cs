@@ -78,10 +78,10 @@ public static class InterfaceManager {
   /// <param name="url">The URL of the <c>fonts.bin</c> file to load.</param>
   public static void LoadFontBundleAll(string plugin, string url) =>
     PacketManager.SendPacketToAll(new ScarletPacket {
-      Type = "LoadFontBundle",
+      Type = "LF",
       Plugin = plugin,
       Window = "$fonts",
-      Data = new() { ["Url"] = url }
+      Data = new() { ["ur"] = url }
     });
 
   /// <summary>
@@ -94,10 +94,10 @@ public static class InterfaceManager {
   /// <param name="url">The URL of the <c>fonts.bin</c> file to load.</param>
   public static void LoadFontBundle(PlayerData player, string plugin, string url) =>
     PacketManager.SendPacket(player, new ScarletPacket {
-      Type = "LoadFontBundle",
+      Type = "LF",
       Plugin = plugin,
       Window = "$fonts",
-      Data = new() { ["Url"] = url }
+      Data = new() { ["ur"] = url }
     });
 
   /// <summary>
@@ -109,10 +109,10 @@ public static class InterfaceManager {
   /// <param name="urls">The URLs to pre-cache.</param>
   public static void PreCacheImages(string plugin, string[] urls) =>
     PacketManager.SendPacketToAll(new ScarletPacket {
-      Type = "PreCacheImages",
+      Type = "PI",
       Plugin = plugin,
       Window = "$precache",
-      Data = new() { ["Urls"] = string.Join("\n", urls) }
+      Data = new() { ["ul"] = string.Join("\n", urls) }
     });
 
   /// <summary>
@@ -125,10 +125,10 @@ public static class InterfaceManager {
   /// <param name="urls">The URLs to pre-cache.</param>
   public static void PreCacheImages(PlayerData player, string plugin, string[] urls) =>
     PacketManager.SendPacket(player, new ScarletPacket {
-      Type = "PreCacheImages",
+      Type = "PI",
       Plugin = plugin,
       Window = "$precache",
-      Data = new() { ["Urls"] = string.Join("\n", urls) }
+      Data = new() { ["ul"] = string.Join("\n", urls) }
     });
 
   /// <summary>

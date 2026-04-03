@@ -54,19 +54,23 @@ public readonly struct UIBackgroundAnimation {
   public UIBackgroundAnimation WithPlaying(bool playing) =>
       new(Frames, IsUrl, Duration, Trigger, LoopType, LoopCount, ReleaseMode, playing);
 
-  /// <summary>Writes animation keys into the packet dictionary under the given prefix.</summary>
+  /// <summary>
+  /// Writes animation keys using a short-token prefix (matches UIBackground.Apply prefix).
+  /// Suffixes: fr=Frames, tt=FrameType, at=AnimTrigger, ad=AnimDuration,
+  /// lt=AnimLoopType, lc=AnimLoopCount, rm=AnimReleaseMode, pl=AnimPlaying.
+  /// </summary>
   internal void Apply(Dictionary<string, string> data, string prefix) {
-    data[$"{prefix}Frames"] = string.Join("\n", Frames);
-    data[$"{prefix}FrameType"] = IsUrl ? "Url" : "Sprite";
-    data[$"{prefix}AnimTrigger"] = ((int)Trigger).ToString(IC);
-    data[$"{prefix}AnimDuration"] = Duration.ToString(IC);
+    data[$"{prefix}fr"] = string.Join("\n", Frames);
+    data[$"{prefix}tt"] = IsUrl ? "Url" : "Sprite";
+    data[$"{prefix}at"] = ((int)Trigger).ToString(IC);
+    data[$"{prefix}ad"] = Duration.ToString(IC);
     if (LoopType != AnimationLoopType.Loop)
-      data[$"{prefix}AnimLoopType"] = LoopType.ToString();
+      data[$"{prefix}lt"] = LoopType.ToString();
     if (LoopCount != 0)
-      data[$"{prefix}AnimLoopCount"] = LoopCount.ToString(IC);
+      data[$"{prefix}lc"] = LoopCount.ToString(IC);
     if (ReleaseMode != AnimationReleaseMode.Pause)
-      data[$"{prefix}AnimReleaseMode"] = ReleaseMode.ToString();
+      data[$"{prefix}rm"] = ReleaseMode.ToString();
     if (!Playing)
-      data[$"{prefix}AnimPlaying"] = "false";
+      data[$"{prefix}pl"] = "false";
   }
 }

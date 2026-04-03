@@ -224,7 +224,7 @@ public class NativeElementBuilder {
   /// <summary>Sends all queued operations to the target player (or all players if constructed via ForAll).</summary>
   public void Send() {
     var packet = new ScarletPacket {
-      Type = "NativeElement",
+      Type = "NE",
       Plugin = _plugin,
       // Window field carries the normalized path as the target identifier.
       Window = _path,
@@ -243,7 +243,7 @@ public class NativeElementBuilder {
   /// </summary>
   public void Clear() {
     var packet = new ScarletPacket {
-      Type = "NativeElementClear",
+      Type = "NC",
       Plugin = _plugin,
       Window = _path,
       Data = new Dictionary<string, string>(),
