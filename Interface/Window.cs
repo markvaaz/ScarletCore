@@ -121,6 +121,15 @@ public class Window : IEnumerable<UIElement> {
   /// <summary>If true, window is hidden when any in-game menu opens. Default: true.</summary>
   public bool HideOnMenuOpen { get; set; } = true;
 
+  // ─── Animations ──────────────────────────────────────────────────────────
+
+  /// <summary>Animation played when the window opens. Default: None.</summary>
+  public WindowAnimation OpenAnimation { get; set; }
+  /// <summary>Animation played when the window closes. Default: None.</summary>
+  public WindowAnimation CloseAnimation { get; set; }
+  /// <summary>Duration in seconds for open/close animations. Default: 0.2s.</summary>
+  public float AnimationDuration { get; set; } = 0.2f;
+
   // ─── Children ────────────────────────────────────────────────────────────
 
   /// <summary>Child elements (Rows, standalone elements, Accordions).</summary>

@@ -11,8 +11,19 @@ public class ProgressBar : UIElement {
   /// <summary>Maximum value of the progress range. Default: 100.</summary>
   public float Max { get; set; } = 100f;
   /// <summary>
-  /// Fill portion background (color, gradient, image, or sprite).
-  /// Separate from <see cref="UIElement.Background"/> which controls the track.
+  /// Track (background) visual — solid color, gradient, remote image, or native sprite.
+  /// Rendered behind the fill bar.
+  /// </summary>
+  public new UIBackground? Background { get; set; }
+  /// <summary>
+  /// Fill portion visual — solid color, gradient, remote image, or native sprite.
+  /// Clipped by the progress percentage.
   /// </summary>
   public UIBackground? BarFill { get; set; }
+  /// <summary>
+  /// When true, changes to <see cref="Value"/> animate smoothly instead of snapping.
+  /// </summary>
+  public bool AnimateValue { get; set; }
+  /// <summary>Duration in seconds of the value-change animation. Default: 0.3s.</summary>
+  public float AnimationDuration { get; set; } = 0.3f;
 }

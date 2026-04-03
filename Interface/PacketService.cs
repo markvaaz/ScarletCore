@@ -184,7 +184,7 @@ internal static class PacketManager {
   /// <param name="packet">The packet to broadcast.</param>
   public static void SendPacketToAll(ScarletPacket packet) {
     var raw = PREFIX + JsonSerializer.Serialize(packet, _jsonOptions);
-    foreach (var player in PlayerService.AllPlayers.Where(p => p.IsOnline && HasInterface(p)))
+    foreach (var player in PlayerService.GetAllConnected().Where(HasInterface))
       SendRaw(player, raw);
   }
 

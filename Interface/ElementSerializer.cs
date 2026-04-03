@@ -42,6 +42,9 @@ internal static class ElementSerializer {
     if (window.Rotation != 0f) wd["Rotation"] = F(window.Rotation);
     if (window.HideOnMenuOpen) wd["HideOnMenuOpen"] = "true";
     if (window.BoxShadow.HasValue) wd["BoxShadow"] = window.BoxShadow.Value.Raw;
+    if (window.OpenAnimation != WindowAnimation.None) wd["OpenAnim"] = window.OpenAnimation.ToString();
+    if (window.CloseAnimation != WindowAnimation.None) wd["CloseAnim"] = window.CloseAnimation.ToString();
+    if (window.AnimationDuration != 0.2f) wd["AnimDuration"] = F(window.AnimationDuration);
     packets.Add(Packet(plugin, windowId, "SetWindow", wd));
 
     // ── Custom Texture ─────────────────────────────────────────────────────
@@ -197,14 +200,27 @@ internal static class ElementSerializer {
         if (b.BoxSizing != BoxSizing.ContentBox) d["BoxSizing"] = b.BoxSizing.ToString();
         SerializeTextStyle(d, b);
         SerializeHoverBackground(d, b.HoverBackground, b.PressedBackground);
+        if (b.HoverScale) d["HoverScale"] = "true";
         return ("AddButton", d);
 
       case Input inp:
         d["Id"] = inp.Id ?? string.Empty;
         d["Placeholder"] = inp.Placeholder ?? string.Empty;
         if (inp.PlaceholderColor.HasValue) d["PlaceholderColor"] = inp.PlaceholderColor.Value;
-        if (inp.BoxSizing != BoxSizing.ContentBox) d["BoxSizing"] = inp.BoxSizing.ToString();
+        if (inp.BoxSizing != BoxSizing.BorderBox) d["BoxSizing"] = inp.BoxSizing.ToString();
         if (inp.Value != null) d["Value"] = inp.Value;
+        if (inp.TextAlign != TextAlignment.Left) d["TextAlign"] = inp.TextAlign.ToString();
+        if (inp.InputType != InputType.String) d["InputType"] = inp.InputType.ToString();
+        if (inp.MaxLength > 0) d["MaxLength"] = inp.MaxLength.ToString(IC);
+        if (inp.FocusBackground.HasValue && inp.FocusBackground.Value.HasValue)
+          inp.FocusBackground.Value.Apply(d, "FocusBg");
+        if (inp.FocusBorder.HasValue) {
+          d["FocusBorderColor"] = inp.FocusBorder.Value.Color;
+          d["FocusBorderWidth"] = F(inp.FocusBorder.Value.Width);
+        }
+        if (inp.CaretColor.HasValue) d["CaretColor"] = inp.CaretColor.Value;
+        if (inp.SelectionColor.HasValue) d["SelectionColor"] = inp.SelectionColor.Value;
+        if (inp.SelectionTextColor.HasValue) d["SelectionTextColor"] = inp.SelectionTextColor.Value;
         SerializeTextStyle(d, inp);
         return ("AddInput", d);
 
@@ -226,7 +242,10 @@ internal static class ElementSerializer {
         d["Value"] = F(pb.Value);
         d["Min"] = F(pb.Min);
         d["Max"] = F(pb.Max);
-        if (pb.BarFill.HasValue) pb.BarFill.Value.Apply(d, "Bar");
+        if (pb.Background.HasValue && pb.Background.Value.HasValue) pb.Background.Value.Apply(d);
+        if (pb.BarFill.HasValue && pb.BarFill.Value.HasValue) pb.BarFill.Value.Apply(d, "Bar");
+        if (pb.AnimateValue) d["AnimValue"] = "true";
+        if (pb.AnimationDuration != 0.3f) d["AnimDuration"] = F(pb.AnimationDuration);
         return ("AddProgressBar", d);
 
       case Image img:

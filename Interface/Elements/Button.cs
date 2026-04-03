@@ -14,6 +14,8 @@ public class Button : UIElement, ITextElement {
   public UIBackground? HoverBackground { get; set; }
   /// <summary>Background shown while the button is pressed.</summary>
   public UIBackground? PressedBackground { get; set; }
+  /// <summary>When true, the button scales slightly on hover (1.0 → 1.05).</summary>
+  public bool HoverScale { get; set; }
 
   // ─── ITextElement ────────────────────────────────────────────────────────
   public UIColor? TextColor { get; set; }
