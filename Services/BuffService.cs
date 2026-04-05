@@ -48,16 +48,6 @@ public static class BuffService {
         return false;
       }
 
-      // Remove gameplay event components to prevent unwanted side effects
-      // These components can cause buffs to trigger additional events we might not want
-      if (buffEntity.Has<CreateGameplayEventsOnSpawn>()) {
-        buffEntity.Remove<CreateGameplayEventsOnSpawn>();
-      }
-
-      if (buffEntity.Has<GameplayEventListeners>()) {
-        buffEntity.Remove<GameplayEventListeners>();
-      }
-
       // Handle custom duration settings
       if (duration > 0) {
         // Ensure the buff has LifeTime and Age components for proper duration management

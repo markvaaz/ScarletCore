@@ -266,20 +266,6 @@ internal static class ElementSerializer {
         d["ft"] = img.Fit.ToString();
         return ("AM", d);
 
-      case PortraitCamera cam:
-        d["fv"] = F(cam.FieldOfView);
-        d["ob"] = F(cam.OrbitAngle);
-        if (cam.Distance != 1f) d["ds"] = F(cam.Distance);
-        if (cam.AnchorBone != null) d["ab"] = cam.AnchorBone;
-        if (cam.BackgroundUrl != null) d["bu"] = cam.BackgroundUrl;
-        if (cam.BackgroundColor.HasValue) d["bcl"] = cam.BackgroundColor.Value;
-        if (cam.BackgroundSize != 1.6f) d["bz"] = F(cam.BackgroundSize);
-        if (cam.BackgroundOffsetX != 0f) d["ux"] = F(cam.BackgroundOffsetX);
-        if (cam.BackgroundOffsetY != 0f) d["uy"] = F(cam.BackgroundOffsetY);
-        if (cam.BackgroundScaleX != 1f) d["uw"] = F(cam.BackgroundScaleX);
-        if (cam.BackgroundScaleY != 1f) d["uh"] = F(cam.BackgroundScaleY);
-        return ("AC", d);
-
       case CloseButton:
         SerializeTextStyle(d, (ITextElement)elem);
         return ("AZ", d);
