@@ -12,6 +12,8 @@ public class Row : UIElement, IEnumerable<UIElement> {
   /// <summary>Child elements inside this row.</summary>
   public List<UIElement> Children { get; set; } = [];
 
+  /// <summary>Flow direction: Horizontal (default, left-to-right) or Vertical (top-to-bottom).</summary>
+  public FlowDirection Direction { get; set; } = FlowDirection.Horizontal;
   /// <summary>Gap between child elements in pixels.</summary>
   public float Gap { get; set; }
   /// <summary>Horizontal distribution of children.</summary>

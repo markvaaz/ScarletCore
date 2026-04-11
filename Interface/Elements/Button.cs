@@ -16,6 +16,8 @@ public class Button : UIElement, ITextElement {
   public UIBackground? PressedBackground { get; set; }
   /// <summary>When true, the button scales slightly on hover (1.0 → 1.05).</summary>
   public bool HoverScale { get; set; }
+  /// <summary>Horizontal alignment of the button label. Default: Left.</summary>
+  public TextAlignment TextAlign { get; set; } = TextAlignment.Center;
 
   // ─── ITextElement ────────────────────────────────────────────────────────
   public UIColor? TextColor { get; set; }

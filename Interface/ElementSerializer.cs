@@ -34,6 +34,7 @@ internal static class ElementSerializer {
     SerializeBackground(wd, window.Background);
     SerializeBorder(wd, window.Border);
     SerializeSpacing(wd, 'p', window.Padding);
+    if (window.Direction != FlowDirection.Vertical) wd["dir"] = window.Direction.ToString();
     if (window.Gap > 0f) wd["gp"] = F(window.Gap);
     if (window.ScrollbarColor.HasValue) wd["sc"] = window.ScrollbarColor.Value;
     if (window.ScrollbarBackgroundColor.HasValue) wd["sb"] = window.ScrollbarBackgroundColor.Value;
@@ -107,6 +108,7 @@ internal static class ElementSerializer {
     SerializeBorder(d, row.Border);
     SerializeSpacing(d, 'p', row.Padding);
     SerializeSpacing(d, 'm', row.Margin);
+    if (row.Direction != FlowDirection.Horizontal) d["dir"] = row.Direction.ToString();
     if (row.Gap > 0f) d["gp"] = F(row.Gap);
     if (row.ScrollbarColor.HasValue) d["sc"] = row.ScrollbarColor.Value;
     if (row.ScrollbarBackgroundColor.HasValue) d["sb"] = row.ScrollbarBackgroundColor.Value;
@@ -198,6 +200,7 @@ internal static class ElementSerializer {
         d["tx"] = b.Label ?? string.Empty;
         d["cm"] = b.Command ?? string.Empty;
         if (b.BoxSizing != BoxSizing.ContentBox) d["bs"] = b.BoxSizing.ToString();
+        if (b.TextAlign != TextAlignment.Left) d["ta"] = b.TextAlign.ToString();
         SerializeTextStyle(d, b);
         SerializeHoverBackground(d, b.HoverBackground, b.PressedBackground);
         if (b.HoverScale) d["hs"] = "true";

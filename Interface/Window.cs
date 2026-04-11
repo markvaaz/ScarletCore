@@ -74,7 +74,9 @@ public class Window : IEnumerable<UIElement> {
 
   // ─── Layout ──────────────────────────────────────────────────────────────
 
-  /// <summary>Gap in pixels between rows inside the window.</summary>
+  /// <summary>Flow direction: Vertical (default, top-to-bottom) or Horizontal (left-to-right).</summary>
+  public FlowDirection Direction { get; set; } = FlowDirection.Vertical;
+  /// <summary>Gap in pixels between children inside the window.</summary>
   public float Gap { get; set; }
   /// <summary>How overflowing child content is handled.</summary>
   public OverflowMode Overflow { get; set; }
