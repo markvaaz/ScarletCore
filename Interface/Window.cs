@@ -132,6 +132,15 @@ public class Window : IEnumerable<UIElement> {
   /// <summary>Duration in seconds for open/close animations. Default: 0.2s.</summary>
   public float AnimationDuration { get; set; } = 0.2f;
 
+  // ─── Auto-Close ──────────────────────────────────────────────────────────
+
+  /// <summary>
+  /// Seconds of inactivity before the window auto-closes. 0 = disabled.
+  /// Any player interaction (button click, input change, dropdown select, accordion toggle)
+  /// resets the timer back to zero.
+  /// </summary>
+  public float AutoClose { get; set; }
+
   // ─── Children ────────────────────────────────────────────────────────────
 
   /// <summary>Child elements (Rows, standalone elements, Accordions).</summary>

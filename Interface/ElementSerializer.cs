@@ -46,6 +46,7 @@ internal static class ElementSerializer {
     if (window.OpenAnimation != WindowAnimation.None) wd["oa"] = window.OpenAnimation.ToString();
     if (window.CloseAnimation != WindowAnimation.None) wd["ca"] = window.CloseAnimation.ToString();
     if (window.AnimationDuration != 0.2f) wd["ad"] = F(window.AnimationDuration);
+    if (window.AutoClose > 0f) wd["ax"] = F(window.AutoClose);
     packets.Add(Packet(plugin, windowId, "SW", wd));
 
     // ── Custom Texture ─────────────────────────────────────────────────────
