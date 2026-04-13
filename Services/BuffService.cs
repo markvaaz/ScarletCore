@@ -48,6 +48,14 @@ public static class BuffService {
         return false;
       }
 
+      if (buffEntity.Has<CreateGameplayEventsOnSpawn>()) {
+        buffEntity.Remove<CreateGameplayEventsOnSpawn>();
+      }
+
+      if (buffEntity.Has<GameplayEventListeners>()) {
+        buffEntity.Remove<GameplayEventListeners>();
+      }
+
       // Handle custom duration settings
       if (duration > 0) {
         // Ensure the buff has LifeTime and Age components for proper duration management
@@ -101,6 +109,78 @@ public static class BuffService {
   public static bool TryApplyBuff(Entity entity, PrefabGUID prefabGUID, float duration = 0) {
     // Call the overloaded method with an output parameter for the buff entity
     return TryApplyBuff(entity, prefabGUID, duration, out _);
+  }
+
+  /// <summary>
+  /// Attempts to apply a buff to an entity preserving <see cref="CreateGameplayEventsOnSpawn"/> and
+  /// <see cref="GameplayEventListeners"/> components (i.e. gameplay events are not stripped).
+  /// </summary>
+  /// <param name="entity">Target entity to receive the buff</param>
+  /// <param name="prefabGUID">GUID of the buff prefab to apply</param>
+  /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <param name="buffEntity">Output parameter that will contain the buff entity if applied</param>
+  /// <returns>True if buff was successfully applied, false otherwise</returns>
+  public static bool TryApplyRawBuff(Entity entity, PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
+    buffEntity = Entity.Null;
+    try {
+      ApplyBuffDebugEvent applyBuffDebugEvent = new() {
+        BuffPrefabGUID = prefabGUID,
+      };
+
+      FromCharacter fromCharacter = new() {
+        Character = entity,
+        User = entity
+      };
+
+      GameSystems.DebugEventsSystem.ApplyBuff(fromCharacter, applyBuffDebugEvent);
+
+      if (!BuffUtility.TryGetBuff(GameSystems.EntityManager, entity, prefabGUID, out buffEntity)) {
+        return false;
+      }
+
+      if (duration > 0) {
+        if (!buffEntity.Has<LifeTime>()) {
+          buffEntity.AddWith((ref LifeTime lifeTime) => {
+            lifeTime.Duration = 0f;
+            lifeTime.EndAction = LifeTimeEndAction.Destroy;
+          });
+        }
+
+        if (!buffEntity.Has<Age>()) {
+          buffEntity.AddWith((ref Age age) => {
+            age.Value = 0f;
+          });
+        }
+
+        var lifeTime = buffEntity.Read<LifeTime>();
+        lifeTime.Duration = duration;
+        lifeTime.EndAction = LifeTimeEndAction.Destroy;
+        buffEntity.Write(lifeTime);
+      }
+
+      if (duration <= -1 && buffEntity.Has<LifeTime>()) {
+        var lifetime = buffEntity.Read<LifeTime>();
+        lifetime.EndAction = LifeTimeEndAction.None;
+        buffEntity.Write(lifetime);
+      }
+
+      return true;
+    } catch (Exception e) {
+      Log.Error($"An error occurred while applying raw buff: {e.Message}");
+      return false;
+    }
+  }
+
+  /// <summary>
+  /// Attempts to apply a buff to an entity preserving <see cref="CreateGameplayEventsOnSpawn"/> and
+  /// <see cref="GameplayEventListeners"/> components (i.e. gameplay events are not stripped).
+  /// </summary>
+  /// <param name="entity">Target entity to receive the buff</param>
+  /// <param name="prefabGUID">GUID of the buff prefab to apply</param>
+  /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <returns>True if buff was successfully applied, false otherwise</returns>
+  public static bool TryApplyRawBuff(Entity entity, PrefabGUID prefabGUID, float duration = 0) {
+    return TryApplyRawBuff(entity, prefabGUID, duration, out _);
   }
 
   /// <summary>
