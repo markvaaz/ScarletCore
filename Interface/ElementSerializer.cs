@@ -47,6 +47,7 @@ internal static class ElementSerializer {
     if (window.CloseAnimation != WindowAnimation.None) wd["ca"] = window.CloseAnimation.ToString();
     if (window.AnimationDuration != 0.2f) wd["ad"] = F(window.AnimationDuration);
     if (window.AutoClose > 0f) wd["ax"] = F(window.AutoClose);
+    if (window.CloseKey.HasValue) wd["kc"] = window.CloseKey.Value.ToString();
     packets.Add(Packet(plugin, windowId, "SW", wd));
 
     // ── Custom Texture ─────────────────────────────────────────────────────
@@ -75,6 +76,8 @@ internal static class ElementSerializer {
         SerializeRow(packets, plugin, windowId, row, ref rowCounter, elemCounters);
       else if (child is Accordion accordion)
         SerializeAccordion(packets, plugin, windowId, accordion, ref rowCounter, elemCounters);
+      else if (child is Container container)
+        SerializeContainer(packets, plugin, windowId, container, ref rowCounter, elemCounters);
       else
         SerializeStandaloneElement(packets, plugin, windowId, child, elemCounters);
     }
@@ -88,7 +91,8 @@ internal static class ElementSerializer {
 
   static void SerializeRow(List<ScarletPacket> packets, string plugin, string windowId,
       Row row, ref int rowCounter, Dictionary<string, int> elemCounters) {
-    string rowId = $"row_{rowCounter++}";
+    string rowId = row.ElemId ?? $"row_{rowCounter}";
+    rowCounter++;
     elemCounters[rowId] = 0;
 
     var d = new Dictionary<string, string> {
@@ -125,7 +129,8 @@ internal static class ElementSerializer {
 
   static void SerializeAccordion(List<ScarletPacket> packets, string plugin, string windowId,
       Accordion acc, ref int rowCounter, Dictionary<string, int> elemCounters) {
-    string accordionId = $"accordion_{rowCounter++}";
+    string accordionId = acc.ElemId ?? $"accordion_{rowCounter}";
+    rowCounter++;
     elemCounters[accordionId] = 0;
 
     var d = new Dictionary<string, string> {
@@ -156,6 +161,40 @@ internal static class ElementSerializer {
       SerializeRowElement(packets, plugin, windowId, child, accordionId, elemCounters);
   }
 
+  static void SerializeContainer(List<ScarletPacket> packets, string plugin, string windowId,
+      Container ct, ref int rowCounter, Dictionary<string, int> elemCounters) {
+    string containerId = ct.ElemId ?? $"container_{rowCounter}";
+    rowCounter++;
+    elemCounters[containerId] = 0;
+
+    var d = new Dictionary<string, string> {
+      ["cn"] = containerId,
+      ["ei"] = containerId,
+      ["jc"] = ct.JustifyContent.ToString(),
+      ["ali"] = ct.AlignItems.ToString(),
+      ["ov"] = ct.Overflow.ToString(),
+    };
+    if (ct.Width.HasValue) d["w"] = ct.Width.Raw;
+    if (ct.Height.HasValue) d["h"] = ct.Height.Raw;
+    SerializeBackground(d, ct.Background);
+    SerializeBorder(d, ct.Border);
+    SerializeSpacing(d, 'p', ct.Padding);
+    SerializeSpacing(d, 'm', ct.Margin);
+    // Default direction is Vertical — only emit when overridden to Horizontal.
+    if (ct.Direction != FlowDirection.Vertical) d["dir"] = ct.Direction.ToString();
+    if (ct.Gap > 0f) d["gp"] = F(ct.Gap);
+    if (ct.ScrollbarColor.HasValue) d["sc"] = ct.ScrollbarColor.Value;
+    if (ct.ScrollbarBackgroundColor.HasValue) d["sb"] = ct.ScrollbarBackgroundColor.Value;
+    if (ct.ScrollbarWidth != 8f) d["sw"] = F(ct.ScrollbarWidth);
+    if (ct.Rotation != 0f) d["ro"] = F(ct.Rotation);
+    if (ct.BoxShadow.HasValue) d["bx"] = ct.BoxShadow.Value.Raw;
+    packets.Add(Packet(plugin, windowId, "AC", d));
+
+    // Container children
+    foreach (var child in ct.Children)
+      SerializeRowElement(packets, plugin, windowId, child, containerId, elemCounters);
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Element serializers
   // ═══════════════════════════════════════════════════════════════════════════
@@ -174,6 +213,38 @@ internal static class ElementSerializer {
 
   static void SerializeRowElement(List<ScarletPacket> packets, string plugin,
       string windowId, UIElement elem, string parentId, Dictionary<string, int> elemCounters) {
+    // Container nested inside a Row/Accordion/Container — serialize as child container.
+    if (elem is Container ct) {
+      string containerId = ct.ElemId ?? NextElemId(elemCounters, parentId);
+      elemCounters[containerId] = 0;
+      var cd = new Dictionary<string, string> {
+        ["cn"] = containerId,
+        ["ei"] = containerId,
+        ["pa"] = parentId,
+        ["jc"] = ct.JustifyContent.ToString(),
+        ["ali"] = ct.AlignItems.ToString(),
+        ["ov"] = ct.Overflow.ToString(),
+      };
+      if (ct.Width.HasValue) cd["w"] = ct.Width.Raw;
+      if (ct.Height.HasValue) cd["h"] = ct.Height.Raw;
+      SerializeBackground(cd, ct.Background);
+      SerializeBorder(cd, ct.Border);
+      SerializeSpacing(cd, 'p', ct.Padding);
+      SerializeSpacing(cd, 'm', ct.Margin);
+      if (ct.Direction != FlowDirection.Vertical) cd["dir"] = ct.Direction.ToString();
+      if (ct.Gap > 0f) cd["gp"] = F(ct.Gap);
+      if (ct.ScrollbarColor.HasValue) cd["sc"] = ct.ScrollbarColor.Value;
+      if (ct.ScrollbarBackgroundColor.HasValue) cd["sb"] = ct.ScrollbarBackgroundColor.Value;
+      if (ct.ScrollbarWidth != 8f) cd["sw"] = F(ct.ScrollbarWidth);
+      if (ct.Rotation != 0f) cd["ro"] = F(ct.Rotation);
+      if (ct.BoxShadow.HasValue) cd["bx"] = ct.BoxShadow.Value.Raw;
+      packets.Add(Packet(plugin, windowId, "AC", cd));
+      // Recurse into children using this container as the new parent.
+      foreach (var child in ct.Children)
+        SerializeRowElement(packets, plugin, windowId, child, containerId, elemCounters);
+      return;
+    }
+
     string elemId = elem.ElemId ?? NextElemId(elemCounters, parentId);
     var (type, d) = BuildElementData(elem, elemId);
     d["pa"] = parentId;
@@ -250,6 +321,17 @@ internal static class ElementSerializer {
         if (pb.BarFill.HasValue && pb.BarFill.Value.HasValue) pb.BarFill.Value.Apply(d, "r");
         if (pb.AnimateValue) d["av"] = "true";
         if (pb.AnimationDuration != 0.3f) d["ad"] = F(pb.AnimationDuration);
+        if (pb.IsHealthBar) d["hb"] = "true";
+        if (pb.Label != null) {
+          d["lbt"] = pb.Label.Content ?? string.Empty;
+          if (pb.Label.TextAlign != TextAlignment.Left) d["lta"] = pb.Label.TextAlign.ToString();
+          if (pb.Label.TextColor.HasValue) d["ltc"] = pb.Label.TextColor.Value;
+          if (pb.Label.FontSize > 0) d["lfs"] = F(pb.Label.FontSize);
+          if (pb.Label.Font != null) d["lfn"] = pb.Label.Font;
+          if (pb.Label.TextGradient.HasValue && pb.Label.TextGradient.Value.HasValue) d["ltg"] = pb.Label.TextGradient.Value.Raw;
+          if (pb.Label.TextShadow.HasValue) d["lts"] = pb.Label.TextShadow.Value.Raw;
+          if (pb.Label.TextOutline.HasValue) d["lto"] = pb.Label.TextOutline.Value.Raw;
+        }
         return ("AP", d);
 
       case AnimatedSheet anim:
@@ -273,6 +355,50 @@ internal static class ElementSerializer {
       case CloseButton:
         SerializeTextStyle(d, (ITextElement)elem);
         return ("AZ", d);
+
+      case Row row:
+        d["rd"] = elemId;
+        d["jc"] = row.JustifyContent.ToString();
+        d["ali"] = row.AlignItems.ToString();
+        d["ov"] = row.Overflow.ToString();
+        if (row.Anchor.HasValue) {
+          d["an"] = row.Anchor.Value.ToString();
+          SerializePosition(d, row.Position);
+          if (row.Pivot.HasValue) d["pv"] = row.Pivot.Value.ToString();
+        }
+        if (row.Direction != FlowDirection.Horizontal) d["dir"] = row.Direction.ToString();
+        if (row.Gap > 0f) d["gp"] = F(row.Gap);
+        if (row.ScrollbarColor.HasValue) d["sc"] = row.ScrollbarColor.Value;
+        if (row.ScrollbarBackgroundColor.HasValue) d["sb"] = row.ScrollbarBackgroundColor.Value;
+        if (row.ScrollbarWidth != 8f) d["sw"] = F(row.ScrollbarWidth);
+        return ("AR", d);
+
+      case Accordion acc:
+        d["ak"] = elemId;
+        d["ti"] = acc.Title ?? string.Empty;
+        d["ex"] = acc.Expanded.ToString().ToLower();
+        d["hh"] = F(acc.HeaderHeight);
+        if (acc.HeaderBackground.HasValue) acc.HeaderBackground.Value.Apply(d, "d");
+        if (acc.HeaderTextColor.HasValue) d["htc"] = acc.HeaderTextColor.Value;
+        if (acc.ChevronColor.HasValue) d["chc"] = acc.ChevronColor.Value;
+        if (acc.ChevronIcon != null) d["chi"] = acc.ChevronIcon;
+        if (!acc.ShowChevron) d["shc"] = "false";
+        if (acc.ContentBackground.HasValue) acc.ContentBackground.Value.Apply(d, "j");
+        if (acc.FontSize > 0f) d["fs"] = F(acc.FontSize);
+        if (acc.Gap > 0f) d["gp"] = F(acc.Gap);
+        return ("AA", d);
+
+      case Container ct:
+        d["cn"] = elemId;
+        d["jc"] = ct.JustifyContent.ToString();
+        d["ali"] = ct.AlignItems.ToString();
+        d["ov"] = ct.Overflow.ToString();
+        if (ct.Direction != FlowDirection.Vertical) d["dir"] = ct.Direction.ToString();
+        if (ct.Gap > 0f) d["gp"] = F(ct.Gap);
+        if (ct.ScrollbarColor.HasValue) d["sc"] = ct.ScrollbarColor.Value;
+        if (ct.ScrollbarBackgroundColor.HasValue) d["sb"] = ct.ScrollbarBackgroundColor.Value;
+        if (ct.ScrollbarWidth != 8f) d["sw"] = F(ct.ScrollbarWidth);
+        return ("AC", d);
 
       default:
         return ("AU", d);
@@ -367,10 +493,53 @@ internal static class ElementSerializer {
     return $"{scope}_e{c}";
   }
 
-  internal static ScarletPacket SerializeElement(string plugin, string windowId, UIElement elem, string elemId) {
+  internal static List<ScarletPacket> SerializeElement(string plugin, string windowId, UIElement elem, string elemId) {
     var (type, d) = BuildElementData(elem, elemId);
     d["ue"] = "1";
-    return Packet(plugin, windowId, type, d);
+
+    if (elem is Row row) {
+      d["ck"] = "1";
+      var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
+      var counters = new Dictionary<string, int>();
+      foreach (var child in row.Children) {
+        string childId = child.ElemId ?? NextElemId(counters, elemId);
+        var (childType, childData) = BuildElementData(child, childId);
+        childData["pa"] = elemId;
+        packets.Add(Packet(plugin, windowId, childType, childData));
+        SerializeTooltip(packets, plugin, windowId, child, childId);
+      }
+      return packets;
+    }
+
+    if (elem is Accordion acc) {
+      d["ck"] = "1";
+      var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
+      var counters = new Dictionary<string, int>();
+      foreach (var child in acc.Children) {
+        string childId = child.ElemId ?? NextElemId(counters, elemId);
+        var (childType, childData) = BuildElementData(child, childId);
+        childData["pa"] = elemId;
+        packets.Add(Packet(plugin, windowId, childType, childData));
+        SerializeTooltip(packets, plugin, windowId, child, childId);
+      }
+      return packets;
+    }
+
+    if (elem is Container ct) {
+      d["ck"] = "1";
+      var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
+      var counters = new Dictionary<string, int>();
+      foreach (var child in ct.Children) {
+        string childId = child.ElemId ?? NextElemId(counters, elemId);
+        var (childType, childData) = BuildElementData(child, childId);
+        childData["pa"] = elemId;
+        packets.Add(Packet(plugin, windowId, childType, childData));
+        SerializeTooltip(packets, plugin, windowId, child, childId);
+      }
+      return packets;
+    }
+
+    return [Packet(plugin, windowId, type, d)];
   }
 
   internal static ScarletPacket SerializeDeleteElement(string plugin, string windowId, string elemId) =>

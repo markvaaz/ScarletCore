@@ -141,6 +141,16 @@ public class Window : IEnumerable<UIElement> {
   /// </summary>
   public float AutoClose { get; set; }
 
+  // ─── Close Keybind ───────────────────────────────────────────────────────
+
+  /// <summary>
+  /// Key that closes this window when pressed on the client.
+  /// <c>null</c> = no close keybind.
+  /// The close keybind takes priority over any global command keybind on the same key.
+  /// Reset when the window is closed.
+  /// </summary>
+  public InputKey? CloseKey { get; set; }
+
   // ─── Children ────────────────────────────────────────────────────────────
 
   /// <summary>Child elements (Rows, standalone elements, Accordions).</summary>
@@ -225,8 +235,8 @@ public class Window : IEnumerable<UIElement> {
   /// <param name="elem">A new element instance carrying the updated property values.</param>
   public void SendUpdate(string elemId, UIElement elem) {
     if (_player == null) return;
-    var packet = ElementSerializer.SerializeElement(_plugin, _id, elem, elemId);
-    PacketManager.SendPacket(_player, packet);
+    foreach (var packet in ElementSerializer.SerializeElement(_plugin, _id, elem, elemId))
+      PacketManager.SendPacket(_player, packet);
   }
 
   /// <summary>
@@ -261,8 +271,8 @@ public class Window : IEnumerable<UIElement> {
   /// <param name="elem">A new element instance carrying the updated property values.</param>
   public static void SendUpdate(PlayerData player, string plugin, string windowId, string elemId, UIElement elem) {
     if (player == null) return;
-    var packet = ElementSerializer.SerializeElement(plugin, windowId, elem, elemId);
-    PacketManager.SendPacket(player, packet);
+    foreach (var packet in ElementSerializer.SerializeElement(plugin, windowId, elem, elemId))
+      PacketManager.SendPacket(player, packet);
   }
 
   /// <summary>

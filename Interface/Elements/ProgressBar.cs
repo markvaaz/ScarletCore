@@ -21,4 +21,18 @@ public class ProgressBar : UIElement {
   public bool AnimateValue { get; set; }
   /// <summary>Duration in seconds of the value-change animation. Default: 0.3s.</summary>
   public float AnimationDuration { get; set; } = 0.3f;
+  /// <summary>
+  /// When true, the client reads Health from the local character every frame and drives
+  /// the fill percentage independently — no server value updates are needed.
+  /// </summary>
+  public bool IsHealthBar { get; set; }
+
+  // ── Overlay label ─────────────────────────────────────────────────────────
+  /// <summary>
+  /// Optional text label overlaid on the bar, rendered as a sibling above it.
+  /// Use <see cref="Text.TextAlign"/> to control positioning inside the bar.
+  /// All <see cref="ITextElement"/> style properties (color, font size, gradient, etc.) are supported.
+  /// For health bars, <c>{healthValue}</c> and <c>{maxHealth}</c> tokens are replaced client-side.
+  /// </summary>
+  public Text Label { get; set; }
 }

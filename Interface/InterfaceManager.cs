@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using ScarletCore.Services;
 using ScarletCore.Interface.Builders;
 using ScarletCore.Interface.Models;
@@ -132,6 +134,39 @@ public static class InterfaceManager {
     });
 
   /// <summary>
+  /// Pre-builds the sprite name index on every connected player's client so that
+  /// subsequent windows that reference game sprites by name open without a freeze.
+  /// Call this once at load time (e.g. on InterfaceAuth), before sending any windows
+  /// that use <c>UIBackground.FromSprite</c>.
+  /// </summary>
+  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
+  /// <param name="names">The sprite names used by your UI (for diagnostic logging).</param>
+  public static void PreCacheSprites(string plugin, string[] names) =>
+    PacketManager.SendPacketToAll(new ScarletPacket {
+      Type = "PS",
+      Plugin = plugin,
+      Window = "$precache",
+      Data = new() { ["sl"] = string.Join("\n", names) }
+    });
+
+  /// <summary>
+  /// Pre-builds the sprite name index on a specific player's client so that
+  /// subsequent windows that reference game sprites by name open without a freeze.
+  /// Call this once at load time (e.g. on InterfaceAuth), before sending any windows
+  /// that use <c>UIBackground.FromSprite</c>.
+  /// </summary>
+  /// <param name="player">The target player.</param>
+  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
+  /// <param name="names">The sprite names used by your UI (for diagnostic logging).</param>
+  public static void PreCacheSprites(PlayerData player, string plugin, string[] names) =>
+    PacketManager.SendPacket(player, new ScarletPacket {
+      Type = "PS",
+      Plugin = plugin,
+      Window = "$precache",
+      Data = new() { ["sl"] = string.Join("\n", names) }
+    });
+
+  /// <summary>
   /// Registers a callback invoked when a player sends a raw chat message starting with <paramref name="prefix"/>.
   /// Useful for handling button commands that don't use the ScarletCore command system.
   /// </summary>
@@ -150,4 +185,44 @@ public static class InterfaceManager {
   /// </example>
   public static void OnCommand(string commandName, Action<PlayerData, string[]> handler) =>
     PacketManager.OnCommand(commandName, handler);
+
+  /// <summary>
+  /// Sends a keybind map to a specific player. Each entry maps a Unity <c>KeyCode</c> name
+  /// (e.g. <c>"G"</c>, <c>"F1"</c>) to a command string that is executed on the client when
+  /// that key is pressed. The command is fired once per press with a 1-second cooldown.
+  /// <para>
+  /// Pass an empty dictionary to clear all keybinds for this plugin on the client.
+  /// </para>
+  /// </summary>
+  /// <param name="player">The target player.</param>
+  /// <param name="plugin">A unique identifier for the calling plugin.</param>
+  /// <param name="binds">Key → command pairs.</param>
+  public static void SetKeybinds(PlayerData player, string plugin, Dictionary<InputKey, string> binds) {
+    var data = new Dictionary<string, string>();
+    if (binds != null && binds.Count > 0)
+      data["kb"] = string.Join("\n", binds.Select(kv => $"{kv.Key}={kv.Value}"));
+    PacketManager.SendPacket(player, new ScarletPacket {
+      Type = "SK",
+      Plugin = plugin,
+      Window = "",
+      Data = data,
+    });
+  }
+
+  /// <summary>
+  /// Broadcasts a keybind map to all connected players. See <see cref="SetKeybinds(PlayerData, string, Dictionary{InputKey,string})"/> for details.
+  /// </summary>
+  /// <param name="plugin">A unique identifier for the calling plugin.</param>
+  /// <param name="binds">Key → command pairs.</param>
+  public static void SetKeybindsAll(string plugin, Dictionary<InputKey, string> binds) {
+    var data = new Dictionary<string, string>();
+    if (binds != null && binds.Count > 0)
+      data["kb"] = string.Join("\n", binds.Select(kv => $"{kv.Key}={kv.Value}"));
+    PacketManager.SendPacketToAll(new ScarletPacket {
+      Type = "SK",
+      Plugin = plugin,
+      Window = "",
+      Data = data,
+    });
+  }
 }
