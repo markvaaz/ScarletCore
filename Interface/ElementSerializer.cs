@@ -188,6 +188,13 @@ internal static class ElementSerializer {
     if (ct.ScrollbarWidth != 8f) d["sw"] = F(ct.ScrollbarWidth);
     if (ct.Rotation != 0f) d["ro"] = F(ct.Rotation);
     if (ct.BoxShadow.HasValue) d["bx"] = ct.BoxShadow.Value.Raw;
+    // When Anchor is set, this is a standalone container (direct window child).
+    // Emit anchor/position so the client positions it absolutely like a leaf element.
+    if (ct.Anchor.HasValue) {
+      d["an"] = ct.Anchor.Value.ToString();
+      SerializePosition(d, ct.Position);
+      if (ct.Pivot.HasValue) d["pv"] = ct.Pivot.Value.ToString();
+    }
     packets.Add(Packet(plugin, windowId, "AC", d));
 
     // Container children
