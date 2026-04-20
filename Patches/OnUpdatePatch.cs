@@ -1,4 +1,5 @@
 using HarmonyLib;
+using ProjectM;
 using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Unity.Entities;
@@ -18,7 +19,6 @@ internal class PerformanceRecorderSystemPatch {
     } catch (System.Exception ex) {
       Log.Error($"ActionScheduler execution failed: {ex}");
     }
-
     return false;
   }
 }

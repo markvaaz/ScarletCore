@@ -23,7 +23,7 @@ namespace ScarletCore.Interface;
 internal static class PacketManager {
   const string PREFIX = "[[SCARLET]]";
   const string CHUNK_PREFIX = "[[SCARLET_CHUNK:";
-  const int MAX_MESSAGE_LEN = 512;
+  const int MAX_MESSAGE_LEN = 500;
   // Each chunk payload: 512 minus worst-case header [[SCARLET_CHUNK:9999:999/999]] (30 chars)
   const int CHUNK_PAYLOAD = 480;
   static int _chunkIdCounter = 0;
