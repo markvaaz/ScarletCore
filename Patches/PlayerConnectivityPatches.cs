@@ -7,7 +7,9 @@ using ScarletCore.Utils;
 using Stunlock.Network;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Entities;
+using ProjectM.Network;
 
 namespace ScarletCore.Patches;
 
@@ -65,6 +67,26 @@ internal static class OnUserConnectedPatch {
   }
 }
 
+[HarmonyPatch]
+internal static class HandleCreateCharacterEventSystemPatch {
+  [HarmonyPatch(typeof(HandleCreateCharacterEventSystem), nameof(HandleCreateCharacterEventSystem.GetIsNameValid))]
+  [HarmonyPostfix]
+  public static void PostfixGetIsNameValid(ref bool __result, ref string characterNameString, ref CreateCharacterFailureReason invalidReason) {
+    if (!GameSystems.Initialized) return;
+    var lowerName = characterNameString.ToLower();
+    if (PlayerService.BannedNames.Any(banned => lowerName.Contains(banned.ToLower()))) {
+      __result = false;
+      invalidReason = CreateCharacterFailureReason.InvalidName;
+      return;
+    }
+
+    if (PlayerService.AllCharacters.ContainsKey(PlayerService.ExtractCleanName(characterNameString))) {
+      __result = false;
+      invalidReason = CreateCharacterFailureReason.NameTaken;
+    }
+  }
+}
+
 // Harmony patch that intercepts when a user disconnects from the server
 [HarmonyPatch(typeof(ServerBootstrapSystem), nameof(ServerBootstrapSystem.OnUserDisconnected))]
 internal static class OnUserDisconnectedPatch {
@@ -117,11 +139,19 @@ internal static class OnUserDisconnectedPatch {
       // Fire specific events based on disconnection reason
       // This allows mods to handle kicks and bans differently
       if (connectionStatusReason == ConnectionStatusChangeReason.Kicked) {
+        PlayerService.AllPlayers.Remove(playerData);
+        PlayerService.PlayerNames.Remove(playerData.Name);
+        PlayerService.PlayerIds.Remove(playerData.PlatformId);
+        PlayerService.PlayerNetworkIds.Remove(playerData.NetworkId);
         if (EventManager.GetSubscriberCount(PlayerEvents.PlayerKicked) > 0)
           EventManager.Emit(PlayerEvents.PlayerKicked, playerData);
       }
 
       if (connectionStatusReason == ConnectionStatusChangeReason.Banned) {
+        PlayerService.AllPlayers.Remove(playerData);
+        PlayerService.PlayerNames.Remove(playerData.Name);
+        PlayerService.PlayerIds.Remove(playerData.PlatformId);
+        PlayerService.PlayerNetworkIds.Remove(playerData.NetworkId);
         if (EventManager.GetSubscriberCount(PlayerEvents.PlayerBanned) > 0)
           EventManager.Emit(PlayerEvents.PlayerBanned, playerData);
       }

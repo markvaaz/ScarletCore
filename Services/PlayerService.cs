@@ -23,6 +23,15 @@ public static class PlayerService {
   /// </summary>
   public static readonly Dictionary<string, PlayerData> PlayerNames = [];
 
+
+  /// <summary>
+  /// Set of character names that are forbidden from being used during character creation.
+  /// Mods can add entries to this set to block specific names server-wide.
+  /// Comparisons are case-insensitive — add names in any casing.
+  /// </summary>
+  public static readonly HashSet<string> BannedNames = [];
+  internal static readonly Dictionary<string, Entity> AllCharacters = [];
+
   /// <summary>
   /// Dictionary for fast player lookup by platform ID (Steam ID, etc.)
   /// </summary>
@@ -67,6 +76,9 @@ public static class PlayerService {
 
         var user = entity.Read<User>();
 
+        var initName = ExtractCleanName(user.CharacterName.Value);
+        if (!string.IsNullOrEmpty(initName)) AllCharacters[initName] = entity;
+
         if (user.PlatformId == 0 || user.CharacterName.Value.StartsWith("[NPC]")) continue;
         // Add each user to the cache system
         SetPlayerCache(entity, true);
@@ -90,6 +102,7 @@ public static class PlayerService {
     PlayerNetworkIds.Clear();
     UnnamedPlayers.Clear();
     AllPlayers.Clear();
+    AllCharacters.Clear();
   }
 
   /// <summary>
@@ -151,16 +164,18 @@ public static class PlayerService {
 
     // Handle name changes and transitions from unnamed to named
     if (nameChanged || nameIsNoLongerEmpty) {
-      // Remove old name from the lookup index using the cached old name
+      // Remove old name from the lookup indexes
       if (!string.IsNullOrEmpty(oldCachedName)) {
         PlayerNames.Remove(oldCachedName.ToLower());
+        AllCharacters.Remove(oldCachedName);
       }
 
       // Update the internal cached name with new clean name
       playerData.SetName(cleanName);
 
-      // Add new clean name to the lookup index
+      // Add new clean name to the lookup indexes
       PlayerNames[cleanName.ToLower()] = playerData;
+      AllCharacters[cleanName] = userEntity;
 
       // Remove from unnamed players list (handles both name changes and first-time naming)
       UnnamedPlayers.Remove(playerData);

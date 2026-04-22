@@ -49,6 +49,9 @@ internal class Destroy_TravelBuffSystem_Patch {
 
         PlayerService.SetPlayerCache(player.UserEntity);
 
+        var createdName = PlayerService.ExtractCleanName(player.User.CharacterName.Value);
+        if (!string.IsNullOrEmpty(createdName)) PlayerService.AllCharacters[createdName] = player.UserEntity;
+
         EventManager.Emit(PlayerEvents.CharacterCreated, player);
       }
       if (EventManager.GetSubscriberCount(PostfixEvents.OnDestroyTravelBuff) == 0) return;
