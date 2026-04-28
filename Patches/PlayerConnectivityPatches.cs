@@ -87,6 +87,41 @@ internal static class HandleCreateCharacterEventSystemPatch {
   }
 }
 
+[HarmonyPatch]
+internal static class DebugEventsSystemPatch {
+  [HarmonyPatch(typeof(DebugEventsSystem), nameof(DebugEventsSystem.RenameUser))]
+  [HarmonyPostfix]
+  public static void PostfixRenameUser(FromCharacter fromCharacter, RenameUserDebugEvent clientEvent) {
+    if (!GameSystems.Initialized) return;
+
+    var newCleanName = PlayerService.ExtractCleanName(clientEvent.NewName.Value);
+    if (string.IsNullOrEmpty(newCleanName)) return;
+
+    // AllCharacters tracks every character regardless of bind status (platformId may be 0).
+    // Reverse-lookup the old name by entity so we can remove the stale entry.
+    var oldCharacterName = PlayerService.AllCharacters
+      .FirstOrDefault(kvp => kvp.Value == fromCharacter.User).Key;
+
+    if (!string.IsNullOrEmpty(oldCharacterName) && !string.Equals(oldCharacterName, newCleanName, StringComparison.OrdinalIgnoreCase))
+      PlayerService.AllCharacters.Remove(oldCharacterName);
+
+    PlayerService.AllCharacters[newCleanName] = fromCharacter.User;
+
+    // PlayerNames and CachedName only apply to bound players (platformId != 0).
+    var userData = fromCharacter.User.Read<User>();
+    if (!PlayerService.TryGetById(userData.PlatformId, out var player)) return;
+
+    var oldCachedName = player.CachedName;
+    if (newCleanName == oldCachedName) return;
+
+    if (!string.IsNullOrEmpty(oldCachedName))
+      PlayerService.PlayerNames.Remove(oldCachedName.ToLower());
+
+    PlayerService.PlayerNames[newCleanName.ToLower()] = player;
+    player.SetName(newCleanName);
+  }
+}
+
 // Harmony patch that intercepts when a user disconnects from the server
 [HarmonyPatch(typeof(ServerBootstrapSystem), nameof(ServerBootstrapSystem.OnUserDisconnected))]
 internal static class OnUserDisconnectedPatch {

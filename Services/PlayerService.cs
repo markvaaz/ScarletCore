@@ -30,7 +30,7 @@ public static class PlayerService {
   /// Comparisons are case-insensitive — add names in any casing.
   /// </summary>
   public static readonly HashSet<string> BannedNames = [];
-  internal static readonly Dictionary<string, Entity> AllCharacters = [];
+  internal static readonly Dictionary<string, Entity> AllCharacters = new(StringComparer.OrdinalIgnoreCase);
 
   /// <summary>
   /// Dictionary for fast player lookup by platform ID (Steam ID, etc.)
@@ -341,8 +341,6 @@ public static class PlayerService {
     };
 
     des.RenameUser(fromCharacter, renameEvent);
-
-    SetPlayerCache(player.UserEntity);
 
     EventManager.Emit(PlayerEvents.CharacterRenamed, player);
 
