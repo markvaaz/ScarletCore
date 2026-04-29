@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using ProjectM.Network;
 using ScarletCore.Commanding;
@@ -23,6 +26,8 @@ namespace ScarletCore.Interface;
 internal static class PacketManager {
   const string PREFIX = "[[SCARLET]]";
   const string CHUNK_PREFIX = "[[SCARLET_CHUNK:";
+  const string BATCH_PREFIX = "[[SCARLET_BATCH]]";
+  const string COMPRESSED_PREFIX = "[[SCARLET_Z]]";
   const int MAX_MESSAGE_LEN = 500;
   // Each chunk payload: 512 minus worst-case header [[SCARLET_CHUNK:9999:999/999]] (30 chars)
   const int CHUNK_PAYLOAD = 480;
@@ -30,6 +35,37 @@ internal static class PacketManager {
   // Invisible zero-width chars sent by the client on init to announce presence.
   // Renders as blank if it ever leaks into visible chat.
   const string HELLO_TOKEN = "\u200B\u200C\u200D";
+  // Minimum JSON length (chars) before attempting DEFLATE compression.
+  const int COMPRESSION_THRESHOLD = 256;
+  // Rate limit for player-initiated commands (chat commands + button commands).
+  // Applied once per command at the entry point — all resulting sends are unconditionally delivered.
+  const double CMD_RATE = 5.0;
+
+  // Simple token-bucket rate limiter. One instance per player per category.
+  sealed class TokenBucket {
+    double _tokens;
+    long _lastTick;
+    readonly double _rate;
+    readonly double _capacity;
+
+    internal TokenBucket(double rate) {
+      _rate = rate;
+      _capacity = rate;
+      _tokens = rate; // start full so first send is never blocked
+      _lastTick = Environment.TickCount64;
+    }
+
+    // Returns true and consumes one token if the bucket is non-empty, false otherwise.
+    internal bool TryConsume() {
+      var now = Environment.TickCount64;
+      var elapsed = (now - _lastTick) / 1000.0; // ms → seconds
+      _lastTick = now;
+      _tokens = Math.Min(_capacity, _tokens + elapsed * _rate);
+      if (_tokens < 1.0) return false;
+      _tokens -= 1.0;
+      return true;
+    }
+  }
 
   static readonly JsonSerializerOptions _jsonOptions = new() {
     PropertyNamingPolicy = null,
@@ -40,6 +76,12 @@ internal static class PacketManager {
 
   // Timestamp of the last handshake sent to each player.
   static readonly Dictionary<ulong, DateTime> _handshakeSentAt = [];
+
+  // Token buckets for player-initiated command requests — 5 req/s per player.
+  static readonly Dictionary<ulong, TokenBucket> _cmdBuckets = [];
+
+  // Hash of the last serialized window batch per "platformId:plugin:windowId" key. (Phase 4)
+  static readonly Dictionary<string, int> _snapshotHashes = [];
 
   /// <summary>Returns true if the player has the ScarletInterface client mod active.</summary>
   /// <param name="player">The player to check.</param>
@@ -117,22 +159,15 @@ internal static class PacketManager {
         SyncUnitModService.SendUnitMods(player);
     });
 
-    var onlinePlayers = PlayerService.GetAllConnected();
-
-    foreach (var player in onlinePlayers) {
-      Deliver(player, HELLO_TOKEN);
-    }
-
     // Remove role and pending packets when the player disconnects.
     EventManager.On(PlayerEvents.PlayerLeft, Deauth);
   }
 
-  /// <summary>Sends a handshake token to the player and records the timestamp for pending-packet queueing.</summary>
-  /// <param name="player">The player to authenticate.</param>
+  /// <summary>Records the join timestamp for pending-packet queueing. Client will initiate the handshake when ready.</summary>
+  /// <param name="player">The player that joined.</param>
   [EventPriority(EventPriority.First)]
   public static void Auth(PlayerData player) {
     _handshakeSentAt[player.PlatformId] = DateTime.UtcNow;
-    Deliver(player, HELLO_TOKEN);
   }
 
   /// <summary>Removes pending packets, handshake state, and the interface role from a disconnecting player.</summary>
@@ -142,6 +177,11 @@ internal static class PacketManager {
     _pendingPackets.Remove(player.PlatformId);
     _handshakeSentAt.Remove(player.PlatformId);
     player.RemoveRole("interface-user");
+    // Clear per-player rate limit bucket and snapshot hashes so the next session starts fresh.
+    _cmdBuckets.Remove(player.PlatformId);
+    var prefix = player.PlatformId + ":";
+    foreach (var key in _snapshotHashes.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList())
+      _snapshotHashes.Remove(key);
   }
 
   static void FlushPendingPackets(PlayerData player) {
@@ -168,10 +208,90 @@ internal static class PacketManager {
     queue.Add(raw);
   }
 
+  // ── Phase 3: DEFLATE + Base64 compression ───────────────────────────────────────────────────
+  // Compresses a JSON string with DEFLATE and encodes as Base64.
+  // Returns null when the compressed form is not shorter than the original.
+  static string TryCompress(string json) {
+    if (json.Length < COMPRESSION_THRESHOLD) return null;
+    var bytes = Encoding.UTF8.GetBytes(json);
+    using var ms = new MemoryStream();
+    using (var ds = new DeflateStream(ms, CompressionLevel.Fastest))
+      ds.Write(bytes, 0, bytes.Length);
+    var b64 = Convert.ToBase64String(ms.ToArray());
+    return b64.Length < json.Length ? b64 : null;
+  }
+
+  // Serialises a batch JSON array and delivers it (compressed if beneficial) to one player.
+  static void SendBatch(PlayerData player, string batchJson) {
+    var compressed = TryCompress(batchJson);
+    var raw = compressed != null ? COMPRESSED_PREFIX + compressed : BATCH_PREFIX + batchJson;
+    if (!HasInterface(player)) {
+      QueueForPendingAuth(player, raw);
+      return;
+    }
+    SendRaw(player, raw);
+  }
+
+  // Broadcasts a batch to all connected interface players.
+  static void SendBatchToAll(string batchJson) {
+    var compressed = TryCompress(batchJson);
+    var raw = compressed != null ? COMPRESSED_PREFIX + compressed : BATCH_PREFIX + batchJson;
+    foreach (var player in PlayerService.GetAllConnected().Where(HasInterface))
+      SendRaw(player, raw);
+  }
+
+  // ── Phase 1+2+4: Full-window send with rate limiting, batching, and snapshot dedup ──────────
+  /// <summary>
+  /// Sends a serialized window batch to a specific player.
+  /// Applies a per-(player,plugin,window) rate limit, DEFLATE+Base64 compression,
+  /// and skips the full payload when the window content is unchanged (snapshot hash match).
+  /// </summary>
+  /// <param name="player">Target player.</param>
+  /// <param name="plugin">Plugin identifier.</param>
+  /// <param name="windowId">Window identifier.</param>
+  /// <param name="packets">Element packets produced by ElementSerializer (action packet not yet added).</param>
+  /// <param name="actionToken">Short action type token ("OP", "CL", "CR", "RS") or null for none.</param>
+  public static void SendWindow(PlayerData player, string plugin, string windowId, List<ScarletPacket> packets, string actionToken) {
+    var key = $"{player.PlatformId}:{plugin}:{windowId}";
+
+    // No rate limit here — limiting happens at command entry (OnBeforeExecute / OnChatMessage).
+    // Server-initiated sends (level-up, join events, etc.) are always delivered in full.
+
+    // Append the action packet.
+    if (actionToken != null) {
+      packets.Add(new ScarletPacket { Type = actionToken, Plugin = plugin, Window = windowId, Data = [] });
+    }
+
+    var batchJson = JsonSerializer.Serialize(packets, _jsonOptions);
+
+    // Phase 4: Snapshot hash dedup — only for Open ("OP") so Close/Clear/Reset always execute.
+    if (actionToken == "OP") {
+      var newHash = batchJson.GetHashCode();
+      if (_snapshotHashes.TryGetValue(key, out var cachedHash) && cachedHash == newHash) {
+        // Content unchanged — send only the Open action so the client shows the existing window.
+        var openPacket = new ScarletPacket { Type = "OP", Plugin = plugin, Window = windowId, Data = [] };
+        SendPacket(player, openPacket);
+        return;
+      }
+      _snapshotHashes[key] = newHash;
+    }
+
+    // Phase 2+3: Deliver as a single batch (with optional compression).
+    SendBatch(player, batchJson);
+  }
+
+  /// <summary>Broadcasts a full window to all connected interface players (no rate limit or snapshot dedup).</summary>
+  public static void SendWindowToAll(string plugin, string windowId, List<ScarletPacket> packets, string actionToken) {
+    if (actionToken != null)
+      packets.Add(new ScarletPacket { Type = actionToken, Plugin = plugin, Window = windowId, Data = [] });
+    SendBatchToAll(JsonSerializer.Serialize(packets, _jsonOptions));
+  }
+
   /// <summary>Sends a ScarletPacket to a specific player.</summary>
   /// <param name="player">The target player. If not yet authenticated, the packet is queued.</param>
   /// <param name="packet">The packet to send.</param>
   public static void SendPacket(PlayerData player, ScarletPacket packet) {
+    // No rate limit here — limiting happens at command entry (OnBeforeExecute / OnChatMessage).
     var raw = PREFIX + JsonSerializer.Serialize(packet, _jsonOptions);
     if (!HasInterface(player)) {
       QueueForPendingAuth(player, raw);
@@ -189,18 +309,19 @@ internal static class PacketManager {
   }
 
   // Sends a raw message to the player, splitting into chunks if it exceeds MAX_MESSAGE_LEN.
+  // The full raw string (including whatever prefix it starts with) is embedded in the chunk
+  // payloads so the client can reconstruct any prefix type without guessing.
   static void SendRaw(PlayerData player, string raw) {
     if (raw.Length <= MAX_MESSAGE_LEN) {
       Deliver(player, raw);
       return;
     }
-    var json = raw[PREFIX.Length..];
     var id = (++_chunkIdCounter).ToString();
-    int total = (int)Math.Ceiling((double)json.Length / CHUNK_PAYLOAD);
+    int total = (int)Math.Ceiling((double)raw.Length / CHUNK_PAYLOAD);
     for (int i = 0; i < total; i++) {
       int start = i * CHUNK_PAYLOAD;
-      int len = Math.Min(CHUNK_PAYLOAD, json.Length - start);
-      Deliver(player, $"{CHUNK_PREFIX}{id}:{i}/{total}]]{json.Substring(start, len)}");
+      int len = Math.Min(CHUNK_PAYLOAD, raw.Length - start);
+      Deliver(player, $"{CHUNK_PREFIX}{id}:{i}/{total}]]{raw.Substring(start, len)}");
     }
   }
 
@@ -257,6 +378,10 @@ internal static class PacketManager {
 
         foreach (var (prefix, handlers) in _rawHandlers) {
           if (!text.StartsWith(prefix, StringComparison.Ordinal)) continue;
+          // System protocol messages (handshake, sync) are never rate-limited.
+          // User-facing raw handlers (custom button commands, etc.) consume a command token.
+          bool isSystemToken = prefix == HELLO_TOKEN || prefix == "[[SCARLET_SYNC]]";
+          if (!isSystemToken && !TryConsumeCommandToken(player)) continue;
           var rest = prefix.Length < text.Length ? text.Substring(prefix.Length).Trim() : string.Empty;
           var args = rest.Length > 0 ? rest.Split(' ', StringSplitOptions.RemoveEmptyEntries) : Array.Empty<string>();
           foreach (var handler in handlers) {
@@ -269,10 +394,23 @@ internal static class PacketManager {
     }
   }
 
+  // Consumes one command token for the player. Returns false if the player is rate-limited.
+  static bool TryConsumeCommandToken(PlayerData player) {
+    if (!_cmdBuckets.TryGetValue(player.PlatformId, out var bucket)) {
+      bucket = new TokenBucket(CMD_RATE);
+      _cmdBuckets[player.PlatformId] = bucket;
+    }
+    return bucket.TryConsume();
+  }
+
   [EventPriority(EventPriority.High)]
   static void OnBeforeExecute(PlayerData player, CommandInfo commandInfo, string[] args) {
     if (_cmdHandlers.Count == 0) return;
     if (!_cmdHandlers.TryGetValue(commandInfo.Name, out var handlers)) return;
+    if (!TryConsumeCommandToken(player)) {
+      commandInfo.CancelExecution = true;
+      return;
+    }
     foreach (var handler in handlers) {
       try { handler(player, args); } catch (Exception ex) { Log.Error($"[ScarletInterface.API] OnCommand handler error: {ex}"); }
     }

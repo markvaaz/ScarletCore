@@ -194,29 +194,19 @@ public class Window : IEnumerable<UIElement> {
   public void Send(WindowAction action = WindowAction.Open) {
     var packets = ElementSerializer.Serialize(this, _plugin, _id);
 
-    // Action packet last (short type tokens)
-    if (action != WindowAction.None) {
-      string typeToken = action switch {
-        WindowAction.Open => "OP",
-        WindowAction.Close => "CL",
-        WindowAction.Clear => "CR",
-        WindowAction.Reset => "RS",
-        _ => action.ToString(),
-      };
-      packets.Add(new ScarletPacket {
-        Type = typeToken,
-        Plugin = _plugin,
-        Window = _id,
-        Data = [],
-      });
-    }
+    string actionToken = action switch {
+      WindowAction.Open => "OP",
+      WindowAction.Close => "CL",
+      WindowAction.Clear => "CR",
+      WindowAction.Reset => "RS",
+      WindowAction.None => null,
+      _ => action.ToString(),
+    };
 
-    foreach (var packet in packets) {
-      if (_player != null)
-        PacketManager.SendPacket(_player, packet);
-      else
-        PacketManager.SendPacketToAll(packet);
-    }
+    if (_player != null)
+      PacketManager.SendWindow(_player, _plugin, _id, packets, actionToken);
+    else
+      PacketManager.SendWindowToAll(_plugin, _id, packets, actionToken);
   }
 
   // ─── IEnumerable ─────────────────────────────────────────────────────────
