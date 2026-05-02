@@ -29,8 +29,11 @@ internal static class PacketManager {
   const string BATCH_PREFIX = "[[SCARLET_BATCH]]";
   const string COMPRESSED_PREFIX = "[[SCARLET_Z]]";
   const int MAX_MESSAGE_LEN = 480;
-  // Each chunk payload: 512 minus worst-case header [[SCARLET_CHUNK:9999:999/999]] (30 chars)
-  const int CHUNK_PAYLOAD = 480;
+  // FixedString512Bytes holds at most ~510 bytes of content (512 − 2-byte length prefix).
+  // Chunk header [[SCARLET_CHUNK:{id}:{i}/{total}]] grows with server uptime; budget 40 chars.
+  // CHUNK_PAYLOAD = MAX_MESSAGE_LEN − header_budget → full chunk always ≤ MAX_MESSAGE_LEN.
+  const int CHUNK_HEADER_BUDGET = 40;
+  const int CHUNK_PAYLOAD = MAX_MESSAGE_LEN - CHUNK_HEADER_BUDGET; // 440
   static int _chunkIdCounter = 0;
   // Invisible zero-width chars sent by the client on init to announce presence.
   // Renders as blank if it ever leaks into visible chat.
