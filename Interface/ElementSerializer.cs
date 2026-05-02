@@ -222,6 +222,18 @@ internal static class ElementSerializer {
 
   static void SerializeRowElement(List<ScarletPacket> packets, string plugin,
       string windowId, UIElement elem, string parentId, Dictionary<string, int> elemCounters) {
+    // Row nested inside a Row/Accordion/Container — serialize as child row.
+    if (elem is Row nestedRow) {
+      string nestedRowId = nestedRow.ElemId ?? NextElemId(elemCounters, parentId);
+      elemCounters[nestedRowId] = 0;
+      var (rowType, rd) = BuildElementData(nestedRow, nestedRowId);
+      rd["pa"] = parentId;
+      packets.Add(Packet(plugin, windowId, rowType, rd));
+      foreach (var child in nestedRow.Children)
+        SerializeRowElement(packets, plugin, windowId, child, nestedRowId, elemCounters);
+      return;
+    }
+
     // Container nested inside a Row/Accordion/Container — serialize as child container.
     if (elem is Container ct) {
       string containerId = ct.ElemId ?? NextElemId(elemCounters, parentId);
@@ -303,7 +315,7 @@ internal static class ElementSerializer {
           d["fw"] = F(inp.FocusBorder.Value.Width);
         }
         if (inp.CaretColor.HasValue) d["cc"] = inp.CaretColor.Value;
-        if (inp.SelectionColor.HasValue) d["sl"] = inp.SelectionColor.Value;
+        if (inp.SelectionColor.HasValue) d["xs"] = inp.SelectionColor.Value;
         if (inp.SelectionTextColor.HasValue) d["st"] = inp.SelectionTextColor.Value;
         SerializeTextStyle(d, inp);
         return ("AI", d);

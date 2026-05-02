@@ -28,7 +28,7 @@ internal static class PacketManager {
   const string CHUNK_PREFIX = "[[SCARLET_CHUNK:";
   const string BATCH_PREFIX = "[[SCARLET_BATCH]]";
   const string COMPRESSED_PREFIX = "[[SCARLET_Z]]";
-  const int MAX_MESSAGE_LEN = 500;
+  const int MAX_MESSAGE_LEN = 480;
   // Each chunk payload: 512 minus worst-case header [[SCARLET_CHUNK:9999:999/999]] (30 chars)
   const int CHUNK_PAYLOAD = 480;
   static int _chunkIdCounter = 0;
@@ -332,7 +332,7 @@ internal static class PacketManager {
       TimeUTC = DateTime.UtcNow.Ticks,
       FromUser = NetworkId.Empty,
       FromCharacter = NetworkId.Empty,
-      MessageType = ServerChatMessageType.Region,
+      MessageType = ServerChatMessageType.System,
     };
     NetworkEvents.SendEvent(GameSystems.EntityManager, eventData, ref user);
   }

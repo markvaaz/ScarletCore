@@ -120,8 +120,8 @@ public class Window : IEnumerable<UIElement> {
   public bool Transparent { get; set; }
   /// <summary>Optional native UI parent identifier to attach to.</summary>
   public string NativeParent { get; set; }
-  /// <summary>If true, window is hidden when any in-game menu opens. Default: true.</summary>
-  public bool HideOnMenuOpen { get; set; } = true;
+  /// <summary>If true, window is hidden when any in-game menu opens. Default: false.</summary>
+  public bool HideOnMenuOpen { get; set; } = false;
 
   // ─── Animations ──────────────────────────────────────────────────────────
 
