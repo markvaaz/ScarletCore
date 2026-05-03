@@ -335,7 +335,7 @@ internal static class PacketManager {
       TimeUTC = DateTime.UtcNow.Ticks,
       FromUser = NetworkId.Empty,
       FromCharacter = NetworkId.Empty,
-      MessageType = ServerChatMessageType.System,
+      MessageType = ServerChatMessageType.Region,
     };
     NetworkEvents.SendEvent(GameSystems.EntityManager, eventData, ref user);
   }
