@@ -43,6 +43,10 @@ internal static class PacketManager {
   // Rate limit for player-initiated commands (chat commands + button commands).
   // Applied once per command at the entry point — all resulting sends are unconditionally delivered.
   const double CMD_RATE = 5.0;
+  // Maximum number of chat events sent per frame. Prevents ECS entity spikes when many players
+  // trigger sends simultaneously (e.g. N players opening a window = N×chunks events at once).
+  // At 30 Hz: 50/frame × 30 = 1500 msgs/s — far above any realistic server load.
+  const int BUDGET_PER_FRAME = 50;
 
   // Simple token-bucket rate limiter. One instance per player per category.
   sealed class TokenBucket {
@@ -86,6 +90,11 @@ internal static class PacketManager {
   // Hash of the last serialized window batch per "platformId:plugin:windowId" key. (Phase 4)
   static readonly Dictionary<string, int> _snapshotHashes = [];
 
+  // Global outbound queue. Deliver() enqueues here; DrainSendQueue() flushes up to BUDGET_PER_FRAME
+  // items per game frame, spreading ECS entity creation evenly across ticks.
+  static readonly Queue<(User user, ChatMessageServerEvent evt)> _sendQueue = new();
+  static ActionId _drainActionId;
+
   /// <summary>Returns true if the player has the ScarletInterface client mod active.</summary>
   /// <param name="player">The player to check.</param>
   public static bool HasInterface(PlayerData player) =>
@@ -124,6 +133,7 @@ internal static class PacketManager {
   /// the client handshake flow, and sends a hello token to all currently online players.
   /// </summary>
   public static void Initialize() {
+    _drainActionId = ActionScheduler.OncePerFrame(DrainSendQueue);
     EventManager.On(PrefixEvents.OnChatMessage, OnChatMessage);
     EventManager.On(CommandEvents.OnBeforeExecute, OnBeforeExecute);
 
@@ -329,7 +339,6 @@ internal static class PacketManager {
   }
 
   static void Deliver(PlayerData player, string text) {
-    var user = player.User;
     ChatMessageServerEvent eventData = new() {
       MessageText = new FixedString512Bytes(text),
       TimeUTC = DateTime.UtcNow.Ticks,
@@ -337,7 +346,16 @@ internal static class PacketManager {
       FromCharacter = NetworkId.Empty,
       MessageType = ServerChatMessageType.Region,
     };
-    NetworkEvents.SendEvent(GameSystems.EntityManager, eventData, ref user);
+    _sendQueue.Enqueue((player.User, eventData));
+  }
+
+  static void DrainSendQueue() {
+    int drained = 0;
+    while (drained < BUDGET_PER_FRAME && _sendQueue.Count > 0) {
+      var (user, evt) = _sendQueue.Dequeue();
+      NetworkEvents.SendEvent(GameSystems.EntityManager, evt, ref user);
+      drained++;
+    }
   }
 
   /// <summary>
