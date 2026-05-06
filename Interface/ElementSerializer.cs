@@ -13,6 +13,11 @@ namespace ScarletCore.Interface;
 /// </summary>
 internal static class ElementSerializer {
   static readonly CultureInfo IC = CultureInfo.InvariantCulture;
+  const string TRUE_LC = "true";
+  const string FALSE_LC = "false";
+  // Pre-computed spacing key arrays — avoid $"{pfx}t" string allocations in SerializeSpacing.
+  static readonly string[] _paddingKeys = ["pt", "pr", "pb", "pl"];
+  static readonly string[] _marginKeys  = ["mt", "mr", "mb", "ml"];
 
   /// <summary>Serializes the window and all children into an ordered packet list.</summary>
   internal static List<ScarletPacket> Serialize(Window window, string plugin, string windowId) {
@@ -21,10 +26,10 @@ internal static class ElementSerializer {
     var elemCounters = new Dictionary<string, int>();
 
     // ── SetWindow packet ───────────────────────────────────────────────────
-    var wd = new Dictionary<string, string> {
+    var wd = new Dictionary<string, string>(24) {
       ["an"] = window.Anchor.ToString(),
-      ["dg"] = window.Draggable.ToString().ToLower(),
-      ["tr"] = window.Transparent.ToString().ToLower(),
+      ["dg"] = window.Draggable ? TRUE_LC : FALSE_LC,
+      ["tr"] = window.Transparent ? TRUE_LC : FALSE_LC,
       ["ov"] = window.Overflow.ToString(),
     };
     if (window.Width.HasValue) wd["w"] = window.Width.Raw;
@@ -95,7 +100,7 @@ internal static class ElementSerializer {
     rowCounter++;
     elemCounters[rowId] = 0;
 
-    var d = new Dictionary<string, string> {
+    var d = new Dictionary<string, string>(20) {
       ["rd"] = rowId,
       ["ei"] = rowId,
       ["jc"] = row.JustifyContent.ToString(),
@@ -133,11 +138,11 @@ internal static class ElementSerializer {
     rowCounter++;
     elemCounters[accordionId] = 0;
 
-    var d = new Dictionary<string, string> {
+    var d = new Dictionary<string, string>(20) {
       ["ak"] = accordionId,
       ["ei"] = accordionId,
       ["ti"] = acc.Title ?? string.Empty,
-      ["ex"] = acc.Expanded.ToString().ToLower(),
+      ["ex"] = acc.Expanded ? TRUE_LC : FALSE_LC,
       ["hh"] = F(acc.HeaderHeight),
     };
     if (acc.Width.HasValue) d["w"] = acc.Width.Raw;
@@ -167,7 +172,7 @@ internal static class ElementSerializer {
     rowCounter++;
     elemCounters[containerId] = 0;
 
-    var d = new Dictionary<string, string> {
+    var d = new Dictionary<string, string>(20) {
       ["cn"] = containerId,
       ["ei"] = containerId,
       ["jc"] = ct.JustifyContent.ToString(),
@@ -238,7 +243,7 @@ internal static class ElementSerializer {
     if (elem is Container ct) {
       string containerId = ct.ElemId ?? NextElemId(elemCounters, parentId);
       elemCounters[containerId] = 0;
-      var cd = new Dictionary<string, string> {
+      var cd = new Dictionary<string, string>(20) {
         ["cn"] = containerId,
         ["ei"] = containerId,
         ["pa"] = parentId,
@@ -278,7 +283,7 @@ internal static class ElementSerializer {
   /// Common base properties are always applied; type-specific properties added per case.
   /// </summary>
   static (string Type, Dictionary<string, string> Data) BuildElementData(UIElement elem, string elemId) {
-    var d = new Dictionary<string, string> { ["ei"] = elemId };
+    var d = new Dictionary<string, string>(16) { ["ei"] = elemId };
     SerializeBase(d, elem);
 
     switch (elem) {
@@ -397,7 +402,7 @@ internal static class ElementSerializer {
       case Accordion acc:
         d["ak"] = elemId;
         d["ti"] = acc.Title ?? string.Empty;
-        d["ex"] = acc.Expanded.ToString().ToLower();
+        d["ex"] = acc.Expanded ? TRUE_LC : FALSE_LC;
         d["hh"] = F(acc.HeaderHeight);
         if (acc.HeaderBackground.HasValue) acc.HeaderBackground.Value.Apply(d, "d");
         if (acc.HeaderTextColor.HasValue) d["htc"] = acc.HeaderTextColor.Value;
@@ -469,10 +474,11 @@ internal static class ElementSerializer {
   /// <summary>Serializes Spacing using a 1-char prefix: 'p'=Padding, 'm'=Margin → pt/pr/pb/pl or mt/mr/mb/ml.</summary>
   static void SerializeSpacing(Dictionary<string, string> d, char pfx, Spacing? spacing) {
     if (!spacing.HasValue) return;
-    d[$"{pfx}t"] = F(spacing.Value.Top);
-    d[$"{pfx}r"] = F(spacing.Value.Right);
-    d[$"{pfx}b"] = F(spacing.Value.Bottom);
-    d[$"{pfx}l"] = F(spacing.Value.Left);
+    var keys = pfx == 'p' ? _paddingKeys : _marginKeys;
+    d[keys[0]] = F(spacing.Value.Top);
+    d[keys[1]] = F(spacing.Value.Right);
+    d[keys[2]] = F(spacing.Value.Bottom);
+    d[keys[3]] = F(spacing.Value.Left);
   }
 
   /// <summary>Serializes Position (px=PosX, py=PosY, zi=ZIndex).</summary>

@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -87,8 +88,17 @@ internal static class PacketManager {
   // Token buckets for player-initiated command requests — 5 req/s per player.
   static readonly Dictionary<ulong, TokenBucket> _cmdBuckets = [];
 
-  // Hash of the last serialized window batch per "platformId:plugin:windowId" key. (Phase 4)
-  static readonly Dictionary<string, int> _snapshotHashes = [];
+  // Hash of the last serialized window batch per player.
+  // Outer key = PlatformId, inner key = "plugin:windowId".
+  // Two-level structure enables O(1) cleanup on disconnect vs the previous O(n) LINQ scan.
+  static readonly Dictionary<ulong, Dictionary<string, int>> _snapshotHashes = [];
+
+  // Per-(plugin:windowId:action) cache of the last serialized compressed raw string.
+  // Eliminates repeated TryCompress() work when the same window is sent to many players
+  // within BATCH_CACHE_TTL_MS milliseconds (e.g. mass-open after a server event).
+  sealed class BatchCacheEntry { public int JsonHash; public string Raw; public long ExpiryMs; }
+  static readonly Dictionary<string, BatchCacheEntry> _batchCache = new(16);
+  const long BATCH_CACHE_TTL_MS = 50;
 
   // Global outbound queue. Deliver() enqueues here; DrainSendQueue() flushes up to BUDGET_PER_FRAME
   // items per game frame, spreading ECS entity creation evenly across ticks.
@@ -192,9 +202,7 @@ internal static class PacketManager {
     player.RemoveRole("interface-user");
     // Clear per-player rate limit bucket and snapshot hashes so the next session starts fresh.
     _cmdBuckets.Remove(player.PlatformId);
-    var prefix = player.PlatformId + ":";
-    foreach (var key in _snapshotHashes.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList())
-      _snapshotHashes.Remove(key);
+    _snapshotHashes.Remove(player.PlatformId);
   }
 
   static void FlushPendingPackets(PlayerData player) {
@@ -221,17 +229,24 @@ internal static class PacketManager {
     queue.Add(raw);
   }
 
-  // ── Phase 3: DEFLATE + Base64 compression ───────────────────────────────────────────────────
+  // ── DEFLATE + Base64 compression ────────────────────────────────────────────────────────────
   // Compresses a JSON string with DEFLATE and encodes as Base64.
+  // Input bytes are rented from ArrayPool to avoid per-call heap allocations.
   // Returns null when the compressed form is not shorter than the original.
   static string TryCompress(string json) {
     if (json.Length < COMPRESSION_THRESHOLD) return null;
-    var bytes = Encoding.UTF8.GetBytes(json);
-    using var ms = new MemoryStream();
-    using (var ds = new DeflateStream(ms, CompressionLevel.Fastest))
-      ds.Write(bytes, 0, bytes.Length);
-    var b64 = Convert.ToBase64String(ms.ToArray());
-    return b64.Length < json.Length ? b64 : null;
+    int maxBytes = Encoding.UTF8.GetMaxByteCount(json.Length);
+    var inputBuf = ArrayPool<byte>.Shared.Rent(maxBytes);
+    try {
+      int actualBytes = Encoding.UTF8.GetBytes(json, 0, json.Length, inputBuf, 0);
+      using var ms = new MemoryStream(actualBytes);
+      using (var ds = new DeflateStream(ms, CompressionLevel.Fastest, leaveOpen: true))
+        ds.Write(inputBuf, 0, actualBytes);
+      var b64 = Convert.ToBase64String(ms.GetBuffer(), 0, (int)ms.Length);
+      return b64.Length < json.Length ? b64 : null;
+    } finally {
+      ArrayPool<byte>.Shared.Return(inputBuf);
+    }
   }
 
   // Serialises a batch JSON array and delivers it (compressed if beneficial) to one player.
@@ -265,32 +280,48 @@ internal static class PacketManager {
   /// <param name="packets">Element packets produced by ElementSerializer (action packet not yet added).</param>
   /// <param name="actionToken">Short action type token ("OP", "CL", "CR", "RS") or null for none.</param>
   public static void SendWindow(PlayerData player, string plugin, string windowId, List<ScarletPacket> packets, string actionToken) {
-    var key = $"{player.PlatformId}:{plugin}:{windowId}";
-
-    // No rate limit here — limiting happens at command entry (OnBeforeExecute / OnChatMessage).
-    // Server-initiated sends (level-up, join events, etc.) are always delivered in full.
-
     // Append the action packet.
     if (actionToken != null) {
       packets.Add(new ScarletPacket { Type = actionToken, Plugin = plugin, Window = windowId, Data = [] });
     }
 
     var batchJson = JsonSerializer.Serialize(packets, _jsonOptions);
+    var batchHash = batchJson.GetHashCode();
 
-    // Phase 4: Snapshot hash dedup — only for Open ("OP") so Close/Clear/Reset always execute.
+    // Snapshot hash dedup — only for Open ("OP") so Close/Clear/Reset always execute.
     if (actionToken == "OP") {
-      var newHash = batchJson.GetHashCode();
-      if (_snapshotHashes.TryGetValue(key, out var cachedHash) && cachedHash == newHash) {
+      if (!_snapshotHashes.TryGetValue(player.PlatformId, out var playerHashes)) {
+        playerHashes = new Dictionary<string, int>(8);
+        _snapshotHashes[player.PlatformId] = playerHashes;
+      }
+      var windowKey = $"{plugin}:{windowId}";
+      if (playerHashes.TryGetValue(windowKey, out var cachedHash) && cachedHash == batchHash) {
         // Content unchanged — send only the Open action so the client shows the existing window.
-        var openPacket = new ScarletPacket { Type = "OP", Plugin = plugin, Window = windowId, Data = [] };
-        SendPacket(player, openPacket);
+        SendPacket(player, new ScarletPacket { Type = "OP", Plugin = plugin, Window = windowId, Data = [] });
         return;
       }
-      _snapshotHashes[key] = newHash;
+      playerHashes[windowKey] = batchHash;
     }
 
-    // Phase 2+3: Deliver as a single batch (with optional compression).
-    SendBatch(player, batchJson);
+    // Frame cache: if the same batch was already compressed within BATCH_CACHE_TTL_MS ms,
+    // reuse the prepared raw string — skips TryCompress for all players after the first.
+    var frameKey = $"{plugin}:{windowId}:{actionToken ?? ""}";
+    var nowMs = Environment.TickCount64;
+    string raw;
+    if (_batchCache.TryGetValue(frameKey, out var cached) &&
+        cached.ExpiryMs > nowMs && cached.JsonHash == batchHash) {
+      raw = cached.Raw;
+    } else {
+      var compressed = TryCompress(batchJson);
+      raw = compressed != null ? COMPRESSED_PREFIX + compressed : BATCH_PREFIX + batchJson;
+      _batchCache[frameKey] = new BatchCacheEntry { JsonHash = batchHash, Raw = raw, ExpiryMs = nowMs + BATCH_CACHE_TTL_MS };
+    }
+
+    if (!HasInterface(player)) {
+      QueueForPendingAuth(player, raw);
+      return;
+    }
+    SendRaw(player, raw);
   }
 
   /// <summary>Broadcasts a full window to all connected interface players (no rate limit or snapshot dedup).</summary>
