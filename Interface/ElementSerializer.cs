@@ -17,7 +17,7 @@ internal static class ElementSerializer {
   const string FALSE_LC = "false";
   // Pre-computed spacing key arrays — avoid $"{pfx}t" string allocations in SerializeSpacing.
   static readonly string[] _paddingKeys = ["pt", "pr", "pb", "pl"];
-  static readonly string[] _marginKeys  = ["mt", "mr", "mb", "ml"];
+  static readonly string[] _marginKeys = ["mt", "mr", "mb", "ml"];
 
   /// <summary>Serializes the window and all children into an ordered packet list.</summary>
   internal static List<ScarletPacket> Serialize(Window window, string plugin, string windowId) {
