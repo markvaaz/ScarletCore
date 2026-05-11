@@ -83,7 +83,11 @@ internal static class ElementSerializer {
         SerializeAccordion(packets, plugin, windowId, accordion, ref rowCounter, elemCounters);
       else if (child is Container container)
         SerializeContainer(packets, plugin, windowId, container, ref rowCounter, elemCounters);
-      else
+      else if (child is VirtualList vl) {
+        string listId = vl.ElemId ?? $"vl_{rowCounter}";
+        rowCounter++;
+        SerializeVirtualList(packets, plugin, windowId, vl, listId, elemCounters, null);
+      } else
         SerializeStandaloneElement(packets, plugin, windowId, child, elemCounters);
     }
 
@@ -209,6 +213,118 @@ internal static class ElementSerializer {
       SerializeRowElement(packets, plugin, windowId, child, containerId, elemCounters);
   }
 
+  // ─── VirtualList ──────────────────────────────────────────────────────────
+
+  /// <summary>
+  /// Emits an AVL (AddVirtualList) container packet followed by one element packet per
+  /// child of each item — each child carries the extra <c>vi</c> (ListId) and <c>vii</c>
+  /// (ItemIndex) keys so the client stores them without creating GameObjects immediately.
+  /// </summary>
+  static void SerializeVirtualList(List<ScarletPacket> packets, string plugin, string windowId,
+      VirtualList vl, string listId, Dictionary<string, int> elemCounters, string parentId) {
+    var d = new Dictionary<string, string>(16) {
+      ["li"] = listId,
+      ["ei"] = listId,
+      ["ih"] = F(vl.ItemHeight),
+    };
+    if (!vl.AutoScrollToBottom) d["ab"] = "false";
+    if (vl.Width.HasValue) d["w"] = vl.Width.Raw;
+    if (vl.Height.HasValue) d["h"] = vl.Height.Raw;
+    SerializeBackground(d, vl.Background);
+    SerializeBorder(d, vl.Border);
+    SerializeSpacing(d, 'p', vl.Padding);
+    SerializeSpacing(d, 'm', vl.Margin);
+    if (parentId != null) d["pa"] = parentId;
+    if (vl.Rotation != 0f) d["ro"] = F(vl.Rotation);
+    if (vl.BoxShadow.HasValue) d["bx"] = vl.BoxShadow.Value.Raw;
+    if (vl.Anchor.HasValue) {
+      d["an"] = vl.Anchor.Value.ToString();
+      SerializePosition(d, vl.Position);
+      if (vl.Pivot.HasValue) d["pv"] = vl.Pivot.Value.ToString();
+    }
+    packets.Add(Packet(plugin, windowId, "AVL", d));
+
+    for (int i = 0; i < vl.Items.Count; i++) {
+      var itemCounters = new Dictionary<string, int>();
+      string itemScopeId = $"{listId}_item_{i}";
+      itemCounters[itemScopeId] = 0;
+      foreach (var child in vl.Items[i])
+        SerializeVirtualItemElement(packets, plugin, windowId, listId, i, child, itemScopeId, itemCounters);
+    }
+  }
+
+  /// <summary>
+  /// Recursively serializes one element inside a virtual list item.
+  /// All emitted packets receive <c>vi</c> (VirtualListId) and <c>vii</c> (VirtualItemIndex)
+  /// so the client routes them to <see cref="VirtualScrollView.StoreElement"/> instead of
+  /// creating GameObjects immediately.
+  /// </summary>
+  static void SerializeVirtualItemElement(List<ScarletPacket> packets, string plugin, string windowId,
+      string listId, int itemIndex, UIElement elem, string parentId, Dictionary<string, int> counters) {
+    string vii = itemIndex.ToString(IC);
+
+    if (elem is Row row) {
+      string rowId = row.ElemId ?? NextElemId(counters, parentId);
+      counters[rowId] = 0;
+      var d = new Dictionary<string, string>(20) {
+        ["rd"] = rowId, ["ei"] = rowId, ["pa"] = parentId,
+        ["vi"] = listId, ["vii"] = vii,
+        ["jc"] = row.JustifyContent.ToString(),
+        ["ali"] = row.AlignItems.ToString(),
+        ["ov"] = row.Overflow.ToString(),
+      };
+      if (row.Width.HasValue) d["w"] = row.Width.Raw;
+      if (row.Height.HasValue) d["h"] = row.Height.Raw;
+      SerializeBackground(d, row.Background);
+      SerializeBorder(d, row.Border);
+      SerializeSpacing(d, 'p', row.Padding);
+      SerializeSpacing(d, 'm', row.Margin);
+      if (row.Direction != FlowDirection.Horizontal) d["dir"] = row.Direction.ToString();
+      if (row.Gap > 0f) d["gp"] = F(row.Gap);
+      if (row.Rotation != 0f) d["ro"] = F(row.Rotation);
+      if (row.BoxShadow.HasValue) d["bx"] = row.BoxShadow.Value.Raw;
+      packets.Add(Packet(plugin, windowId, "AR", d));
+      foreach (var child in row.Children)
+        SerializeVirtualItemElement(packets, plugin, windowId, listId, itemIndex, child, rowId, counters);
+      return;
+    }
+
+    if (elem is Container ct) {
+      string ctId = ct.ElemId ?? NextElemId(counters, parentId);
+      counters[ctId] = 0;
+      var d = new Dictionary<string, string>(20) {
+        ["cn"] = ctId, ["ei"] = ctId, ["pa"] = parentId,
+        ["vi"] = listId, ["vii"] = vii,
+        ["jc"] = ct.JustifyContent.ToString(),
+        ["ali"] = ct.AlignItems.ToString(),
+        ["ov"] = ct.Overflow.ToString(),
+      };
+      if (ct.Width.HasValue) d["w"] = ct.Width.Raw;
+      if (ct.Height.HasValue) d["h"] = ct.Height.Raw;
+      SerializeBackground(d, ct.Background);
+      SerializeBorder(d, ct.Border);
+      SerializeSpacing(d, 'p', ct.Padding);
+      SerializeSpacing(d, 'm', ct.Margin);
+      if (ct.Direction != FlowDirection.Vertical) d["dir"] = ct.Direction.ToString();
+      if (ct.Gap > 0f) d["gp"] = F(ct.Gap);
+      if (ct.Rotation != 0f) d["ro"] = F(ct.Rotation);
+      if (ct.BoxShadow.HasValue) d["bx"] = ct.BoxShadow.Value.Raw;
+      packets.Add(Packet(plugin, windowId, "AC", d));
+      foreach (var child in ct.Children)
+        SerializeVirtualItemElement(packets, plugin, windowId, listId, itemIndex, child, ctId, counters);
+      return;
+    }
+
+    // Leaf element
+    string elemId = elem.ElemId ?? NextElemId(counters, parentId);
+    var (type, ld) = BuildElementData(elem, elemId);
+    ld["pa"] = parentId;
+    ld["vi"] = listId;
+    ld["vii"] = vii;
+    packets.Add(Packet(plugin, windowId, type, ld));
+    SerializeTooltip(packets, plugin, windowId, elem, elemId);
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Element serializers
   // ═══════════════════════════════════════════════════════════════════════════
@@ -268,6 +384,14 @@ internal static class ElementSerializer {
       // Recurse into children using this container as the new parent.
       foreach (var child in ct.Children)
         SerializeRowElement(packets, plugin, windowId, child, containerId, elemCounters);
+      return;
+    }
+
+    // VirtualList nested inside a Row/Accordion/Container.
+    if (elem is VirtualList nestedVl) {
+      string listId = nestedVl.ElemId ?? NextElemId(elemCounters, parentId);
+      elemCounters[listId] = 0;
+      SerializeVirtualList(packets, plugin, windowId, nestedVl, listId, elemCounters, parentId);
       return;
     }
 
