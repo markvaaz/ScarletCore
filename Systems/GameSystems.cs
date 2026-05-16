@@ -226,6 +226,7 @@ public static class GameSystems {
     RoleService.Initialize();
     MapService.Initialize();
     PlayerService.Initialize();
+    PlayerSpatialHash.Initialize();
     AdminService.Initialize();
     PacketManager.Initialize();
     ActionScheduler.Repeating(Localizer.NotifyPlayersWithoutLanguage, 600f);

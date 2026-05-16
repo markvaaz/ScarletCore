@@ -57,6 +57,8 @@ internal static class OnUserConnectedPatch {
         return;
       }
 
+      PlayerSpatialHash.Add(playerData);
+
       // Fire the user connected event for subscribers (only if there are listeners)
       if (EventManager.GetSubscriberCount(PlayerEvents.PlayerJoined) > 0)
         EventManager.Emit(PlayerEvents.PlayerJoined, playerData);
@@ -95,23 +97,46 @@ internal static class DebugEventsSystemPatch {
     if (!GameSystems.Initialized) return;
 
     var newCleanName = PlayerService.ExtractCleanName(clientEvent.NewName.Value);
-    if (string.IsNullOrEmpty(newCleanName)) return;
 
     // AllCharacters tracks every character regardless of bind status (platformId may be 0).
     // Reverse-lookup the old name by entity so we can remove the stale entry.
+    // This cleanup must happen BEFORE the early-return for empty new names so that
+    // unbind scenarios (which clear the character name) don't leave dangling entries.
     var oldCharacterName = PlayerService.AllCharacters
       .FirstOrDefault(kvp => kvp.Value == fromCharacter.User).Key;
 
     if (!string.IsNullOrEmpty(oldCharacterName) && !string.Equals(oldCharacterName, newCleanName, StringComparison.OrdinalIgnoreCase))
       PlayerService.AllCharacters.Remove(oldCharacterName);
 
-    PlayerService.AllCharacters[newCleanName] = fromCharacter.User;
+    if (!string.IsNullOrEmpty(newCleanName))
+      PlayerService.AllCharacters[newCleanName] = fromCharacter.User;
 
     // PlayerNames and CachedName only apply to bound players (platformId != 0).
+    // After an unbind the PlatformId is already 0, so TryGetById would fail.
+    // Fall back to NetworkId lookup so we can still clean up the PlayerNames entry.
     var userData = fromCharacter.User.Read<User>();
-    if (!PlayerService.TryGetById(userData.PlatformId, out var player)) return;
+    PlayerData player = null;
+
+    if (userData.PlatformId != 0)
+      PlayerService.TryGetById(userData.PlatformId, out player);
+
+    if (player == null) {
+      var networkId = fromCharacter.User.Read<NetworkId>();
+      PlayerService.TryGetByNetworkId(networkId, out player);
+    }
+
+    if (player == null) return;
 
     var oldCachedName = player.CachedName;
+
+    // New name is empty (unbind cleared the character name) — remove the old entry.
+    if (string.IsNullOrEmpty(newCleanName)) {
+      if (!string.IsNullOrEmpty(oldCachedName))
+        PlayerService.PlayerNames.Remove(oldCachedName.ToLower());
+      player.SetName(string.Empty);
+      return;
+    }
+
     if (newCleanName == oldCachedName) return;
 
     if (!string.IsNullOrEmpty(oldCachedName))
@@ -166,6 +191,8 @@ internal static class OnUserDisconnectedPatch {
         Log.Warning("Failed to set player cache for disconnected user.");
         return;
       }
+
+      PlayerSpatialHash.Remove(playerData);
 
       // Fire the general user disconnected event (only if there are listeners)
       if (EventManager.GetSubscriberCount(PlayerEvents.PlayerLeft) > 0)

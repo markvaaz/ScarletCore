@@ -119,6 +119,30 @@ public static class PlayerService {
     var fullName = userData.CharacterName.Value;
     var cleanName = ExtractCleanName(fullName);
 
+    // Guard: skip unbound/NPC characters — same rule as Initialize().
+    // When a player is unbound their PlatformId becomes 0. We must not create a bogus
+    // PlayerData entry at key 0 or overwrite PlayerNames with it.
+    if (userData.PlatformId == 0 || userData.CharacterName.Value.StartsWith("[NPC]")) {
+      // On disconnect after unbind: look up the previously-cached PlayerData via the
+      // NetworkId (which was stored during the last successful connect) so callers can
+      // still fire disconnect events and clean up spatial data properly.
+      PlayerNetworkIds.TryGetValue(networkId, out var existingPlayer);
+
+      if (existingPlayer != null) {
+        // Remove the stale PlayerNames entry that points to this now-unbound player.
+        var existingName = existingPlayer.CachedName;
+        if (!string.IsNullOrEmpty(existingName) &&
+            PlayerNames.TryGetValue(existingName.ToLower(), out var staleData) &&
+            staleData == existingPlayer) {
+          PlayerNames.Remove(existingName.ToLower());
+        }
+
+        if (isOffline) PlayerNetworkIds.Remove(networkId);
+      }
+
+      return existingPlayer;
+    }
+
     // Check if this is a new player we haven't seen before
     if (!PlayerIds.TryGetValue(userData.PlatformId, out PlayerData playerData)) {
       PlayerData newData = new();
@@ -181,6 +205,14 @@ public static class PlayerService {
       UnnamedPlayers.Remove(playerData);
     }
 
+    // Always keep PlayerNames and AllCharacters pointing to the current PlayerData for this
+    // player. This fixes the window after an unbind-then-rebind where PlayerNames might still
+    // hold a stale entry (created by the PlatformId=0 path on the previous disconnect) even
+    // though the name did not change from the perspective of this newly-connecting player.
+    if (!string.IsNullOrEmpty(cleanName)) {
+      PlayerNames[cleanName.ToLower()] = playerData;
+      AllCharacters[cleanName] = userEntity;
+    }
 
     // Ensure new players have the default User role
     EnsurePlayerHasDefaultRole(playerData);
