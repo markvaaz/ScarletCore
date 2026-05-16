@@ -209,7 +209,162 @@ public class PlayerData {
   }
 
   /// <summary>
+  /// Checks if the player's inventory is completely empty.
+  /// </summary>
+  public bool IsInventoryEmpty() {
+    return InventoryService.IsInventoryEmpty(CharacterEntity);
+  }
+
+  /// <summary>
+  /// Checks if the player's inventory is completely full.
+  /// </summary>
+  public bool IsInventoryFull() {
+    return InventoryService.IsFull(CharacterEntity);
+  }
+
+  /// <summary>
+  /// Checks if the player has at least one of the specified item.
+  /// </summary>
+  public bool HasItem(PrefabGUID itemGuid) {
+    return InventoryService.HasItem(CharacterEntity, itemGuid);
+  }
+
+  /// <summary>
+  /// Checks if the player has at least <paramref name="amount"/> of the specified item.
+  /// </summary>
+  public bool HasAmount(PrefabGUID itemGuid, int amount) {
+    return InventoryService.HasAmount(CharacterEntity, itemGuid, amount);
+  }
+
+  /// <summary>
+  /// Returns the total quantity of the specified item in the player's inventory.
+  /// </summary>
+  public int GetItemAmount(PrefabGUID itemGuid) {
+    return InventoryService.GetItemAmount(CharacterEntity, itemGuid);
+  }
+
+  /// <summary>
+  /// Returns the total number of slots in the player's inventory.
+  /// </summary>
+  public int GetInventorySize() {
+    return InventoryService.GetInventorySize(CharacterEntity);
+  }
+
+  /// <summary>
+  /// Returns the number of empty slots in the player's inventory.
+  /// </summary>
+  public int GetEmptySlotCount() {
+    return InventoryService.GetEmptySlotsCount(CharacterEntity);
+  }
+
+  /// <summary>
+  /// Finds the first empty slot index in the player's inventory, or -1 if the inventory is full.
+  /// </summary>
+  public int GetEmptySlotIndex() {
+    return InventoryService.GetEmptySlotIndex(CharacterEntity);
+  }
+
+  /// <summary>
+  /// Tries to find the slot index occupied by the specified item.
+  /// </summary>
+  public bool TryGetItemSlot(PrefabGUID itemGuid, out int slot) {
+    return InventoryService.TryGetItemSlot(CharacterEntity, itemGuid, out slot);
+  }
+
+  /// <summary>
+  /// Tries to get the inventory entry at a specific slot index.
+  /// </summary>
+  public bool TryGetItemAtSlot(int slot, out InventoryBuffer item) {
+    return InventoryService.TryGetItemAtSlot(CharacterEntity, slot, out item);
+  }
+
+  /// <summary>
+  /// Adds an item directly into a specific inventory slot.
+  /// </summary>
+  /// <returns>True if the item was placed into the slot successfully.</returns>
+  public bool AddItemAtSlot(PrefabGUID itemGuid, int amount, int slot) {
+    return InventoryService.AddItemAtSlot(CharacterEntity, itemGuid, amount, slot);
+  }
+
+  /// <summary>
+  /// Removes the entire stack from a specific inventory slot.
+  /// </summary>
+  public void RemoveItemAtSlot(int slot) {
+    InventoryService.RemoveItemAtSlot(CharacterEntity, slot);
+  }
+
+  /// <summary>
+  /// Removes a specific amount from a given inventory slot.
+  /// </summary>
+  public void RemoveItemAtSlot(int slot, int amount) {
+    InventoryService.RemoveItemAtSlot(CharacterEntity, slot, amount);
+  }
+
+  /// <summary>
+  /// Clears the item at the specified slot, leaving it empty.
+  /// </summary>
+  public void ClearInventorySlot(int slot) {
+    InventoryService.ClearSlot(CharacterEntity, slot);
+  }
+
+  /// <summary>
+  /// Removes all items from the player's inventory.
+  /// </summary>
+  public void ClearInventory() {
+    InventoryService.ClearInventory(CharacterEntity);
+  }
+
+  /// <summary>
+  /// Drops an item from the player's inventory at their current position.
+  /// </summary>
+  public void DropItem(PrefabGUID itemGuid, int amount = 1) {
+    InventoryService.CreateDropItem(CharacterEntity, itemGuid, amount);
+  }
+
+  /// <summary>
+  /// Adds multiple items to the player's inventory.
+  /// Returns a dictionary of items that could not be added (overflow).
+  /// </summary>
+  public Dictionary<PrefabGUID, int> AddItems(Dictionary<PrefabGUID, int> items) {
+    return InventoryService.AddItems(CharacterEntity, items);
+  }
+
+  /// <summary>
+  /// Removes multiple items from the player's inventory.
+  /// Returns a dictionary of items that could not be removed (deficit).
+  /// </summary>
+  public Dictionary<PrefabGUID, int> RemoveItems(Dictionary<PrefabGUID, int> items) {
+    return InventoryService.RemoveItems(CharacterEntity, items);
+  }
+
+  /// <summary>
+  /// Checks whether the player has all items in the specified dictionary at the required amounts.
+  /// </summary>
+  public bool HasItems(Dictionary<PrefabGUID, int> items) {
+    return InventoryService.HasItems(CharacterEntity, items);
+  }
+
+  /// <summary>
+  /// Returns the current amount of each requested item in the player's inventory.
+  /// </summary>
+  public Dictionary<PrefabGUID, int> GetItemAmounts(List<PrefabGUID> itemGuids) {
+    return InventoryService.GetItemAmounts(CharacterEntity, itemGuids);
+  }
+
+  /// <summary>
+  /// Gives a full set of items to the player.
+  /// Returns items that could not be added due to insufficient space.
+  /// </summary>
+  /// <param name="itemSet">Items to give.</param>
+  /// <param name="clearFirst">If true, clears the inventory before giving items.</param>
+  public Dictionary<PrefabGUID, int> GiveItemSet(Dictionary<PrefabGUID, int> itemSet, bool clearFirst = false) {
+    return InventoryService.GiveItemSet(CharacterEntity, itemSet, clearFirst);
+  }
+
+  /// <summary>
   /// Gets the player's current equipment data.
+  /// Provides access to all equipped items and their stats.
+  /// </summary>
   /// Provides access to all equipped items and their stats.
   /// </summary>
   /// <returns>The Equipment component containing all equipped items</returns>
@@ -234,6 +389,15 @@ public class PlayerData {
   /// <param name="priority">The priority for the ability replacement (default: 99)</param>
   public void ReplaceAbilityOnSlot(PrefabGUID newAbilityGuid, int abilitySlotIndex = 0, int priority = 99) {
     AbilityService.ReplaceAbilityOnSlotHard(CharacterEntity, newAbilityGuid, abilitySlotIndex, priority);
+  }
+
+  /// <summary>
+  /// Performs a temporary (soft) replacement of ability slots for the player.
+  /// Uses an internal replace buff managed by the buff system, so replacements last only as long as the buff is active.
+  /// </summary>
+  /// <param name="abilities">Array of replacement entries: (PrefabGUID, slot index, priority, copy cooldown)</param>
+  public void ReplaceAbilityOnSlotSoft((PrefabGUID PrefabGUID, int Slot, int Priority, bool CopyCooldown)[] abilities) {
+    AbilityService.ReplaceAbilityOnSlotSoft(CharacterEntity, abilities);
   }
 
   /// <summary>
@@ -279,6 +443,97 @@ public class PlayerData {
   }
 
   /// <summary>
+  /// Attempts to apply a raw buff to the player's character, preserving gameplay event components.
+  /// Unlike TryApplyBuff, this does NOT strip CreateGameplayEventsOnSpawn or GameplayEventListeners.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to apply</param>
+  /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <param name="buffEntity">Output parameter for the applied buff entity</param>
+  /// <returns>True if the buff was successfully applied, false otherwise</returns>
+  public bool TryApplyRawBuff(PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
+    return BuffService.TryApplyRawBuff(CharacterEntity, prefabGUID, duration, out buffEntity);
+  }
+
+  /// <summary>
+  /// Attempts to apply a raw buff to the player's character with an optional duration.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to apply</param>
+  /// <param name="duration">Duration in seconds (default: 0)</param>
+  /// <returns>True if the buff was successfully applied, false otherwise</returns>
+  public bool TryApplyRawBuff(PrefabGUID prefabGUID, float duration = 0) {
+    return BuffService.TryApplyRawBuff(CharacterEntity, prefabGUID, duration, out _);
+  }
+
+  /// <summary>
+  /// Attempts to apply a buff to the player only if it is not already active.
+  /// If the buff already exists it will not be reapplied or modified.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to apply</param>
+  /// <param name="duration">Duration in seconds (-1 for permanent/indefinite)</param>
+  /// <param name="buffEntity">Output parameter for the existing or newly applied buff entity</param>
+  /// <returns>True if the buff was applied or already exists, false if application failed</returns>
+  public bool TryApplyUniqueBuff(PrefabGUID prefabGUID, float duration, out Entity buffEntity) {
+    return BuffService.TryApplyUnique(CharacterEntity, prefabGUID, duration, out buffEntity);
+  }
+
+  /// <summary>
+  /// Attempts to apply a buff to the player only if it is not already active.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to apply</param>
+  /// <param name="duration">Duration in seconds (default: 0)</param>
+  /// <returns>True if the buff was applied or already exists, false if application failed</returns>
+  public bool TryApplyUniqueBuff(PrefabGUID prefabGUID, float duration = 0) {
+    return BuffService.TryApplyUnique(CharacterEntity, prefabGUID, duration, out _);
+  }
+
+  /// <summary>
+  /// Checks whether the player currently has a specific buff applied.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to check</param>
+  /// <returns>True if the buff is currently active on the player, false otherwise</returns>
+  public bool HasBuff(PrefabGUID prefabGUID) {
+    return BuffService.HasBuff(CharacterEntity, prefabGUID);
+  }
+
+  /// <summary>
+  /// Attempts to retrieve the entity for a specific buff applied to the player.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to look up</param>
+  /// <param name="buffEntity">Output parameter that will contain the buff entity if found</param>
+  /// <returns>True if the buff was found, false otherwise</returns>
+  public bool TryGetBuff(PrefabGUID prefabGUID, out Entity buffEntity) {
+    return BuffService.TryGetBuff(CharacterEntity, prefabGUID, out buffEntity);
+  }
+
+  /// <summary>
+  /// Removes a specific buff from the player if it is currently active.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to remove</param>
+  /// <returns>True if the buff was found and removed, false otherwise</returns>
+  public bool TryRemoveBuff(PrefabGUID prefabGUID) {
+    return BuffService.TryRemoveBuff(CharacterEntity, prefabGUID);
+  }
+
+  /// <summary>
+  /// Gets the remaining duration of a buff currently active on the player.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to query</param>
+  /// <returns>Remaining duration in seconds, or -1 if the buff does not exist or is permanent</returns>
+  public float GetBuffRemainingDuration(PrefabGUID prefabGUID) {
+    return BuffService.GetBuffRemainingDuration(CharacterEntity, prefabGUID);
+  }
+
+  /// <summary>
+  /// Modifies the remaining duration of a buff currently active on the player.
+  /// </summary>
+  /// <param name="prefabGUID">The GUID of the buff to modify</param>
+  /// <param name="newDuration">The new duration in seconds</param>
+  /// <returns>True if the duration was successfully modified, false otherwise</returns>
+  public bool ModifyBuffDuration(PrefabGUID prefabGUID, float newDuration) {
+    return BuffService.ModifyBuffDuration(CharacterEntity, prefabGUID, newDuration);
+  }
+
+  /// <summary>
   /// Grants administrator privileges to the player.
   /// </summary>
   public void MakeAdmin() {
@@ -314,6 +569,13 @@ public class PlayerData {
   }
 
   /// <summary>
+  /// Checks whether the player is currently banned from the server.
+  /// </summary>
+  public bool IsBanned() {
+    return KickBanService.IsBanned(this);
+  }
+
+  /// <summary>
   /// Attempts to add another player to this player's clan.
   /// </summary>
   /// <param name="player">The player to add to the clan</param>
@@ -339,6 +601,40 @@ public class PlayerData {
   }
 
   /// <summary>
+  /// Tries to get the current clan leader of this player's clan.
+  /// </summary>
+  /// <param name="leader">The clan leader, or null if not found.</param>
+  /// <returns>True if a leader was found, false otherwise.</returns>
+  public bool TryGetClanLeader(out PlayerData leader) {
+    leader = null;
+    return !string.IsNullOrEmpty(ClanName) && ClanService.TryGetClanLeader(ClanName, out leader);
+  }
+
+  /// <summary>
+  /// Attempts to change this player's role inside their clan.
+  /// </summary>
+  /// <param name="newRole">The new clan role to assign.</param>
+  /// <returns>True if the role was changed successfully, false otherwise.</returns>
+  public bool TryChangeClanRole(ClanRoleEnum newRole) {
+    return ClanService.TryChangeClanRole(this, newRole);
+  }
+
+  /// <summary>
+  /// Sets a clan tag in the player's display name.
+  /// </summary>
+  /// <param name="clanTag">The tag text to apply.</param>
+  public void SetClanTag(string clanTag) {
+    ClanService.SetTagForPlayer(this, clanTag);
+  }
+
+  /// <summary>
+  /// Removes the clan tag from the player's display name.
+  /// </summary>
+  public void RemoveClanTag() {
+    ClanService.RemoveTagFromPlayer(this);
+  }
+
+  /// <summary>
   /// Reveals the entire map for the player.
   /// </summary>
   public void RevealMap() {
@@ -353,12 +649,93 @@ public class PlayerData {
   }
 
   /// <summary>
+  /// Reveals a circular area of the map around the given position.
+  /// </summary>
+  /// <param name="centerPos">World-space center of the reveal area.</param>
+  /// <param name="radius">Radius in world units to reveal.</param>
+  public void RevealMapRadius(float3 centerPos, float radius) {
+    MapService.RevealMapRadius(this, centerPos, radius);
+  }
+
+  /// <summary>
+  /// Reveals a rectangular area of the map around the given position.
+  /// </summary>
+  /// <param name="centerPos">World-space center of the reveal area.</param>
+  /// <param name="width">Width in world units of the rectangle.</param>
+  /// <param name="height">Height in world units of the rectangle.</param>
+  public void RevealMapRectangle(float3 centerPos, float width, float height) {
+    MapService.RevealMapRectangle(this, centerPos, width, height);
+  }
+
+  /// <summary>
+  /// Gets the display name of the world region the player is currently in.
+  /// </summary>
+  public string GetCurrentRegionDisplayName() {
+    return MapService.GetRegionDisplayName(CurrentRegion, Language);
+  }
+
+  /// <summary>
+  /// Returns all online players within <paramref name="radius"/> world units of this player, excluding themselves.
+  /// Uses the <see cref="PlayerSpatialHash"/> for efficient lookup. Does not allocate — reuse the list for hot paths.
+  /// </summary>
+  /// <param name="radius">Search radius in world units.</param>
+  /// <param name="results">List to fill with nearby players. Cleared before use.</param>
+  public void GetNearbyPlayers(float radius, System.Collections.Generic.List<PlayerData> results) {
+    PlayerSpatialHash.QueryNearby(this, radius, results);
+  }
+
+  /// <summary>
+  /// Returns all online players within <paramref name="radius"/> world units of this player, excluding themselves.
+  /// Allocates a new list. Prefer the overload that accepts a <see cref="System.Collections.Generic.List{T}"/> for hot paths.
+  /// </summary>
+  /// <param name="radius">Search radius in world units.</param>
+  public System.Collections.Generic.List<PlayerData> GetNearbyPlayers(float radius) {
+    return PlayerSpatialHash.QueryNearby(this, radius);
+  }
+
+  /// <summary>
+  /// Applies an array of stat modifiers to the player using the specified modifier buff.
+  /// Safe to call at high frequency — rapid consecutive calls are coalesced into a single cycle.
+  /// </summary>
+  /// <param name="modifierBuff">The prefab GUID of the modifier buff to use</param>
+  /// <param name="modifiers">Array of modifiers to apply</param>
+  public void ApplyStatModifiers(PrefabGUID modifierBuff, Modifier[] modifiers) {
+    StatModifierService.ApplyModifiers(CharacterEntity, modifierBuff, modifiers);
+  }
+
+  /// <summary>
+  /// Removes all stat modifiers applied via the specified modifier buff and cancels any pending re-apply.
+  /// </summary>
+  /// <param name="modifierBuff">The prefab GUID of the modifier buff to remove</param>
+  public void RemoveStatModifiers(PrefabGUID modifierBuff) {
+    StatModifierService.RemoveModifiers(CharacterEntity, modifierBuff);
+  }
+
+  /// <summary>
   /// Teleports the player to a specific position in the world.
   /// Instantly moves the player's character to the specified coordinates.
   /// </summary>
   /// <param name="position">The target position to teleport to</param>
   public void TeleportTo(float3 position) {
     TeleportService.TeleportToPosition(CharacterEntity, position);
+  }
+
+  /// <summary>
+  /// Teleports the player to another player's current position.
+  /// </summary>
+  /// <param name="target">The target player to teleport to</param>
+  /// <returns>True if teleportation was successful, false otherwise</returns>
+  public bool TeleportTo(PlayerData target) {
+    return TeleportService.TeleportToEntity(CharacterEntity, target.CharacterEntity);
+  }
+
+  /// <summary>
+  /// Returns the world-space distance between this player and another player.
+  /// </summary>
+  /// <param name="other">The other player to measure distance to</param>
+  /// <returns>Distance in world units, or -1 if either entity is invalid</returns>
+  public float GetDistanceTo(PlayerData other) {
+    return TeleportService.GetDistance(CharacterEntity, other.CharacterEntity);
   }
 
   /// <summary>
@@ -371,6 +748,26 @@ public class PlayerData {
     if (string.IsNullOrWhiteSpace(message)) return;
     message = ProcessPlaceholders(message);
     MessageService.Send(this, message);
+  }
+
+  /// <summary>
+  /// Sends a raw message to the player without any placeholder processing.
+  /// </summary>
+  /// <param name="message">The raw message text to send.</param>
+  public void SendRawMessage(string message) {
+    if (string.IsNullOrWhiteSpace(message)) return;
+    MessageService.SendRaw(this, message);
+  }
+
+  /// <summary>
+  /// Displays a scrolling combat text (SCT) notification above the player.
+  /// </summary>
+  /// <param name="prefab">The prefab GUID for the SCT icon or effect.</param>
+  /// <param name="assetGuid">The asset GUID string for the SCT.</param>
+  /// <param name="color">The color of the SCT value.</param>
+  /// <param name="value">The numeric value to display.</param>
+  public void SendSCT(PrefabGUID prefab, string assetGuid, float3 color, int value) {
+    MessageService.SendSCT(this, prefab, assetGuid, color, value);
   }
 
   /// <summary>
