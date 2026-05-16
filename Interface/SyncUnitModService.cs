@@ -13,9 +13,6 @@ namespace ScarletCore.Interface;
 /// </summary>
 internal static class SyncUnitModService {
   static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = null };
-  // Minimum interval between sends per player (seconds)
-  const double COOLDOWN = 1.0;
-  static readonly Dictionary<ulong, DateTime> _lastSent = [];
 
   /// <summary>Reads all <see cref="ModifyUnitStatBuff_DOTS"/> entries from the player's buffs and sends them to the client.
   /// Calls are throttled to once per second per player.</summary>

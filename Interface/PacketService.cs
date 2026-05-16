@@ -88,18 +88,6 @@ internal static class PacketManager {
   // Token buckets for player-initiated command requests — 5 req/s per player.
   static readonly Dictionary<ulong, TokenBucket> _cmdBuckets = [];
 
-  // Hash of the last serialized window batch per player.
-  // Outer key = PlatformId, inner key = "plugin:windowId".
-  // Two-level structure enables O(1) cleanup on disconnect vs the previous O(n) LINQ scan.
-  static readonly Dictionary<ulong, Dictionary<string, int>> _snapshotHashes = [];
-
-  // Per-(plugin:windowId:action) cache of the last serialized compressed raw string.
-  // Eliminates repeated TryCompress() work when the same window is sent to many players
-  // within BATCH_CACHE_TTL_MS milliseconds (e.g. mass-open after a server event).
-  sealed class BatchCacheEntry { public int JsonHash; public string Raw; public long ExpiryMs; }
-  static readonly Dictionary<string, BatchCacheEntry> _batchCache = new(16);
-  const long BATCH_CACHE_TTL_MS = 50;
-
   // Global outbound queue. Deliver() enqueues here; DrainSendQueue() flushes up to BUDGET_PER_FRAME
   // items per game frame, spreading ECS entity creation evenly across ticks.
   static readonly Queue<(User user, ChatMessageServerEvent evt)> _sendQueue = new();
@@ -200,9 +188,8 @@ internal static class PacketManager {
     _pendingPackets.Remove(player.PlatformId);
     _handshakeSentAt.Remove(player.PlatformId);
     player.RemoveRole("interface-user");
-    // Clear per-player rate limit bucket and snapshot hashes so the next session starts fresh.
+    // Clear per-player rate limit bucket so the next session starts fresh.
     _cmdBuckets.Remove(player.PlatformId);
-    _snapshotHashes.Remove(player.PlatformId);
   }
 
   static void FlushPendingPackets(PlayerData player) {
@@ -286,36 +273,8 @@ internal static class PacketManager {
     }
 
     var batchJson = JsonSerializer.Serialize(packets, _jsonOptions);
-    var batchHash = batchJson.GetHashCode();
-
-    // Snapshot hash dedup — only for Open ("OP") so Close/Clear/Reset always execute.
-    if (actionToken == "OP") {
-      if (!_snapshotHashes.TryGetValue(player.PlatformId, out var playerHashes)) {
-        playerHashes = new Dictionary<string, int>(8);
-        _snapshotHashes[player.PlatformId] = playerHashes;
-      }
-      var windowKey = $"{plugin}:{windowId}";
-      if (playerHashes.TryGetValue(windowKey, out var cachedHash) && cachedHash == batchHash) {
-        // Content unchanged — send only the Open action so the client shows the existing window.
-        SendPacket(player, new ScarletPacket { Type = "OP", Plugin = plugin, Window = windowId, Data = [] });
-        return;
-      }
-      playerHashes[windowKey] = batchHash;
-    }
-
-    // Frame cache: if the same batch was already compressed within BATCH_CACHE_TTL_MS ms,
-    // reuse the prepared raw string — skips TryCompress for all players after the first.
-    var frameKey = $"{plugin}:{windowId}:{actionToken ?? ""}";
-    var nowMs = Environment.TickCount64;
-    string raw;
-    if (_batchCache.TryGetValue(frameKey, out var cached) &&
-        cached.ExpiryMs > nowMs && cached.JsonHash == batchHash) {
-      raw = cached.Raw;
-    } else {
-      var compressed = TryCompress(batchJson);
-      raw = compressed != null ? COMPRESSED_PREFIX + compressed : BATCH_PREFIX + batchJson;
-      _batchCache[frameKey] = new BatchCacheEntry { JsonHash = batchHash, Raw = raw, ExpiryMs = nowMs + BATCH_CACHE_TTL_MS };
-    }
+    var compressed = TryCompress(batchJson);
+    var raw = compressed != null ? COMPRESSED_PREFIX + compressed : BATCH_PREFIX + batchJson;
 
     if (!HasInterface(player)) {
       QueueForPendingAuth(player, raw);
