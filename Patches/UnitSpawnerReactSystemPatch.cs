@@ -45,15 +45,30 @@ internal class UnitSpawnerReactSystemPatch {
 
           // Determine the appropriate end action based on duration
           LifeTimeEndAction endAction;
-          if (duration == -1f) {
+          float finalDuration;
+
+          if (duration == 0f) {
+            // Restore the original prefab lifetime so the entity behaves as the game intended
+            var prefabGuid = entity.GetPrefabGuid();
+            if (GameSystems.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(prefabGuid, out var prefabEntity) && prefabEntity.Has<LifeTime>()) {
+              var prefabLifeTime = prefabEntity.Read<LifeTime>();
+              finalDuration = prefabLifeTime.Duration;
+              endAction = prefabLifeTime.EndAction;
+            } else {
+              finalDuration = duration;
+              endAction = LifeTimeEndAction.None;
+            }
+          } else if (duration == -1f) {
+            finalDuration = duration;
             endAction = LifeTimeEndAction.None; // Infinite duration - no automatic destruction
           } else {
+            finalDuration = duration;
             endAction = LifeTimeEndAction.Destroy; // Finite duration - destroy when expired
           }
 
           // Update the entity's lifetime component with the new duration and end action
           entity.With((ref LifeTime lt) => {
-            lt.Duration = duration;
+            lt.Duration = finalDuration;
             lt.EndAction = endAction;
           });
 
