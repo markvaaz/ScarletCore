@@ -256,7 +256,7 @@ internal static class ElementSerializer {
   /// <summary>
   /// Recursively serializes one element inside a virtual list item.
   /// All emitted packets receive <c>vi</c> (VirtualListId) and <c>vii</c> (VirtualItemIndex)
-  /// so the client routes them to <see cref="VirtualScrollView.StoreElement"/> instead of
+  /// so the client routes them to <c>VirtualScrollView.StoreElement</c> instead of
   /// creating GameObjects immediately.
   /// </summary>
   static void SerializeVirtualItemElement(List<ScarletPacket> packets, string plugin, string windowId,

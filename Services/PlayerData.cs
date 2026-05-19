@@ -365,8 +365,6 @@ public class PlayerData {
   /// Gets the player's current equipment data.
   /// Provides access to all equipped items and their stats.
   /// </summary>
-  /// Provides access to all equipped items and their stats.
-  /// </summary>
   /// <returns>The Equipment component containing all equipped items</returns>
   public Equipment GetEquipment() {
     return CharacterEntity.Read<Equipment>();
