@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using ScarletCore.Utils;
@@ -356,9 +357,10 @@ public static class EventManager {
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   internal static void Emit(CommandEvents eventType, PlayerData player, CommandInfo commandInfo, string[] args) {
     if (!_commandHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
-    for (int i = 0; i < handlers.Count; i++) {
+    var snapshot = handlers.ToList();
+    for (int i = 0; i < snapshot.Count; i++) {
       try {
-        if (handlers[i].Handler is Action<PlayerData, CommandInfo, string[]> cb) {
+        if (snapshot[i].Handler is Action<PlayerData, CommandInfo, string[]> cb) {
           cb(player, commandInfo, args);
         }
       } catch (Exception ex) {
@@ -441,8 +443,9 @@ public static class EventManager {
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   internal static void Emit(RoleEvents eventType, PlayerData player, Role role) {
     if (!_roleHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
-    for (int i = 0; i < handlers.Count; i++) {
-      try { handlers[i].Handler(player, role); } catch (Exception ex) { Log.Error($"EventManager: Error in role '{eventType}': {ex}"); }
+    var snapshot = handlers.ToList();
+    for (int i = 0; i < snapshot.Count; i++) {
+      try { snapshot[i].Handler(player, role); } catch (Exception ex) { Log.Error($"EventManager: Error in role '{eventType}': {ex}"); }
     }
   }
 
@@ -549,8 +552,9 @@ public static class EventManager {
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(PrefixEvents eventType, NativeArray<Entity> entityArray) {
     if (!_prefixHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
-    for (int i = 0; i < handlers.Count; i++) {
-      try { handlers[i].Handler(entityArray); } catch (Exception ex) { Log.Error($"EventManager: Error in prefix '{eventType}': {ex}"); }
+    var snapshot = handlers.ToList();
+    for (int i = 0; i < snapshot.Count; i++) {
+      try { snapshot[i].Handler(entityArray); } catch (Exception ex) { Log.Error($"EventManager: Error in prefix '{eventType}': {ex}"); }
     }
   }
 
@@ -562,8 +566,9 @@ public static class EventManager {
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(PostfixEvents eventType, NativeArray<Entity> entityArray) {
     if (!_postfixHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
-    for (int i = 0; i < handlers.Count; i++) {
-      try { handlers[i].Handler(entityArray); } catch (Exception ex) { Log.Error($"EventManager: Error in postfix '{eventType}': {ex}"); }
+    var snapshot = handlers.ToList();
+    for (int i = 0; i < snapshot.Count; i++) {
+      try { snapshot[i].Handler(entityArray); } catch (Exception ex) { Log.Error($"EventManager: Error in postfix '{eventType}': {ex}"); }
     }
   }
 
@@ -575,8 +580,9 @@ public static class EventManager {
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(PlayerEvents eventType, PlayerData playerData) {
     if (!_playerHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
-    for (int i = 0; i < handlers.Count; i++) {
-      try { handlers[i].Handler(playerData); } catch (Exception ex) { Log.Error($"EventManager: Error in player '{eventType}': {ex}"); }
+    var snapshot = handlers.ToList();
+    for (int i = 0; i < snapshot.Count; i++) {
+      try { snapshot[i].Handler(playerData); } catch (Exception ex) { Log.Error($"EventManager: Error in player '{eventType}': {ex}"); }
     }
   }
 
@@ -587,11 +593,12 @@ public static class EventManager {
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(ServerEvents eventType) {
     if (!_serverHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
-    for (int i = 0; i < handlers.Count; i++) {
+    var snapshot = handlers.ToList();
+    for (int i = 0; i < snapshot.Count; i++) {
       try {
-        if (handlers[i].Handler is Action action) {
+        if (snapshot[i].Handler is Action action) {
           action();
-        } else if (handlers[i].Handler is Action<string> actionWithParam) {
+        } else if (snapshot[i].Handler is Action<string> actionWithParam) {
           actionWithParam(null);
         }
       } catch (Exception ex) { Log.Error($"EventManager: Error in server '{eventType}': {ex}"); }
@@ -606,11 +613,12 @@ public static class EventManager {
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void Emit(ServerEvents eventType, string data) {
     if (!_serverHandlers.TryGetValue(eventType, out var handlers) || handlers.Count == 0) return;
-    for (int i = 0; i < handlers.Count; i++) {
+    var snapshot = handlers.ToList();
+    for (int i = 0; i < snapshot.Count; i++) {
       try {
-        if (handlers[i].Handler is Action action) {
+        if (snapshot[i].Handler is Action action) {
           action();
-        } else if (handlers[i].Handler is Action<string> actionWithParam) {
+        } else if (snapshot[i].Handler is Action<string> actionWithParam) {
           actionWithParam(data);
         }
       } catch (Exception ex) { Log.Error($"EventManager: Error in server '{eventType}': {ex}"); }
