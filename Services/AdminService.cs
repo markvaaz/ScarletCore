@@ -1,3 +1,4 @@
+using System.Linq;
 using ProjectM;
 using ProjectM.Network;
 using ScarletCore.Systems;
@@ -6,6 +7,7 @@ using Unity.Entities;
 using ScarletCore.Events;
 using ScarletCore.Commanding;
 using ScarletCore.Localization;
+using System.Collections.Generic;
 
 namespace ScarletCore.Services;
 
@@ -37,6 +39,59 @@ public static class AdminService {
     Plugin.Database.Set($"auto_admin_{playerData.PlatformId}", autoAdmin);
     var status = autoAdmin ? "enabled" : "disabled";
     context.ReplySuccess($"Auto admin has been ~{status}~ for you.");
+  }
+
+  [Command("removeautoadmin", Language.English, adminOnly: true)]
+  internal static void RemoveAutoAdminCommand(CommandContext context, string targetPlayerName) {
+    if (!PlayerService.TryGetByName(targetPlayerName, out var targetPlayer)) {
+      context.ReplyError($"Player ~{targetPlayerName}~ not found.");
+      return;
+    }
+
+    Plugin.Database.Set($"auto_admin_{targetPlayer.PlatformId}", false);
+    context.ReplySuccess($"Auto admin has been ~disabled~ for ~{targetPlayer.Name}~.");
+  }
+
+  [Command("checkautoadmin", Language.English, adminOnly: true)]
+  internal static void CheckAutoAdminCommand(CommandContext context, string targetPlayerName) {
+    if (!PlayerService.TryGetByName(targetPlayerName, out var targetPlayer)) {
+      context.ReplyError($"Player ~{targetPlayerName}~ not found.");
+      return;
+    }
+
+    var autoAdmin = Plugin.Database.Has($"auto_admin_{targetPlayer.PlatformId}") &&
+                    Plugin.Database.Get<bool>($"auto_admin_{targetPlayer.PlatformId}");
+    var status = autoAdmin ? "enabled" : "disabled";
+    context.ReplySuccess($"Auto admin for ~{targetPlayer.Name}~ is ~{status}~.");
+  }
+
+  [Command("listautoadmins", Language.English, adminOnly: true)]
+  internal static void ListAutoAdminsCommand(CommandContext context) {
+    var keys = Plugin.Database.GetKeysByPrefix("auto_admin_");
+
+    var results = new List<(ulong PlatformId, PlayerData Player)>();
+    foreach (var key in keys) {
+      if (!Plugin.Database.Get<bool>(key)) continue;
+      var idStr = key["auto_admin_".Length..];
+      if (!ulong.TryParse(idStr, out var platformId)) continue;
+      PlayerService.TryGetById(platformId, out var player);
+      results.Add((platformId, player));
+    }
+
+    if (results.Count == 0) {
+      context.ReplyError("No players with auto-admin enabled.");
+      return;
+    }
+
+    context.Reply($"~Players with Auto-Admin enabled ({results.Count}):~".Bold());
+    foreach (var (platformId, player) in results) {
+      if (player != null) {
+        var status = player.IsOnline ? "online".WithColor("green") : "offline".WithColor("gray");
+        context.Reply($"• ~{player.Name}~ ({status}) [{platformId}]");
+      } else {
+        context.Reply($"• ~Unknown~ (never connected) [{platformId}]");
+      }
+    }
   }
 
   [Command("toggleadmin", Language.English, requiredPermissions: ["admin.toggle"])]
