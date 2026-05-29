@@ -9,7 +9,6 @@ using Unity.Mathematics;
 using Unity.Transforms;
 using ScarletCore.Systems;
 using ScarletCore.Localization;
-using Unity.Collections;
 
 namespace ScarletCore;
 
