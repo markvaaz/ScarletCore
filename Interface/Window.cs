@@ -31,20 +31,23 @@ namespace ScarletCore.Interface;
 /// }.Send();
 /// </code>
 /// </summary>
-public class Window : IEnumerable<UIElement> {
+public class Window : IEnumerable<UIElement>
+{
   readonly string _plugin;
   readonly PlayerData _player; // null = broadcast to all
   readonly string _id;
 
   /// <summary>Creates a window targeting a specific player.</summary>
-  public Window(PlayerData player, string plugin, string id) {
+  public Window(PlayerData player, string plugin, string id)
+  {
     _player = player;
     _plugin = plugin;
     _id = id;
   }
 
   /// <summary>Creates a window that broadcasts to all connected players.</summary>
-  public Window(string plugin, string id) {
+  public Window(string plugin, string id)
+  {
     _player = null;
     _plugin = plugin;
     _id = id;
@@ -173,14 +176,22 @@ public class Window : IEnumerable<UIElement> {
       string topBorder = null, string bottomBorder = null,
       string leftBorder = null, string rightBorder = null,
       string background = null, bool backgroundRepeat = false,
-      int cornerSize = 32, int frameExpand = 0) {
-    CustomTexture = new CustomTextureData {
-      TopLeftCorner = topLeftCorner, TopRightCorner = topRightCorner,
-      BottomLeftCorner = bottomLeftCorner, BottomRightCorner = bottomRightCorner,
-      TopBorder = topBorder, BottomBorder = bottomBorder,
-      LeftBorder = leftBorder, RightBorder = rightBorder,
-      Background = background, BackgroundRepeat = backgroundRepeat,
-      CornerSize = cornerSize, FrameExpand = frameExpand,
+      int cornerSize = 32, int frameExpand = 0)
+  {
+    CustomTexture = new CustomTextureData
+    {
+      TopLeftCorner = topLeftCorner,
+      TopRightCorner = topRightCorner,
+      BottomLeftCorner = bottomLeftCorner,
+      BottomRightCorner = bottomRightCorner,
+      TopBorder = topBorder,
+      BottomBorder = bottomBorder,
+      LeftBorder = leftBorder,
+      RightBorder = rightBorder,
+      Background = background,
+      BackgroundRepeat = backgroundRepeat,
+      CornerSize = cornerSize,
+      FrameExpand = frameExpand,
     };
     return this;
   }
@@ -191,15 +202,17 @@ public class Window : IEnumerable<UIElement> {
   /// Serializes the window and all children into packets and sends them
   /// to the target player(s). The <paramref name="action"/> is sent last.
   /// </summary>
-  public void Send(WindowAction action = WindowAction.Open) {
+  public void Send(WindowAction action = WindowAction.Open)
+  {
     var packets = ElementSerializer.Serialize(this, _plugin, _id);
 
-    string actionToken = action switch {
+    string actionToken = action switch
+    {
       WindowAction.Open => "OP",
       WindowAction.Close => "CL",
       WindowAction.Clear => "CR",
       WindowAction.Reset => "RS",
-      WindowAction.None => null,
+      WindowAction.None => "RF",
       _ => action.ToString(),
     };
 
@@ -223,7 +236,8 @@ public class Window : IEnumerable<UIElement> {
   /// </summary>
   /// <param name="elemId">The <see cref="UIElement.ElemId"/> used when the window was first sent.</param>
   /// <param name="elem">A new element instance carrying the updated property values.</param>
-  public void SendUpdate(string elemId, UIElement elem) {
+  public void SendUpdate(string elemId, UIElement elem)
+  {
     if (_player == null) return;
     foreach (var packet in ElementSerializer.SerializeElement(_plugin, _id, elem, elemId))
       PacketManager.SendPacket(_player, packet);
@@ -238,7 +252,8 @@ public class Window : IEnumerable<UIElement> {
   /// </para>
   /// </summary>
   /// <param name="elemId">The <see cref="UIElement.ElemId"/> of the element to remove.</param>
-  public void SendDelete(string elemId) {
+  public void SendDelete(string elemId)
+  {
     if (_player == null) return;
     PacketManager.SendPacket(_player, ElementSerializer.SerializeDeleteElement(_plugin, _id, elemId));
   }
@@ -259,7 +274,8 @@ public class Window : IEnumerable<UIElement> {
   /// <param name="windowId">ID of the window that contains the element.</param>
   /// <param name="elemId">The <see cref="UIElement.ElemId"/> used when the window was first sent.</param>
   /// <param name="elem">A new element instance carrying the updated property values.</param>
-  public static void SendUpdate(PlayerData player, string plugin, string windowId, string elemId, UIElement elem) {
+  public static void SendUpdate(PlayerData player, string plugin, string windowId, string elemId, UIElement elem)
+  {
     if (player == null) return;
     foreach (var packet in ElementSerializer.SerializeElement(plugin, windowId, elem, elemId))
       PacketManager.SendPacket(player, packet);
@@ -277,7 +293,8 @@ public class Window : IEnumerable<UIElement> {
   /// <param name="plugin">Plugin identifier used when the window was created.</param>
   /// <param name="windowId">ID of the window that contains the element.</param>
   /// <param name="elemId">The <see cref="UIElement.ElemId"/> of the element to remove.</param>
-  public static void SendDelete(PlayerData player, string plugin, string windowId, string elemId) {
+  public static void SendDelete(PlayerData player, string plugin, string windowId, string elemId)
+  {
     if (player == null) return;
     PacketManager.SendPacket(player, ElementSerializer.SerializeDeleteElement(plugin, windowId, elemId));
   }
@@ -287,7 +304,8 @@ public class Window : IEnumerable<UIElement> {
 }
 
 /// <summary>Data holder for 9-slice custom texture frame.</summary>
-internal class CustomTextureData {
+internal class CustomTextureData
+{
   public string TopLeftCorner, TopRightCorner, BottomLeftCorner, BottomRightCorner;
   public string TopBorder, BottomBorder, LeftBorder, RightBorder;
   public string Background;
