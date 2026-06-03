@@ -5,7 +5,8 @@ namespace ScarletCore.Interface.Elements;
 /// <summary>
 /// A text input field. Its value can be read by other elements via <c>{Id}</c> token replacement.
 /// </summary>
-public class Input : UIElement, ITextElement {
+public class Input : UIElement, ITextElement
+{
   /// <summary>Unique identifier used to reference this input's value in other elements' commands.</summary>
   public string Id { get; set; }
   /// <summary>Greyed-out hint text shown when the input is empty.</summary>
@@ -32,6 +33,12 @@ public class Input : UIElement, ITextElement {
   public UIColor? SelectionColor { get; set; }
   /// <summary>Text color of selected characters (set on the TMP vertex colors if supported).</summary>
   public UIColor? SelectionTextColor { get; set; }
+  /// <summary>
+  /// Command sent to the server when the user presses Enter. Supports <c>{Id}</c> token
+  /// replacement — use the Input's own <see cref="Id"/> or any other input/dropdown Id to
+  /// inject its current value into the command string.
+  /// </summary>
+  public string OnSubmit { get; set; }
 
   // ─── ITextElement ────────────────────────────────────────────────────────
   public UIColor? TextColor { get; set; }

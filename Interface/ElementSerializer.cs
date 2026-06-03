@@ -11,7 +11,8 @@ namespace ScarletCore.Interface;
 /// compatible with the ScarletInterface client. All data-key serialization is centralised
 /// here — element classes carry only data, no serialization logic.
 /// </summary>
-internal static class ElementSerializer {
+internal static class ElementSerializer
+{
   static readonly CultureInfo IC = CultureInfo.InvariantCulture;
   const string TRUE_LC = "true";
   const string FALSE_LC = "false";
@@ -20,13 +21,15 @@ internal static class ElementSerializer {
   static readonly string[] _marginKeys = ["mt", "mr", "mb", "ml"];
 
   /// <summary>Serializes the window and all children into an ordered packet list.</summary>
-  internal static List<ScarletPacket> Serialize(Window window, string plugin, string windowId) {
+  internal static List<ScarletPacket> Serialize(Window window, string plugin, string windowId)
+  {
     var packets = new List<ScarletPacket>();
     int rowCounter = 0;
     var elemCounters = new Dictionary<string, int>();
 
     // ── SetWindow packet ───────────────────────────────────────────────────
-    var wd = new Dictionary<string, string>(24) {
+    var wd = new Dictionary<string, string>(24)
+    {
       ["an"] = window.Anchor.ToString(),
       ["dg"] = window.Draggable ? TRUE_LC : FALSE_LC,
       ["tr"] = window.Transparent ? TRUE_LC : FALSE_LC,
@@ -56,9 +59,11 @@ internal static class ElementSerializer {
     packets.Add(Packet(plugin, windowId, "SW", wd));
 
     // ── Custom Texture ─────────────────────────────────────────────────────
-    if (window.CustomTexture != null) {
+    if (window.CustomTexture != null)
+    {
       var ct = window.CustomTexture;
-      var td = new Dictionary<string, string> {
+      var td = new Dictionary<string, string>
+      {
         ["cs"] = ct.CornerSize.ToString(IC),
       };
       if (ct.TopLeftCorner != null) td["t1"] = ct.TopLeftCorner;
@@ -76,18 +81,21 @@ internal static class ElementSerializer {
     }
 
     // ── Children ───────────────────────────────────────────────────────────
-    foreach (var child in window.Children) {
+    foreach (var child in window.Children)
+    {
       if (child is Row row)
         SerializeRow(packets, plugin, windowId, row, ref rowCounter, elemCounters);
       else if (child is Accordion accordion)
         SerializeAccordion(packets, plugin, windowId, accordion, ref rowCounter, elemCounters);
       else if (child is Container container)
         SerializeContainer(packets, plugin, windowId, container, ref rowCounter, elemCounters);
-      else if (child is VirtualList vl) {
+      else if (child is VirtualList vl)
+      {
         string listId = vl.ElemId ?? $"vl_{rowCounter}";
         rowCounter++;
         SerializeVirtualList(packets, plugin, windowId, vl, listId, elemCounters, null);
-      } else
+      }
+      else
         SerializeStandaloneElement(packets, plugin, windowId, child, elemCounters);
     }
 
@@ -99,12 +107,14 @@ internal static class ElementSerializer {
   // ═══════════════════════════════════════════════════════════════════════════
 
   static void SerializeRow(List<ScarletPacket> packets, string plugin, string windowId,
-      Row row, ref int rowCounter, Dictionary<string, int> elemCounters) {
+      Row row, ref int rowCounter, Dictionary<string, int> elemCounters)
+  {
     string rowId = row.ElemId ?? $"row_{rowCounter}";
     rowCounter++;
     elemCounters[rowId] = 0;
 
-    var d = new Dictionary<string, string>(20) {
+    var d = new Dictionary<string, string>(20)
+    {
       ["rd"] = rowId,
       ["ei"] = rowId,
       ["jc"] = row.JustifyContent.ToString(),
@@ -114,7 +124,8 @@ internal static class ElementSerializer {
     if (row.Width.HasValue) d["w"] = row.Width.Raw;
     if (row.Height.HasValue) d["h"] = row.Height.Raw;
     SerializeBackground(d, row.Background);
-    if (row.Anchor.HasValue) {
+    if (row.Anchor.HasValue)
+    {
       d["an"] = row.Anchor.Value.ToString();
       SerializePosition(d, row.Position);
       if (row.Pivot.HasValue) d["pv"] = row.Pivot.Value.ToString();
@@ -137,12 +148,14 @@ internal static class ElementSerializer {
   }
 
   static void SerializeAccordion(List<ScarletPacket> packets, string plugin, string windowId,
-      Accordion acc, ref int rowCounter, Dictionary<string, int> elemCounters) {
+      Accordion acc, ref int rowCounter, Dictionary<string, int> elemCounters)
+  {
     string accordionId = acc.ElemId ?? $"accordion_{rowCounter}";
     rowCounter++;
     elemCounters[accordionId] = 0;
 
-    var d = new Dictionary<string, string>(20) {
+    var d = new Dictionary<string, string>(20)
+    {
       ["ak"] = accordionId,
       ["ei"] = accordionId,
       ["ti"] = acc.Title ?? string.Empty,
@@ -171,12 +184,14 @@ internal static class ElementSerializer {
   }
 
   static void SerializeContainer(List<ScarletPacket> packets, string plugin, string windowId,
-      Container ct, ref int rowCounter, Dictionary<string, int> elemCounters) {
+      Container ct, ref int rowCounter, Dictionary<string, int> elemCounters)
+  {
     string containerId = ct.ElemId ?? $"container_{rowCounter}";
     rowCounter++;
     elemCounters[containerId] = 0;
 
-    var d = new Dictionary<string, string>(20) {
+    var d = new Dictionary<string, string>(20)
+    {
       ["cn"] = containerId,
       ["ei"] = containerId,
       ["jc"] = ct.JustifyContent.ToString(),
@@ -201,7 +216,8 @@ internal static class ElementSerializer {
     // Anchor or Position is explicitly set. Anchor defaults to TopLeft when only
     // Position is provided (e.g. Position = new Position(0, -34) without an Anchor).
     bool hasStandalonePos = ct.Anchor.HasValue || (ct.Position.HasValue && ct.Position.Value.HasValue);
-    if (hasStandalonePos) {
+    if (hasStandalonePos)
+    {
       d["an"] = (ct.Anchor ?? Anchor.TopLeft).ToString();
       SerializePosition(d, ct.Position);
       if (ct.Pivot.HasValue) d["pv"] = ct.Pivot.Value.ToString();
@@ -221,8 +237,10 @@ internal static class ElementSerializer {
   /// (ItemIndex) keys so the client stores them without creating GameObjects immediately.
   /// </summary>
   static void SerializeVirtualList(List<ScarletPacket> packets, string plugin, string windowId,
-      VirtualList vl, string listId, Dictionary<string, int> elemCounters, string parentId) {
-    var d = new Dictionary<string, string>(16) {
+      VirtualList vl, string listId, Dictionary<string, int> elemCounters, string parentId)
+  {
+    var d = new Dictionary<string, string>(16)
+    {
       ["li"] = listId,
       ["ei"] = listId,
       ["ih"] = F(vl.ItemHeight),
@@ -237,14 +255,16 @@ internal static class ElementSerializer {
     if (parentId != null) d["pa"] = parentId;
     if (vl.Rotation != 0f) d["ro"] = F(vl.Rotation);
     if (vl.BoxShadow.HasValue) d["bx"] = vl.BoxShadow.Value.Raw;
-    if (vl.Anchor.HasValue) {
+    if (vl.Anchor.HasValue)
+    {
       d["an"] = vl.Anchor.Value.ToString();
       SerializePosition(d, vl.Position);
       if (vl.Pivot.HasValue) d["pv"] = vl.Pivot.Value.ToString();
     }
     packets.Add(Packet(plugin, windowId, "AVL", d));
 
-    for (int i = 0; i < vl.Items.Count; i++) {
+    for (int i = 0; i < vl.Items.Count; i++)
+    {
       var itemCounters = new Dictionary<string, int>();
       string itemScopeId = $"{listId}_item_{i}";
       itemCounters[itemScopeId] = 0;
@@ -260,15 +280,21 @@ internal static class ElementSerializer {
   /// creating GameObjects immediately.
   /// </summary>
   static void SerializeVirtualItemElement(List<ScarletPacket> packets, string plugin, string windowId,
-      string listId, int itemIndex, UIElement elem, string parentId, Dictionary<string, int> counters) {
+      string listId, int itemIndex, UIElement elem, string parentId, Dictionary<string, int> counters)
+  {
     string vii = itemIndex.ToString(IC);
 
-    if (elem is Row row) {
+    if (elem is Row row)
+    {
       string rowId = row.ElemId ?? NextElemId(counters, parentId);
       counters[rowId] = 0;
-      var d = new Dictionary<string, string>(20) {
-        ["rd"] = rowId, ["ei"] = rowId, ["pa"] = parentId,
-        ["vi"] = listId, ["vii"] = vii,
+      var d = new Dictionary<string, string>(20)
+      {
+        ["rd"] = rowId,
+        ["ei"] = rowId,
+        ["pa"] = parentId,
+        ["vi"] = listId,
+        ["vii"] = vii,
         ["jc"] = row.JustifyContent.ToString(),
         ["ali"] = row.AlignItems.ToString(),
         ["ov"] = row.Overflow.ToString(),
@@ -289,12 +315,17 @@ internal static class ElementSerializer {
       return;
     }
 
-    if (elem is Container ct) {
+    if (elem is Container ct)
+    {
       string ctId = ct.ElemId ?? NextElemId(counters, parentId);
       counters[ctId] = 0;
-      var d = new Dictionary<string, string>(20) {
-        ["cn"] = ctId, ["ei"] = ctId, ["pa"] = parentId,
-        ["vi"] = listId, ["vii"] = vii,
+      var d = new Dictionary<string, string>(20)
+      {
+        ["cn"] = ctId,
+        ["ei"] = ctId,
+        ["pa"] = parentId,
+        ["vi"] = listId,
+        ["vii"] = vii,
         ["jc"] = ct.JustifyContent.ToString(),
         ["ali"] = ct.AlignItems.ToString(),
         ["ov"] = ct.Overflow.ToString(),
@@ -330,7 +361,8 @@ internal static class ElementSerializer {
   // ═══════════════════════════════════════════════════════════════════════════
 
   static void SerializeStandaloneElement(List<ScarletPacket> packets, string plugin,
-      string windowId, UIElement elem, Dictionary<string, int> elemCounters) {
+      string windowId, UIElement elem, Dictionary<string, int> elemCounters)
+  {
     string elemId = elem.ElemId ?? NextElemId(elemCounters, "_sa");
     var (type, d) = BuildElementData(elem, elemId);
     // Standalone elements always emit anchor/position
@@ -342,9 +374,11 @@ internal static class ElementSerializer {
   }
 
   static void SerializeRowElement(List<ScarletPacket> packets, string plugin,
-      string windowId, UIElement elem, string parentId, Dictionary<string, int> elemCounters) {
+      string windowId, UIElement elem, string parentId, Dictionary<string, int> elemCounters)
+  {
     // Row nested inside a Row/Accordion/Container — serialize as child row.
-    if (elem is Row nestedRow) {
+    if (elem is Row nestedRow)
+    {
       string nestedRowId = nestedRow.ElemId ?? NextElemId(elemCounters, parentId);
       elemCounters[nestedRowId] = 0;
       var (rowType, rd) = BuildElementData(nestedRow, nestedRowId);
@@ -356,10 +390,12 @@ internal static class ElementSerializer {
     }
 
     // Container nested inside a Row/Accordion/Container — serialize as child container.
-    if (elem is Container ct) {
+    if (elem is Container ct)
+    {
       string containerId = ct.ElemId ?? NextElemId(elemCounters, parentId);
       elemCounters[containerId] = 0;
-      var cd = new Dictionary<string, string>(20) {
+      var cd = new Dictionary<string, string>(20)
+      {
         ["cn"] = containerId,
         ["ei"] = containerId,
         ["pa"] = parentId,
@@ -388,7 +424,8 @@ internal static class ElementSerializer {
     }
 
     // VirtualList nested inside a Row/Accordion/Container.
-    if (elem is VirtualList nestedVl) {
+    if (elem is VirtualList nestedVl)
+    {
       string listId = nestedVl.ElemId ?? NextElemId(elemCounters, parentId);
       elemCounters[listId] = 0;
       SerializeVirtualList(packets, plugin, windowId, nestedVl, listId, elemCounters, parentId);
@@ -406,11 +443,13 @@ internal static class ElementSerializer {
   /// Builds the packet Type name and data dictionary for a concrete element.
   /// Common base properties are always applied; type-specific properties added per case.
   /// </summary>
-  static (string Type, Dictionary<string, string> Data) BuildElementData(UIElement elem, string elemId) {
+  static (string Type, Dictionary<string, string> Data) BuildElementData(UIElement elem, string elemId)
+  {
     var d = new Dictionary<string, string>(16) { ["ei"] = elemId };
     SerializeBase(d, elem);
 
-    switch (elem) {
+    switch (elem)
+    {
       case Text t:
         d["tx"] = t.Content ?? string.Empty;
         if (t.TextAlign != TextAlignment.Left) d["ta"] = t.TextAlign.ToString();
@@ -439,13 +478,15 @@ internal static class ElementSerializer {
         if (inp.MaxLength > 0) d["mx"] = inp.MaxLength.ToString(IC);
         if (inp.FocusBackground.HasValue && inp.FocusBackground.Value.HasValue)
           inp.FocusBackground.Value.Apply(d, "f");
-        if (inp.FocusBorder.HasValue) {
+        if (inp.FocusBorder.HasValue)
+        {
           d["fc"] = inp.FocusBorder.Value.Color;
           d["fw"] = F(inp.FocusBorder.Value.Width);
         }
         if (inp.CaretColor.HasValue) d["cc"] = inp.CaretColor.Value;
         if (inp.SelectionColor.HasValue) d["xs"] = inp.SelectionColor.Value;
         if (inp.SelectionTextColor.HasValue) d["st"] = inp.SelectionTextColor.Value;
+        if (!string.IsNullOrEmpty(inp.OnSubmit)) d["sm"] = inp.OnSubmit;
         SerializeTextStyle(d, inp);
         return ("AI", d);
 
@@ -472,7 +513,8 @@ internal static class ElementSerializer {
         if (pb.AnimateValue) d["av"] = "true";
         if (pb.AnimationDuration != 0.3f) d["ad"] = F(pb.AnimationDuration);
         if (pb.IsHealthBar) d["hb"] = "true";
-        if (pb.Label != null) {
+        if (pb.Label != null)
+        {
           d["lbt"] = pb.Label.Content ?? string.Empty;
           if (pb.Label.TextAlign != TextAlignment.Left) d["lta"] = pb.Label.TextAlign.ToString();
           if (pb.Label.TextColor.HasValue) d["ltc"] = pb.Label.TextColor.Value;
@@ -511,7 +553,8 @@ internal static class ElementSerializer {
         d["jc"] = row.JustifyContent.ToString();
         d["ali"] = row.AlignItems.ToString();
         d["ov"] = row.Overflow.ToString();
-        if (row.Anchor.HasValue) {
+        if (row.Anchor.HasValue)
+        {
           d["an"] = row.Anchor.Value.ToString();
           SerializePosition(d, row.Position);
           if (row.Pivot.HasValue) d["pv"] = row.Pivot.Value.ToString();
@@ -560,7 +603,8 @@ internal static class ElementSerializer {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /// <summary>Serializes base UIElement properties shared by all elements.</summary>
-  static void SerializeBase(Dictionary<string, string> d, UIElement elem) {
+  static void SerializeBase(Dictionary<string, string> d, UIElement elem)
+  {
     if (elem.Width.HasValue) d["w"] = elem.Width.Raw;
     if (elem.Height.HasValue) d["h"] = elem.Height.Raw;
     SerializeBackground(d, elem.Background);
@@ -572,13 +616,15 @@ internal static class ElementSerializer {
   }
 
   /// <summary>Serializes UIBackground into data keys.</summary>
-  static void SerializeBackground(Dictionary<string, string> d, UIBackground? bg) {
+  static void SerializeBackground(Dictionary<string, string> d, UIBackground? bg)
+  {
     if (!bg.HasValue || !bg.Value.HasValue) return;
     bg.Value.Apply(d);
   }
 
   /// <summary>Serializes ITextElement properties.</summary>
-  static void SerializeTextStyle(Dictionary<string, string> d, ITextElement t) {
+  static void SerializeTextStyle(Dictionary<string, string> d, ITextElement t)
+  {
     if (t.TextColor.HasValue) d["tc"] = t.TextColor.Value;
     if (t.FontSize > 0) d["fs"] = F(t.FontSize);
     if (t.Font != null) d["fn"] = t.Font;
@@ -588,7 +634,8 @@ internal static class ElementSerializer {
   }
 
   /// <summary>Serializes Border into data keys (dc=BorderColor, dw=BorderWidth, dr=BorderRadius).</summary>
-  static void SerializeBorder(Dictionary<string, string> d, Border? border) {
+  static void SerializeBorder(Dictionary<string, string> d, Border? border)
+  {
     if (!border.HasValue) return;
     d["dc"] = border.Value.Color;
     d["dw"] = F(border.Value.Width);
@@ -596,7 +643,8 @@ internal static class ElementSerializer {
   }
 
   /// <summary>Serializes Spacing using a 1-char prefix: 'p'=Padding, 'm'=Margin → pt/pr/pb/pl or mt/mr/mb/ml.</summary>
-  static void SerializeSpacing(Dictionary<string, string> d, char pfx, Spacing? spacing) {
+  static void SerializeSpacing(Dictionary<string, string> d, char pfx, Spacing? spacing)
+  {
     if (!spacing.HasValue) return;
     var keys = pfx == 'p' ? _paddingKeys : _marginKeys;
     d[keys[0]] = F(spacing.Value.Top);
@@ -606,7 +654,8 @@ internal static class ElementSerializer {
   }
 
   /// <summary>Serializes Position (px=PosX, py=PosY, zi=ZIndex).</summary>
-  static void SerializePosition(Dictionary<string, string> d, Position? pos) {
+  static void SerializePosition(Dictionary<string, string> d, Position? pos)
+  {
     if (!pos.HasValue) return;
     if (pos.Value.X.HasValue) d["px"] = pos.Value.X.Raw;
     if (pos.Value.Y.HasValue) d["py"] = pos.Value.Y.Raw;
@@ -619,16 +668,19 @@ internal static class ElementSerializer {
   /// q=PressedBg prefix → qcl/qgr/qim/qsp/qif/qfr/qtt/qat/qad/qlt/qlc/qrm/qpl
   /// </summary>
   static void SerializeHoverBackground(Dictionary<string, string> d,
-      UIBackground? hover, UIBackground? pressed) {
+      UIBackground? hover, UIBackground? pressed)
+  {
     if (hover.HasValue && hover.Value.HasValue) hover.Value.Apply(d, "h");
     if (pressed.HasValue && pressed.Value.HasValue) pressed.Value.Apply(d, "q");
   }
 
   /// <summary>Serializes a tooltip if present (te=TargetElemId, tw=TooltipWindowId).</summary>
   static void SerializeTooltip(List<ScarletPacket> packets, string plugin, string windowId,
-      UIElement elem, string elemId) {
+      UIElement elem, string elemId)
+  {
     if (elem.Tooltip == null) return;
-    packets.Add(Packet(plugin, windowId, "AO", new Dictionary<string, string> {
+    packets.Add(Packet(plugin, windowId, "AO", new Dictionary<string, string>
+    {
       ["te"] = elemId,
       ["tw"] = elem.Tooltip,
     }));
@@ -638,21 +690,25 @@ internal static class ElementSerializer {
   // Helpers
   // ═══════════════════════════════════════════════════════════════════════════
 
-  static string NextElemId(Dictionary<string, int> counters, string scope) {
+  static string NextElemId(Dictionary<string, int> counters, string scope)
+  {
     counters.TryGetValue(scope, out int c);
     counters[scope] = c + 1;
     return $"{scope}_e{c}";
   }
 
-  internal static List<ScarletPacket> SerializeElement(string plugin, string windowId, UIElement elem, string elemId) {
+  internal static List<ScarletPacket> SerializeElement(string plugin, string windowId, UIElement elem, string elemId)
+  {
     var (type, d) = BuildElementData(elem, elemId);
     d["ue"] = "1";
 
-    if (elem is Row row) {
+    if (elem is Row row)
+    {
       d["ck"] = "1";
       var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
       var counters = new Dictionary<string, int>();
-      foreach (var child in row.Children) {
+      foreach (var child in row.Children)
+      {
         string childId = child.ElemId ?? NextElemId(counters, elemId);
         var (childType, childData) = BuildElementData(child, childId);
         childData["pa"] = elemId;
@@ -662,11 +718,13 @@ internal static class ElementSerializer {
       return packets;
     }
 
-    if (elem is Accordion acc) {
+    if (elem is Accordion acc)
+    {
       d["ck"] = "1";
       var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
       var counters = new Dictionary<string, int>();
-      foreach (var child in acc.Children) {
+      foreach (var child in acc.Children)
+      {
         string childId = child.ElemId ?? NextElemId(counters, elemId);
         var (childType, childData) = BuildElementData(child, childId);
         childData["pa"] = elemId;
@@ -676,11 +734,13 @@ internal static class ElementSerializer {
       return packets;
     }
 
-    if (elem is Container ct) {
+    if (elem is Container ct)
+    {
       d["ck"] = "1";
       var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
       var counters = new Dictionary<string, int>();
-      foreach (var child in ct.Children) {
+      foreach (var child in ct.Children)
+      {
         string childId = child.ElemId ?? NextElemId(counters, elemId);
         var (childType, childData) = BuildElementData(child, childId);
         childData["pa"] = elemId;
