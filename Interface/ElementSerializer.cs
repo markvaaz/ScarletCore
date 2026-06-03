@@ -490,6 +490,31 @@ internal static class ElementSerializer
         SerializeTextStyle(d, inp);
         return ("AI", d);
 
+      case TextArea ta:
+        d["id"] = ta.Id ?? string.Empty;
+        d["ph"] = ta.Placeholder ?? string.Empty;
+        if (ta.PlaceholderColor.HasValue) d["pc"] = ta.PlaceholderColor.Value;
+        if (ta.BoxSizing != BoxSizing.BorderBox) d["bs"] = ta.BoxSizing.ToString();
+        if (ta.Value != null) d["vl"] = ta.Value;
+        if (ta.MaxLength > 0) d["mx"] = ta.MaxLength.ToString(IC);
+        if (ta.FocusBackground.HasValue && ta.FocusBackground.Value.HasValue)
+          ta.FocusBackground.Value.Apply(d, "f");
+        if (ta.FocusBorder.HasValue)
+        {
+          d["fc"] = ta.FocusBorder.Value.Color;
+          d["fw"] = F(ta.FocusBorder.Value.Width);
+        }
+        if (ta.CaretColor.HasValue) d["cc"] = ta.CaretColor.Value;
+        if (ta.SelectionColor.HasValue) d["xs"] = ta.SelectionColor.Value;
+        if (ta.SelectionTextColor.HasValue) d["st"] = ta.SelectionTextColor.Value;
+        if (!string.IsNullOrEmpty(ta.OnSubmit)) d["sm"] = ta.OnSubmit;
+        if (!ta.ShowScrollbar) d["ss"] = FALSE_LC;
+        if (ta.ScrollbarColor.HasValue) d["sc"] = ta.ScrollbarColor.Value;
+        if (ta.ScrollbarBackgroundColor.HasValue) d["sb"] = ta.ScrollbarBackgroundColor.Value;
+        if (ta.ScrollbarWidth != 6f) d["sw"] = F(ta.ScrollbarWidth);
+        SerializeTextStyle(d, ta);
+        return ("ATA", d);
+
       case Dropdown dd:
         d["id"] = dd.Id ?? string.Empty;
         d["op"] = dd.Options ?? string.Empty;
