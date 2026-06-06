@@ -55,6 +55,9 @@ public class ScrollCanvas : UIElement, IEnumerable<Branch>
   /// <summary>Thickness of connection lines in pixels.</summary>
   public float LineWidth { get; set; } = 2f;
 
+  /// <summary>Style of the connection lines between branch nodes. Defaults to Direct (straight line).</summary>
+  public Builders.LineStyle LineStyle { get; set; } = Builders.LineStyle.Direct;
+
   /// <summary>Adds a root branch (enables collection initializer syntax).</summary>
   public void Add(Branch branch) => Branches.Add(branch);
   public IEnumerator<Branch> GetEnumerator() => Branches.GetEnumerator();

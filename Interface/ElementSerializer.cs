@@ -260,6 +260,7 @@ internal static class ElementSerializer
     if (sc.BoxShadow.HasValue) d["bx"] = sc.BoxShadow.Value.Raw;
     if (sc.ViewOrigin != Anchor.TopLeft) d["vo"] = sc.ViewOrigin.ToString();
     if (sc.LineColor.HasValue) d["lnc"] = sc.LineColor.Value;
+    if (sc.LineStyle != Builders.LineStyle.Direct) d["ls"] = sc.LineStyle.ToString();
 
     // Standalone ScrollCanvas (direct window child): emit anchor/position when either
     // Anchor or Position is explicitly set.
@@ -299,7 +300,7 @@ internal static class ElementSerializer
     if (branch.BoxShadow.HasValue) d["bx"] = branch.BoxShadow.Value.Raw;
     // Hub: a branch whose only children are other branches — rendered as a transparent
     // connector so the parent draws V-fork lines directly to the grandchildren.
-    bool isHub = branch.Children.Count > 0 && !branch.Children.Exists(c => !(c is Branch));
+    bool isHub = branch.Children.Count > 0 && !branch.Children.Exists(c => c is not Branch);
     if (isHub) d["hb"] = "1";
     packets.Add(Packet(plugin, windowId, "ABR", d));
 
