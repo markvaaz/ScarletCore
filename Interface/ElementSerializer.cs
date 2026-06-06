@@ -89,6 +89,8 @@ internal static class ElementSerializer
         SerializeAccordion(packets, plugin, windowId, accordion, ref rowCounter, elemCounters);
       else if (child is Container container)
         SerializeContainer(packets, plugin, windowId, container, ref rowCounter, elemCounters);
+      else if (child is ScrollCanvas scrollCanvas)
+        SerializeScrollCanvas(packets, plugin, windowId, scrollCanvas, ref rowCounter, elemCounters);
       else if (child is VirtualList vl)
       {
         string listId = vl.ElemId ?? $"vl_{rowCounter}";
@@ -229,7 +231,88 @@ internal static class ElementSerializer
       SerializeRowElement(packets, plugin, windowId, child, containerId, elemCounters);
   }
 
-  // ─── VirtualList ──────────────────────────────────────────────────────────
+  // ─── ScrollCanvas ─────────────────────────────────────────────────────────
+
+  static void SerializeScrollCanvas(List<ScarletPacket> packets, string plugin, string windowId,
+      ScrollCanvas sc, ref int rowCounter, Dictionary<string, int> elemCounters)
+  {
+    string canvasId = sc.ElemId ?? $"canvas_{rowCounter}";
+    rowCounter++;
+    elemCounters[canvasId] = 0;
+
+    var d = new Dictionary<string, string>(20)
+    {
+      ["kd"] = canvasId,
+      ["ei"] = canvasId,
+      ["nw"] = F(sc.NodeWidth),
+      ["nh"] = F(sc.NodeHeight),
+      ["cg"] = F(sc.ColumnGap),
+      ["rg"] = F(sc.RowGap),
+      ["lnw"] = F(sc.LineWidth),
+    };
+    if (sc.Width.HasValue) d["w"] = sc.Width.Raw;
+    if (sc.Height.HasValue) d["h"] = sc.Height.Raw;
+    SerializeBackground(d, sc.Background);
+    SerializeBorder(d, sc.Border);
+    SerializeSpacing(d, 'p', sc.Padding);
+    SerializeSpacing(d, 'm', sc.Margin);
+    if (sc.Rotation != 0f) d["ro"] = F(sc.Rotation);
+    if (sc.BoxShadow.HasValue) d["bx"] = sc.BoxShadow.Value.Raw;
+    if (sc.ViewOrigin != Anchor.TopLeft) d["vo"] = sc.ViewOrigin.ToString();
+    if (sc.LineColor.HasValue) d["lnc"] = sc.LineColor.Value;
+
+    // Standalone ScrollCanvas (direct window child): emit anchor/position when either
+    // Anchor or Position is explicitly set.
+    bool hasStandalonePos = sc.Anchor.HasValue || (sc.Position.HasValue && sc.Position.Value.HasValue);
+    if (hasStandalonePos)
+    {
+      d["an"] = (sc.Anchor ?? Anchor.TopLeft).ToString();
+      SerializePosition(d, sc.Position);
+      if (sc.Pivot.HasValue) d["pv"] = sc.Pivot.Value.ToString();
+    }
+    packets.Add(Packet(plugin, windowId, "AK", d));
+
+    // Serialize branch tree in DFS pre-order (parents before children).
+    var branchCounter = new int[1];
+    foreach (var branch in sc.Branches)
+      SerializeBranch(packets, plugin, windowId, branch, canvasId, branchCounter, elemCounters);
+  }
+
+  static void SerializeBranch(List<ScarletPacket> packets, string plugin, string windowId,
+      Branch branch, string parentId, int[] branchCounter, Dictionary<string, int> elemCounters)
+  {
+    string branchId = branch.ElemId ?? $"{parentId}_br{branchCounter[0]++}";
+    elemCounters[branchId] = 0;
+
+    var d = new Dictionary<string, string>(16)
+    {
+      ["bid"] = branchId,
+      ["ei"] = branchId,
+      ["pa"] = parentId,
+    };
+    if (branch.Width.HasValue) d["w"] = branch.Width.Raw;
+    if (branch.Height.HasValue) d["h"] = branch.Height.Raw;
+    SerializeBackground(d, branch.Background);
+    SerializeBorder(d, branch.Border);
+    SerializeSpacing(d, 'p', branch.Padding);
+    if (branch.Rotation != 0f) d["ro"] = F(branch.Rotation);
+    if (branch.BoxShadow.HasValue) d["bx"] = branch.BoxShadow.Value.Raw;
+    // Hub: a branch whose only children are other branches — rendered as a transparent
+    // connector so the parent draws V-fork lines directly to the grandchildren.
+    bool isHub = branch.Children.Count > 0 && !branch.Children.Exists(c => !(c is Branch));
+    if (isHub) d["hb"] = "1";
+    packets.Add(Packet(plugin, windowId, "ABR", d));
+
+    // Children is a mixed list: Branch items form tree children (positioned below,
+    // connected by lines); all other UIElement types are content rendered inside this node.
+    foreach (var child in branch.Children)
+    {
+      if (child is Branch childBranch)
+        SerializeBranch(packets, plugin, windowId, childBranch, branchId, branchCounter, elemCounters);
+      else
+        SerializeRowElement(packets, plugin, windowId, child, branchId, elemCounters);
+    }
+  }
 
   /// <summary>
   /// Emits an AVL (AddVirtualList) container packet followed by one element packet per
@@ -388,6 +471,7 @@ internal static class ElementSerializer
         SerializeRowElement(packets, plugin, windowId, child, nestedRowId, elemCounters);
       return;
     }
+
 
     // Container nested inside a Row/Accordion/Container — serialize as child container.
     if (elem is Container ct)
