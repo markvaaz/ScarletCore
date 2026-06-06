@@ -58,6 +58,16 @@ public class ScrollCanvas : UIElement, IEnumerable<Branch>
   /// <summary>Style of the connection lines between branch nodes. Defaults to Direct (straight line).</summary>
   public Builders.LineStyle LineStyle { get; set; } = Builders.LineStyle.Direct;
 
+  /// <summary>
+  /// Inner padding that pushes tree content away from the canvas border.
+  /// Accepts a single float (uniform) or <see cref="Spacing"/> per-side.
+  /// <code>
+  /// Padding = 20              // 20px all sides
+  /// Padding = new Spacing(20, 10)   // 20px vertical, 10px horizontal
+  /// </code>
+  /// </summary>
+  public new Spacing? Padding { get => base.Padding; set => base.Padding = value; }
+
   /// <summary>Adds a root branch (enables collection initializer syntax).</summary>
   public void Add(Branch branch) => Branches.Add(branch);
   public IEnumerator<Branch> GetEnumerator() => Branches.GetEnumerator();
