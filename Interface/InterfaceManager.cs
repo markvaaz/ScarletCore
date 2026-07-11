@@ -225,4 +225,164 @@ public static class InterfaceManager {
       Data = data,
     });
   }
+
+  // ── Audio ─────────────────────────────────────────────────────────────────────
+  //
+  // The server tells clients to play/stop sounds; each sound carries a caller-chosen
+  // <c>soundId</c> (a handle) so it can be stopped or live-updated individually. Audio
+  // files are fetched from a URL and cached on disk per client (like images).
+  //
+  // Supported formats: WAV, OGG, MP3 and FLAC — playback goes through the game's own
+  // FMOD core system, which decodes these natively (Unity's audio pipeline is disabled
+  // in V Rising, so AudioSource/AudioClip cannot be used).
+  //
+  // 2D sounds play at a constant volume (UI / music). 3D sounds are anchored at an
+  // in-game world coordinate; each client attenuates the volume by the distance between
+  // the sound and its local player, computed entirely client-side.
+
+  static string F(float v) => NativeElementBuilder.F(v);
+
+  static ScarletPacket AudioPacket(string type, string plugin, Dictionary<string, string> data) =>
+    new() { Type = type, Plugin = plugin, Window = "$audio", Data = data };
+
+  static Dictionary<string, string> Build2D(string soundId, string url, float volume, bool loop, string category) {
+    var d = new Dictionary<string, string> { ["aid"] = soundId, ["ur"] = url, ["am"] = "2d" };
+    if (volume != 1f) d["vol"] = F(volume);
+    if (loop) d["lp"] = "true";
+    if (!string.IsNullOrEmpty(category)) d["aca"] = category;
+    return d;
+  }
+
+  static Dictionary<string, string> Build3D(string soundId, string url, float x, float y, float z,
+      float minDistance, float maxDistance, float volume, bool loop, string resumeMode, string category) {
+    var d = new Dictionary<string, string> {
+      ["aid"] = soundId, ["ur"] = url, ["am"] = "3d",
+      ["wx"] = F(x), ["wy"] = F(y), ["wz"] = F(z),
+      ["mnd"] = F(minDistance), ["mxd"] = F(maxDistance),
+    };
+    if (volume != 1f) d["vol"] = F(volume);
+    if (loop) d["lp"] = "true";
+    if (!string.IsNullOrEmpty(resumeMode) && resumeMode != "pause") d["rz"] = resumeMode;
+    if (!string.IsNullOrEmpty(category)) d["aca"] = category;
+    return d;
+  }
+
+  /// <summary>
+  /// Plays a 2D sound (constant volume) on a specific player's client.
+  /// </summary>
+  /// <param name="player">Target player.</param>
+  /// <param name="plugin">A unique identifier for the calling plugin.</param>
+  /// <param name="soundId">Caller-chosen handle; reusing an id replaces the previous sound.</param>
+  /// <param name="url">HTTP(S) URL of the audio file (WAV, OGG, MP3 or FLAC).</param>
+  /// <param name="volume">0..1 playback volume. Default 1.</param>
+  /// <param name="loop">Whether the clip loops. Default false.</param>
+  /// <param name="category">Optional group tag for <see cref="StopCategory"/> (e.g. "music").</param>
+  public static void PlaySound2D(PlayerData player, string plugin, string soundId, string url,
+      float volume = 1f, bool loop = false, string category = null) =>
+    PacketManager.SendPacket(player, AudioPacket("PA", plugin, Build2D(soundId, url, volume, loop, category)));
+
+  /// <summary>Plays a 2D sound on every connected interface player. See <see cref="PlaySound2D"/>.</summary>
+  public static void PlaySound2DAll(string plugin, string soundId, string url,
+      float volume = 1f, bool loop = false, string category = null) =>
+    PacketManager.SendPacketToAll(AudioPacket("PA", plugin, Build2D(soundId, url, volume, loop, category)));
+
+  /// <summary>
+  /// Plays a 3D positional sound anchored at an in-game world coordinate on a specific
+  /// player's client. The client attenuates the volume by the distance between the sound
+  /// and the local player: full volume within <paramref name="minDistance"/>, silent beyond
+  /// <paramref name="maxDistance"/>.
+  /// </summary>
+  /// <param name="player">Target player.</param>
+  /// <param name="plugin">A unique identifier for the calling plugin.</param>
+  /// <param name="soundId">Caller-chosen handle; reusing an id replaces the previous sound.</param>
+  /// <param name="url">HTTP(S) URL of the audio file (WAV, OGG, MP3 or FLAC).</param>
+  /// <param name="x">World X of the emitter.</param>
+  /// <param name="y">World Y of the emitter.</param>
+  /// <param name="z">World Z of the emitter.</param>
+  /// <param name="minDistance">Distance (world units) within which the sound plays at full volume.</param>
+  /// <param name="maxDistance">Distance beyond which the sound is inaudible.</param>
+  /// <param name="volume">0..1 base volume before distance attenuation. Default 1.</param>
+  /// <param name="loop">Whether the clip loops. Default true (typical for ambient emitters).</param>
+  /// <param name="resumeMode">
+  /// Out-of-range behaviour: <c>"pause"</c> (freeze the timeline and resume where it left off)
+  /// or <c>"virtual"</c> (keep the timeline advancing while muted, resuming in sync). Default "pause".
+  /// </param>
+  /// <param name="category">Optional group tag for <see cref="StopCategory"/>.</param>
+  public static void PlaySound3D(PlayerData player, string plugin, string soundId, string url,
+      float x, float y, float z, float minDistance, float maxDistance,
+      float volume = 1f, bool loop = true, string resumeMode = "pause", string category = null) =>
+    PacketManager.SendPacket(player, AudioPacket("PA", plugin,
+      Build3D(soundId, url, x, y, z, minDistance, maxDistance, volume, loop, resumeMode, category)));
+
+  /// <summary>Plays a 3D positional sound on every connected interface player. See <see cref="PlaySound3D"/>.</summary>
+  public static void PlaySound3DAll(string plugin, string soundId, string url,
+      float x, float y, float z, float minDistance, float maxDistance,
+      float volume = 1f, bool loop = true, string resumeMode = "pause", string category = null) =>
+    PacketManager.SendPacketToAll(AudioPacket("PA", plugin,
+      Build3D(soundId, url, x, y, z, minDistance, maxDistance, volume, loop, resumeMode, category)));
+
+  /// <summary>
+  /// Live-updates an active sound by id. Only the non-null values are changed; everything
+  /// else keeps its current value. Useful for moving a 3D emitter or fading volume.
+  /// </summary>
+  public static void UpdateSound(PlayerData player, string plugin, string soundId,
+      float? volume = null, float? x = null, float? y = null, float? z = null,
+      float? minDistance = null, float? maxDistance = null) =>
+    PacketManager.SendPacket(player, AudioPacket("UA", plugin,
+      BuildUpdate(soundId, volume, x, y, z, minDistance, maxDistance)));
+
+  /// <summary>Live-updates an active sound on every connected interface player. See <see cref="UpdateSound"/>.</summary>
+  public static void UpdateSoundAll(string plugin, string soundId,
+      float? volume = null, float? x = null, float? y = null, float? z = null,
+      float? minDistance = null, float? maxDistance = null) =>
+    PacketManager.SendPacketToAll(AudioPacket("UA", plugin,
+      BuildUpdate(soundId, volume, x, y, z, minDistance, maxDistance)));
+
+  static Dictionary<string, string> BuildUpdate(string soundId, float? volume,
+      float? x, float? y, float? z, float? minDistance, float? maxDistance) {
+    var d = new Dictionary<string, string> { ["aid"] = soundId };
+    if (volume.HasValue) d["vol"] = F(volume.Value);
+    if (x.HasValue) d["wx"] = F(x.Value);
+    if (y.HasValue) d["wy"] = F(y.Value);
+    if (z.HasValue) d["wz"] = F(z.Value);
+    if (minDistance.HasValue) d["mnd"] = F(minDistance.Value);
+    if (maxDistance.HasValue) d["mxd"] = F(maxDistance.Value);
+    return d;
+  }
+
+  /// <summary>Stops a single sound by id on a specific player's client.</summary>
+  public static void StopSound(PlayerData player, string plugin, string soundId) =>
+    PacketManager.SendPacket(player, AudioPacket("XA", plugin, new() { ["aid"] = soundId }));
+
+  /// <summary>Stops a single sound by id on every connected interface player.</summary>
+  public static void StopSoundAll(string plugin, string soundId) =>
+    PacketManager.SendPacketToAll(AudioPacket("XA", plugin, new() { ["aid"] = soundId }));
+
+  /// <summary>Stops every sound tagged with <paramref name="category"/> on a specific player's client.</summary>
+  public static void StopCategory(PlayerData player, string plugin, string category) =>
+    PacketManager.SendPacket(player, AudioPacket("XA", plugin, new() { ["aca"] = category }));
+
+  /// <summary>Stops every sound tagged with <paramref name="category"/> on every connected interface player.</summary>
+  public static void StopCategoryAll(string plugin, string category) =>
+    PacketManager.SendPacketToAll(AudioPacket("XA", plugin, new() { ["aca"] = category }));
+
+  /// <summary>Stops all sounds on a specific player's client.</summary>
+  public static void StopAllSounds(PlayerData player, string plugin) =>
+    PacketManager.SendPacket(player, AudioPacket("XA", plugin, new()));
+
+  /// <summary>Stops all sounds on every connected interface player.</summary>
+  public static void StopAllSoundsForAll(string plugin) =>
+    PacketManager.SendPacketToAll(AudioPacket("XA", plugin, new()));
+
+  /// <summary>
+  /// Pre-caches audio files on disk on every connected player's client so later
+  /// <see cref="PlaySound2D"/>/<see cref="PlaySound3D"/> calls start without a download stall.
+  /// Call once at load time. Files are stored per-server and re-downloaded only when they change.
+  /// </summary>
+  public static void PreCacheAudio(string plugin, string[] urls) =>
+    PacketManager.SendPacketToAll(AudioPacket("PCA", plugin, new() { ["ul"] = string.Join("\n", urls) }));
+
+  /// <summary>Pre-caches audio files on disk for a specific player's client. See <see cref="PreCacheAudio(string, string[])"/>.</summary>
+  public static void PreCacheAudio(PlayerData player, string plugin, string[] urls) =>
+    PacketManager.SendPacket(player, AudioPacket("PCA", plugin, new() { ["ul"] = string.Join("\n", urls) }));
 }
