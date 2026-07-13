@@ -239,22 +239,48 @@ public static class InterfaceManager {
   // 2D sounds play at a constant volume (UI / music). 3D sounds are anchored at an
   // in-game world coordinate; each client attenuates the volume by the distance between
   // the sound and its local player, computed entirely client-side.
+  //
+  // GLOBAL SYNC (<c>syncAnchorUtc</c>): pass the UTC moment the track's timeline started
+  // (e.g. a fixed anchor stored when your zone music began looping). The elapsed time is
+  // measured at send time and the client seeks to <c>elapsed % length</c>, then keeps the
+  // channel drift-corrected — every player hears the same part of the track no matter when
+  // they arrived. Reuse the SAME anchor for every send of that track. Assumes pitch 1.
+  //
+  // Other playback options: startAtMs (fixed start offset), fadeInMs / fadeOutMs
+  // (sample-accurate fades), pitch (playback rate), pan (2D stereo, -1..1), and
+  // pause/resume + seek via UpdateSound.
 
   static string F(float v) => NativeElementBuilder.F(v);
 
   static ScarletPacket AudioPacket(string type, string plugin, Dictionary<string, string> data) =>
     new() { Type = type, Plugin = plugin, Window = "$audio", Data = data };
 
-  static Dictionary<string, string> Build2D(string soundId, string url, float volume, bool loop, string category) {
+  // Milliseconds elapsed since the track's global start, measured now (send time).
+  static string SyncElapsed(DateTime anchorUtc) =>
+    Math.Max(0L, (long)(DateTime.UtcNow - anchorUtc.ToUniversalTime()).TotalMilliseconds).ToString();
+
+  static void AddPlayOptions(Dictionary<string, string> d, float startAtMs,
+      DateTime? syncAnchorUtc, float fadeInMs, float pitch, float pan) {
+    if (startAtMs > 0f) d["sat"] = F(startAtMs);
+    if (syncAnchorUtc.HasValue) d["sye"] = SyncElapsed(syncAnchorUtc.Value);
+    if (fadeInMs > 0f) d["fdi"] = F(fadeInMs);
+    if (pitch != 1f) d["pit"] = F(pitch);
+    if (pan != 0f) d["pn"] = F(pan);
+  }
+
+  static Dictionary<string, string> Build2D(string soundId, string url, float volume, bool loop,
+      string category, float startAtMs, DateTime? syncAnchorUtc, float fadeInMs, float pitch, float pan) {
     var d = new Dictionary<string, string> { ["aid"] = soundId, ["ur"] = url, ["am"] = "2d" };
     if (volume != 1f) d["vol"] = F(volume);
     if (loop) d["lp"] = "true";
     if (!string.IsNullOrEmpty(category)) d["aca"] = category;
+    AddPlayOptions(d, startAtMs, syncAnchorUtc, fadeInMs, pitch, pan);
     return d;
   }
 
   static Dictionary<string, string> Build3D(string soundId, string url, float x, float y, float z,
-      float minDistance, float maxDistance, float volume, bool loop, string resumeMode, string category) {
+      float minDistance, float maxDistance, float volume, bool loop, string resumeMode, string category,
+      float startAtMs, DateTime? syncAnchorUtc, float fadeInMs, float pitch) {
     var d = new Dictionary<string, string> {
       ["aid"] = soundId, ["ur"] = url, ["am"] = "3d",
       ["wx"] = F(x), ["wy"] = F(y), ["wz"] = F(z),
@@ -264,6 +290,7 @@ public static class InterfaceManager {
     if (loop) d["lp"] = "true";
     if (!string.IsNullOrEmpty(resumeMode) && resumeMode != "pause") d["rz"] = resumeMode;
     if (!string.IsNullOrEmpty(category)) d["aca"] = category;
+    AddPlayOptions(d, startAtMs, syncAnchorUtc, fadeInMs, pitch, 0f);   // pan is 2D-only
     return d;
   }
 
@@ -277,14 +304,29 @@ public static class InterfaceManager {
   /// <param name="volume">0..1 playback volume. Default 1.</param>
   /// <param name="loop">Whether the clip loops. Default false.</param>
   /// <param name="category">Optional group tag for <see cref="StopCategory"/> (e.g. "music").</param>
+  /// <param name="startAtMs">Start playback at this offset into the file (ms). Default 0.</param>
+  /// <param name="syncAnchorUtc">
+  /// Global sync: the UTC moment the track's timeline started. The client seeks to
+  /// <c>elapsed % length</c> and stays drift-corrected, so every player hears the same
+  /// part of the track. Reuse the same anchor on every send of that track.
+  /// </param>
+  /// <param name="fadeInMs">Fade the volume in over this many ms. Default 0 (no fade).</param>
+  /// <param name="pitch">Playback rate multiplier (1 = normal). Default 1.</param>
+  /// <param name="pan">Stereo pan, -1 (left) … 0 (center) … 1 (right). Default 0.</param>
   public static void PlaySound2D(PlayerData player, string plugin, string soundId, string url,
-      float volume = 1f, bool loop = false, string category = null) =>
-    PacketManager.SendPacket(player, AudioPacket("PA", plugin, Build2D(soundId, url, volume, loop, category)));
+      float volume = 1f, bool loop = false, string category = null,
+      float startAtMs = 0f, DateTime? syncAnchorUtc = null, float fadeInMs = 0f,
+      float pitch = 1f, float pan = 0f) =>
+    PacketManager.SendPacket(player, AudioPacket("PA", plugin,
+      Build2D(soundId, url, volume, loop, category, startAtMs, syncAnchorUtc, fadeInMs, pitch, pan)));
 
   /// <summary>Plays a 2D sound on every connected interface player. See <see cref="PlaySound2D"/>.</summary>
   public static void PlaySound2DAll(string plugin, string soundId, string url,
-      float volume = 1f, bool loop = false, string category = null) =>
-    PacketManager.SendPacketToAll(AudioPacket("PA", plugin, Build2D(soundId, url, volume, loop, category)));
+      float volume = 1f, bool loop = false, string category = null,
+      float startAtMs = 0f, DateTime? syncAnchorUtc = null, float fadeInMs = 0f,
+      float pitch = 1f, float pan = 0f) =>
+    PacketManager.SendPacketToAll(AudioPacket("PA", plugin,
+      Build2D(soundId, url, volume, loop, category, startAtMs, syncAnchorUtc, fadeInMs, pitch, pan)));
 
   /// <summary>
   /// Plays a 3D positional sound anchored at an in-game world coordinate on a specific
@@ -308,38 +350,71 @@ public static class InterfaceManager {
   /// or <c>"virtual"</c> (keep the timeline advancing while muted, resuming in sync). Default "pause".
   /// </param>
   /// <param name="category">Optional group tag for <see cref="StopCategory"/>.</param>
+  /// <param name="startAtMs">Start playback at this offset into the file (ms). Default 0.</param>
+  /// <param name="syncAnchorUtc">
+  /// Global sync: the UTC moment the track's timeline started. The client seeks to
+  /// <c>elapsed % length</c> and stays drift-corrected — ideal for looping city/zone
+  /// music that must sound identical to everyone. Reuse the same anchor on every send.
+  /// With ResumeMode "pause", a synced sound re-seeks to the global position on resume.
+  /// </param>
+  /// <param name="fadeInMs">Fade the volume in over this many ms. Default 0 (no fade).</param>
+  /// <param name="pitch">Playback rate multiplier (1 = normal). Default 1.</param>
   public static void PlaySound3D(PlayerData player, string plugin, string soundId, string url,
       float x, float y, float z, float minDistance, float maxDistance,
-      float volume = 1f, bool loop = true, string resumeMode = "pause", string category = null) =>
+      float volume = 1f, bool loop = true, string resumeMode = "pause", string category = null,
+      float startAtMs = 0f, DateTime? syncAnchorUtc = null, float fadeInMs = 0f, float pitch = 1f) =>
     PacketManager.SendPacket(player, AudioPacket("PA", plugin,
-      Build3D(soundId, url, x, y, z, minDistance, maxDistance, volume, loop, resumeMode, category)));
+      Build3D(soundId, url, x, y, z, minDistance, maxDistance, volume, loop, resumeMode, category,
+        startAtMs, syncAnchorUtc, fadeInMs, pitch)));
 
   /// <summary>Plays a 3D positional sound on every connected interface player. See <see cref="PlaySound3D"/>.</summary>
   public static void PlaySound3DAll(string plugin, string soundId, string url,
       float x, float y, float z, float minDistance, float maxDistance,
-      float volume = 1f, bool loop = true, string resumeMode = "pause", string category = null) =>
+      float volume = 1f, bool loop = true, string resumeMode = "pause", string category = null,
+      float startAtMs = 0f, DateTime? syncAnchorUtc = null, float fadeInMs = 0f, float pitch = 1f) =>
     PacketManager.SendPacketToAll(AudioPacket("PA", plugin,
-      Build3D(soundId, url, x, y, z, minDistance, maxDistance, volume, loop, resumeMode, category)));
+      Build3D(soundId, url, x, y, z, minDistance, maxDistance, volume, loop, resumeMode, category,
+        startAtMs, syncAnchorUtc, fadeInMs, pitch)));
 
   /// <summary>
   /// Live-updates an active sound by id. Only the non-null values are changed; everything
-  /// else keeps its current value. Useful for moving a 3D emitter or fading volume.
+  /// else keeps its current value. Useful for moving a 3D emitter, fading volume,
+  /// pausing/resuming (<paramref name="paused"/>) or jumping to a position
+  /// (<paramref name="seekMs"/> — re-anchors global sync to the new position).
   /// </summary>
   public static void UpdateSound(PlayerData player, string plugin, string soundId,
       float? volume = null, float? x = null, float? y = null, float? z = null,
-      float? minDistance = null, float? maxDistance = null) =>
+      float? minDistance = null, float? maxDistance = null,
+      float? pitch = null, float? pan = null, bool? paused = null, float? seekMs = null) =>
     PacketManager.SendPacket(player, AudioPacket("UA", plugin,
-      BuildUpdate(soundId, volume, x, y, z, minDistance, maxDistance)));
+      BuildUpdate(soundId, volume, x, y, z, minDistance, maxDistance, pitch, pan, paused, seekMs)));
 
   /// <summary>Live-updates an active sound on every connected interface player. See <see cref="UpdateSound"/>.</summary>
   public static void UpdateSoundAll(string plugin, string soundId,
       float? volume = null, float? x = null, float? y = null, float? z = null,
-      float? minDistance = null, float? maxDistance = null) =>
+      float? minDistance = null, float? maxDistance = null,
+      float? pitch = null, float? pan = null, bool? paused = null, float? seekMs = null) =>
     PacketManager.SendPacketToAll(AudioPacket("UA", plugin,
-      BuildUpdate(soundId, volume, x, y, z, minDistance, maxDistance)));
+      BuildUpdate(soundId, volume, x, y, z, minDistance, maxDistance, pitch, pan, paused, seekMs)));
+
+  /// <summary>
+  /// Live-updates every active sound tagged with <paramref name="category"/> on a specific
+  /// player's client — e.g. lower or pause all "music" at once.
+  /// </summary>
+  public static void UpdateCategory(PlayerData player, string plugin, string category,
+      float? volume = null, bool? paused = null) =>
+    PacketManager.SendPacket(player, AudioPacket("UA", plugin,
+      BuildCategoryUpdate(category, volume, paused)));
+
+  /// <summary>Live-updates a sound category on every connected interface player. See <see cref="UpdateCategory"/>.</summary>
+  public static void UpdateCategoryAll(string plugin, string category,
+      float? volume = null, bool? paused = null) =>
+    PacketManager.SendPacketToAll(AudioPacket("UA", plugin,
+      BuildCategoryUpdate(category, volume, paused)));
 
   static Dictionary<string, string> BuildUpdate(string soundId, float? volume,
-      float? x, float? y, float? z, float? minDistance, float? maxDistance) {
+      float? x, float? y, float? z, float? minDistance, float? maxDistance,
+      float? pitch, float? pan, bool? paused, float? seekMs) {
     var d = new Dictionary<string, string> { ["aid"] = soundId };
     if (volume.HasValue) d["vol"] = F(volume.Value);
     if (x.HasValue) d["wx"] = F(x.Value);
@@ -347,32 +422,54 @@ public static class InterfaceManager {
     if (z.HasValue) d["wz"] = F(z.Value);
     if (minDistance.HasValue) d["mnd"] = F(minDistance.Value);
     if (maxDistance.HasValue) d["mxd"] = F(maxDistance.Value);
+    if (pitch.HasValue) d["pit"] = F(pitch.Value);
+    if (pan.HasValue) d["pn"] = F(pan.Value);
+    if (paused.HasValue) d["pd"] = paused.Value ? "true" : "false";
+    if (seekMs.HasValue) d["skm"] = F(seekMs.Value);
     return d;
   }
 
-  /// <summary>Stops a single sound by id on a specific player's client.</summary>
-  public static void StopSound(PlayerData player, string plugin, string soundId) =>
-    PacketManager.SendPacket(player, AudioPacket("XA", plugin, new() { ["aid"] = soundId }));
+  static Dictionary<string, string> BuildCategoryUpdate(string category, float? volume, bool? paused) {
+    var d = new Dictionary<string, string> { ["aca"] = category };
+    if (volume.HasValue) d["vol"] = F(volume.Value);
+    if (paused.HasValue) d["pd"] = paused.Value ? "true" : "false";
+    return d;
+  }
+
+  static Dictionary<string, string> BuildStop(string soundId, string category, float fadeOutMs) {
+    var d = new Dictionary<string, string>();
+    if (!string.IsNullOrEmpty(soundId)) d["aid"] = soundId;
+    if (!string.IsNullOrEmpty(category)) d["aca"] = category;
+    if (fadeOutMs > 0f) d["fdo"] = F(fadeOutMs);
+    return d;
+  }
+
+  /// <summary>
+  /// Stops a single sound by id on a specific player's client.
+  /// <paramref name="fadeOutMs"/> &gt; 0 fades to silence over that many ms before stopping.
+  /// </summary>
+  public static void StopSound(PlayerData player, string plugin, string soundId, float fadeOutMs = 0f) =>
+    PacketManager.SendPacket(player, AudioPacket("XA", plugin, BuildStop(soundId, null, fadeOutMs)));
 
   /// <summary>Stops a single sound by id on every connected interface player.</summary>
-  public static void StopSoundAll(string plugin, string soundId) =>
-    PacketManager.SendPacketToAll(AudioPacket("XA", plugin, new() { ["aid"] = soundId }));
+  public static void StopSoundAll(string plugin, string soundId, float fadeOutMs = 0f) =>
+    PacketManager.SendPacketToAll(AudioPacket("XA", plugin, BuildStop(soundId, null, fadeOutMs)));
 
   /// <summary>Stops every sound tagged with <paramref name="category"/> on a specific player's client.</summary>
-  public static void StopCategory(PlayerData player, string plugin, string category) =>
-    PacketManager.SendPacket(player, AudioPacket("XA", plugin, new() { ["aca"] = category }));
+  public static void StopCategory(PlayerData player, string plugin, string category, float fadeOutMs = 0f) =>
+    PacketManager.SendPacket(player, AudioPacket("XA", plugin, BuildStop(null, category, fadeOutMs)));
 
   /// <summary>Stops every sound tagged with <paramref name="category"/> on every connected interface player.</summary>
-  public static void StopCategoryAll(string plugin, string category) =>
-    PacketManager.SendPacketToAll(AudioPacket("XA", plugin, new() { ["aca"] = category }));
+  public static void StopCategoryAll(string plugin, string category, float fadeOutMs = 0f) =>
+    PacketManager.SendPacketToAll(AudioPacket("XA", plugin, BuildStop(null, category, fadeOutMs)));
 
   /// <summary>Stops all sounds on a specific player's client.</summary>
-  public static void StopAllSounds(PlayerData player, string plugin) =>
-    PacketManager.SendPacket(player, AudioPacket("XA", plugin, new()));
+  public static void StopAllSounds(PlayerData player, string plugin, float fadeOutMs = 0f) =>
+    PacketManager.SendPacket(player, AudioPacket("XA", plugin, BuildStop(null, null, fadeOutMs)));
 
   /// <summary>Stops all sounds on every connected interface player.</summary>
-  public static void StopAllSoundsForAll(string plugin) =>
-    PacketManager.SendPacketToAll(AudioPacket("XA", plugin, new()));
+  public static void StopAllSoundsForAll(string plugin, float fadeOutMs = 0f) =>
+    PacketManager.SendPacketToAll(AudioPacket("XA", plugin, BuildStop(null, null, fadeOutMs)));
 
   /// <summary>
   /// Pre-caches audio files on disk on every connected player's client so later
