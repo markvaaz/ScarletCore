@@ -260,27 +260,34 @@ public static class InterfaceManager {
     Math.Max(0L, (long)(DateTime.UtcNow - anchorUtc.ToUniversalTime()).TotalMilliseconds).ToString();
 
   static void AddPlayOptions(Dictionary<string, string> d, float startAtMs,
-      DateTime? syncAnchorUtc, float fadeInMs, float pitch, float pan) {
+      DateTime? syncAnchorUtc, float fadeInMs, float pitch, float pan,
+      string[] duckCategories, float duckLevel) {
     if (startAtMs > 0f) d["sat"] = F(startAtMs);
     if (syncAnchorUtc.HasValue) d["sye"] = SyncElapsed(syncAnchorUtc.Value);
     if (fadeInMs > 0f) d["fdi"] = F(fadeInMs);
     if (pitch != 1f) d["pit"] = F(pitch);
     if (pan != 0f) d["pn"] = F(pan);
+    if (duckCategories != null && duckCategories.Length > 0) {
+      d["dkc"] = string.Join(",", duckCategories);
+      d["dkl"] = F(duckLevel);
+    }
   }
 
   static Dictionary<string, string> Build2D(string soundId, string url, float volume, bool loop,
-      string category, float startAtMs, DateTime? syncAnchorUtc, float fadeInMs, float pitch, float pan) {
+      string category, float startAtMs, DateTime? syncAnchorUtc, float fadeInMs, float pitch, float pan,
+      string[] duckCategories, float duckLevel) {
     var d = new Dictionary<string, string> { ["aid"] = soundId, ["ur"] = url, ["am"] = "2d" };
     if (volume != 1f) d["vol"] = F(volume);
     if (loop) d["lp"] = "true";
     if (!string.IsNullOrEmpty(category)) d["aca"] = category;
-    AddPlayOptions(d, startAtMs, syncAnchorUtc, fadeInMs, pitch, pan);
+    AddPlayOptions(d, startAtMs, syncAnchorUtc, fadeInMs, pitch, pan, duckCategories, duckLevel);
     return d;
   }
 
   static Dictionary<string, string> Build3D(string soundId, string url, float x, float y, float z,
       float minDistance, float maxDistance, float volume, bool loop, string resumeMode, string category,
-      float startAtMs, DateTime? syncAnchorUtc, float fadeInMs, float pitch) {
+      float startAtMs, DateTime? syncAnchorUtc, float fadeInMs, float pitch,
+      string[] duckCategories, float duckLevel) {
     var d = new Dictionary<string, string> {
       ["aid"] = soundId, ["ur"] = url, ["am"] = "3d",
       ["wx"] = F(x), ["wy"] = F(y), ["wz"] = F(z),
@@ -290,7 +297,7 @@ public static class InterfaceManager {
     if (loop) d["lp"] = "true";
     if (!string.IsNullOrEmpty(resumeMode) && resumeMode != "pause") d["rz"] = resumeMode;
     if (!string.IsNullOrEmpty(category)) d["aca"] = category;
-    AddPlayOptions(d, startAtMs, syncAnchorUtc, fadeInMs, pitch, 0f);   // pan is 2D-only
+    AddPlayOptions(d, startAtMs, syncAnchorUtc, fadeInMs, pitch, 0f, duckCategories, duckLevel);   // pan is 2D-only
     return d;
   }
 
@@ -313,20 +320,25 @@ public static class InterfaceManager {
   /// <param name="fadeInMs">Fade the volume in over this many ms. Default 0 (no fade).</param>
   /// <param name="pitch">Playback rate multiplier (1 = normal). Default 1.</param>
   /// <param name="pan">Stereo pan, -1 (left) … 0 (center) … 1 (right). Default 0.</param>
+  /// <param name="duckCategories">
+  /// While this sound plays, lower every sound in these categories to
+  /// <paramref name="duckLevel"/> (e.g. an announcement ducking "music"). Restored on stop.
+  /// </param>
+  /// <param name="duckLevel">Volume multiplier applied to the ducked categories. Default 0.25.</param>
   public static void PlaySound2D(PlayerData player, string plugin, string soundId, string url,
       float volume = 1f, bool loop = false, string category = null,
       float startAtMs = 0f, DateTime? syncAnchorUtc = null, float fadeInMs = 0f,
-      float pitch = 1f, float pan = 0f) =>
+      float pitch = 1f, float pan = 0f, string[] duckCategories = null, float duckLevel = 0.25f) =>
     PacketManager.SendPacket(player, AudioPacket("PA", plugin,
-      Build2D(soundId, url, volume, loop, category, startAtMs, syncAnchorUtc, fadeInMs, pitch, pan)));
+      Build2D(soundId, url, volume, loop, category, startAtMs, syncAnchorUtc, fadeInMs, pitch, pan, duckCategories, duckLevel)));
 
   /// <summary>Plays a 2D sound on every connected interface player. See <see cref="PlaySound2D"/>.</summary>
   public static void PlaySound2DAll(string plugin, string soundId, string url,
       float volume = 1f, bool loop = false, string category = null,
       float startAtMs = 0f, DateTime? syncAnchorUtc = null, float fadeInMs = 0f,
-      float pitch = 1f, float pan = 0f) =>
+      float pitch = 1f, float pan = 0f, string[] duckCategories = null, float duckLevel = 0.25f) =>
     PacketManager.SendPacketToAll(AudioPacket("PA", plugin,
-      Build2D(soundId, url, volume, loop, category, startAtMs, syncAnchorUtc, fadeInMs, pitch, pan)));
+      Build2D(soundId, url, volume, loop, category, startAtMs, syncAnchorUtc, fadeInMs, pitch, pan, duckCategories, duckLevel)));
 
   /// <summary>
   /// Plays a 3D positional sound anchored at an in-game world coordinate on a specific
@@ -359,22 +371,26 @@ public static class InterfaceManager {
   /// </param>
   /// <param name="fadeInMs">Fade the volume in over this many ms. Default 0 (no fade).</param>
   /// <param name="pitch">Playback rate multiplier (1 = normal). Default 1.</param>
+  /// <param name="duckCategories">While audible, lower these categories to <paramref name="duckLevel"/>.</param>
+  /// <param name="duckLevel">Volume multiplier applied to the ducked categories. Default 0.25.</param>
   public static void PlaySound3D(PlayerData player, string plugin, string soundId, string url,
       float x, float y, float z, float minDistance, float maxDistance,
       float volume = 1f, bool loop = true, string resumeMode = "pause", string category = null,
-      float startAtMs = 0f, DateTime? syncAnchorUtc = null, float fadeInMs = 0f, float pitch = 1f) =>
+      float startAtMs = 0f, DateTime? syncAnchorUtc = null, float fadeInMs = 0f, float pitch = 1f,
+      string[] duckCategories = null, float duckLevel = 0.25f) =>
     PacketManager.SendPacket(player, AudioPacket("PA", plugin,
       Build3D(soundId, url, x, y, z, minDistance, maxDistance, volume, loop, resumeMode, category,
-        startAtMs, syncAnchorUtc, fadeInMs, pitch)));
+        startAtMs, syncAnchorUtc, fadeInMs, pitch, duckCategories, duckLevel)));
 
   /// <summary>Plays a 3D positional sound on every connected interface player. See <see cref="PlaySound3D"/>.</summary>
   public static void PlaySound3DAll(string plugin, string soundId, string url,
       float x, float y, float z, float minDistance, float maxDistance,
       float volume = 1f, bool loop = true, string resumeMode = "pause", string category = null,
-      float startAtMs = 0f, DateTime? syncAnchorUtc = null, float fadeInMs = 0f, float pitch = 1f) =>
+      float startAtMs = 0f, DateTime? syncAnchorUtc = null, float fadeInMs = 0f, float pitch = 1f,
+      string[] duckCategories = null, float duckLevel = 0.25f) =>
     PacketManager.SendPacketToAll(AudioPacket("PA", plugin,
       Build3D(soundId, url, x, y, z, minDistance, maxDistance, volume, loop, resumeMode, category,
-        startAtMs, syncAnchorUtc, fadeInMs, pitch)));
+        startAtMs, syncAnchorUtc, fadeInMs, pitch, duckCategories, duckLevel)));
 
   /// <summary>
   /// Live-updates an active sound by id. Only the non-null values are changed; everything
