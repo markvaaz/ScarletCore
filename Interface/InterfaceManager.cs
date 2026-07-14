@@ -197,34 +197,75 @@ public static class InterfaceManager {
   /// <param name="player">The target player.</param>
   /// <param name="plugin">A unique identifier for the calling plugin.</param>
   /// <param name="binds">Key → command pairs.</param>
-  public static void SetKeybinds(PlayerData player, string plugin, Dictionary<InputKey, string> binds) {
-    var data = new Dictionary<string, string>();
-    if (binds != null && binds.Count > 0)
-      data["kb"] = string.Join("\n", binds.Select(kv => $"{kv.Key}={kv.Value}"));
-    PacketManager.SendPacket(player, new ScarletPacket {
-      Type = "SK",
-      Plugin = plugin,
-      Window = "",
-      Data = data,
-    });
-  }
+  public static void SetKeybinds(PlayerData player, string plugin, Dictionary<InputKey, string> binds) =>
+    PacketManager.SendPacket(player, KeybindPacket(plugin, SerializeKeybinds(binds)));
 
   /// <summary>
   /// Broadcasts a keybind map to all connected players. See <see cref="SetKeybinds(PlayerData, string, Dictionary{InputKey,string})"/> for details.
   /// </summary>
   /// <param name="plugin">A unique identifier for the calling plugin.</param>
   /// <param name="binds">Key → command pairs.</param>
-  public static void SetKeybindsAll(string plugin, Dictionary<InputKey, string> binds) {
+  public static void SetKeybindsAll(string plugin, Dictionary<InputKey, string> binds) =>
+    PacketManager.SendPacketToAll(KeybindPacket(plugin, SerializeKeybinds(binds)));
+
+  /// <summary>
+  /// Sends keybinds that carry a friendly <see cref="Keybind.Label"/> shown in the player's
+  /// in-game rebinding menu (Controls tab). Players can re-bind each to a different key;
+  /// the chosen key is stored client-side and overrides the default sent here.
+  /// Pass an empty array to clear this plugin's binds.
+  /// </summary>
+  public static void SetKeybinds(PlayerData player, string plugin, params Keybind[] binds) =>
+    PacketManager.SendPacket(player, KeybindPacket(plugin, SerializeKeybinds(binds)));
+
+  /// <summary>Broadcasts labelled keybinds to all connected players. See <see cref="SetKeybinds(PlayerData, string, Keybind[])"/>.</summary>
+  public static void SetKeybindsAll(string plugin, params Keybind[] binds) =>
+    PacketManager.SendPacketToAll(KeybindPacket(plugin, SerializeKeybinds(binds)));
+
+  static ScarletPacket KeybindPacket(string plugin, string kb) {
     var data = new Dictionary<string, string>();
-    if (binds != null && binds.Count > 0)
-      data["kb"] = string.Join("\n", binds.Select(kv => $"{kv.Key}={kv.Value}"));
-    PacketManager.SendPacketToAll(new ScarletPacket {
-      Type = "SK",
-      Plugin = plugin,
-      Window = "",
-      Data = data,
-    });
+    if (!string.IsNullOrEmpty(kb)) data["kb"] = kb;
+    return new ScarletPacket { Type = "SK", Plugin = plugin, Window = "", Data = data };
   }
+
+  static string SerializeKeybinds(Dictionary<InputKey, string> binds) =>
+    binds == null || binds.Count == 0 ? null
+      : string.Join("\n", binds.Select(kv => $"{kv.Key}={kv.Value}"));
+
+  // Line format: "Key=Command" then optional tab-separated "Label" and "ToggleWindow"
+  // fields (an empty label placeholder is emitted when only a toggle window is present).
+  // Tabs/newlines are stripped from the trailing fields so they can't corrupt the framing.
+  static string SerializeKeybinds(Keybind[] binds) =>
+    binds == null || binds.Length == 0 ? null
+      : string.Join("\n", binds.Where(b => !string.IsNullOrEmpty(b.Command)).Select(SerializeKeybind));
+
+  static string SerializeKeybind(Keybind b) {
+    var line = $"{b.Key}={b.Command}";
+    bool hasLabel = !string.IsNullOrEmpty(b.Label);
+    bool hasToggle = !string.IsNullOrEmpty(b.ToggleWindow);
+    if (hasLabel || hasToggle) line += "\t" + (hasLabel ? Clean(b.Label) : "");
+    if (hasToggle) line += "\t" + Clean(b.ToggleWindow);
+    return line;
+  }
+
+  static string Clean(string s) => s.Replace('\t', ' ').Replace('\n', ' ');
+
+  // ── Options-menu branding ───────────────────────────────────────────────────────
+
+  /// <summary>
+  /// Sets the title shown for this mod's sections in the player's native Options menu
+  /// (the Sound volume section and the Controls keybinds section) — typically your server's
+  /// name. Persists client-side, so it still shows at the main menu before reconnecting.
+  /// Call once on <c>InterfaceAuth</c> (and/or at load for already-connected players).
+  /// </summary>
+  public static void SetOptionsTitle(PlayerData player, string plugin, string title) =>
+    PacketManager.SendPacket(player, OptionsBrandingPacket(plugin, title));
+
+  /// <summary>Sets the Options-menu section title on every connected player. See <see cref="SetOptionsTitle"/>.</summary>
+  public static void SetOptionsTitleAll(string plugin, string title) =>
+    PacketManager.SendPacketToAll(OptionsBrandingPacket(plugin, title));
+
+  static ScarletPacket OptionsBrandingPacket(string plugin, string title) =>
+    new() { Type = "OB", Plugin = plugin, Window = "", Data = new() { ["tx"] = title ?? "" } };
 
   // ── Audio ─────────────────────────────────────────────────────────────────────
   //
@@ -254,6 +295,167 @@ public static class InterfaceManager {
 
   static ScarletPacket AudioPacket(string type, string plugin, Dictionary<string, string> data) =>
     new() { Type = type, Plugin = plugin, Window = "$audio", Data = data };
+
+  /// <summary>
+  /// Pre-registers audio categories on the player's client so a volume slider appears for
+  /// each in the Sound options menu even before any sound of that category has played.
+  /// Categories are also discovered automatically when a sound carrying one is played, so
+  /// this is only needed to surface the slider up-front. Call on <c>InterfaceAuth</c>.
+  /// </summary>
+  public static void RegisterAudioCategories(PlayerData player, string plugin, params string[] categories) =>
+    PacketManager.SendPacket(player, AudioCategoryPacket(plugin, categories));
+
+  /// <summary>Pre-registers audio categories on every connected player. See <see cref="RegisterAudioCategories"/>.</summary>
+  public static void RegisterAudioCategoriesAll(string plugin, params string[] categories) =>
+    PacketManager.SendPacketToAll(AudioCategoryPacket(plugin, categories));
+
+  static ScarletPacket AudioCategoryPacket(string plugin, string[] categories) {
+    var data = new Dictionary<string, string>();
+    var joined = string.Join("\n", (categories ?? []).Where(c => !string.IsNullOrWhiteSpace(c)));
+    if (joined.Length > 0) data["cats"] = joined;
+    return new ScarletPacket { Type = "RAC", Plugin = plugin, Window = "$audio", Data = data };
+  }
+
+  // ── Ability bar visuals ─────────────────────────────────────────────────────────
+  //
+  // Override the icon and/or the hover-tooltip text of an ability in the player's ability
+  // bar (BottomBar), keyed by the ability's PrefabGUID. The change is applied client-side on
+  // the game's own ability-bar and tooltip UI, so it follows the ability wherever it is shown
+  // and survives cooldown repaints. Overrides persist until cleared or the client disconnects.
+
+  /// <summary>
+  /// Replaces the icon of an ability in a player's ability bar. <paramref name="icon"/> is an
+  /// http(s)/file URL (downloaded and disk-cached on the client) or the name of a native game
+  /// sprite. Pass an empty string to remove just the icon override.
+  /// <paramref name="abilityGuid"/> is the ability's PrefabGUID hash (e.g. <c>prefabGuid.GuidHash</c>).
+  /// </summary>
+  public static void SetAbilityIcon(PlayerData player, string plugin, int abilityGuid, string icon) =>
+    PacketManager.SendPacket(player, AbilityIconPacket(plugin, abilityGuid, icon));
+
+  /// <summary>Replaces an ability's icon on every connected player. See <see cref="SetAbilityIcon"/>.</summary>
+  public static void SetAbilityIconAll(string plugin, int abilityGuid, string icon) =>
+    PacketManager.SendPacketToAll(AbilityIconPacket(plugin, abilityGuid, icon));
+
+  /// <summary>
+  /// Overrides an ability's hover-tooltip text in a player's ability bar. Pass null/empty for a
+  /// field to keep the game's own value for that field (e.g. change only the description).
+  /// <paramref name="abilityGuid"/> is the ability's PrefabGUID hash (e.g. <c>prefabGuid.GuidHash</c>).
+  /// </summary>
+  public static void SetAbilityTooltip(PlayerData player, string plugin, int abilityGuid, string title, string description) =>
+    PacketManager.SendPacket(player, AbilityTooltipPacket(plugin, abilityGuid, title, description));
+
+  /// <summary>Overrides an ability's tooltip text on every connected player. See <see cref="SetAbilityTooltip"/>.</summary>
+  public static void SetAbilityTooltipAll(string plugin, int abilityGuid, string title, string description) =>
+    PacketManager.SendPacketToAll(AbilityTooltipPacket(plugin, abilityGuid, title, description));
+
+  /// <summary>Removes all overrides (icon + tooltip) for an ability on a player's client.</summary>
+  public static void ClearAbilityVisual(PlayerData player, string plugin, int abilityGuid) =>
+    PacketManager.SendPacket(player, AbilityClearPacket(plugin, abilityGuid));
+
+  /// <summary>Removes all overrides for an ability on every connected player.</summary>
+  public static void ClearAbilityVisualAll(string plugin, int abilityGuid) =>
+    PacketManager.SendPacketToAll(AbilityClearPacket(plugin, abilityGuid));
+
+  static ScarletPacket AbilityIconPacket(string plugin, int abilityGuid, string icon) =>
+    new() {
+      Type = "SAI", Plugin = plugin, Window = "$ability",
+      Data = new() { ["agid"] = abilityGuid.ToString(), ["aic"] = icon ?? "" }
+    };
+
+  static ScarletPacket AbilityTooltipPacket(string plugin, int abilityGuid, string title, string description) {
+    var data = new Dictionary<string, string> { ["agid"] = abilityGuid.ToString() };
+    if (!string.IsNullOrEmpty(title)) data["atl"] = title;
+    if (!string.IsNullOrEmpty(description)) data["ade"] = description;
+    return new ScarletPacket { Type = "SAT", Plugin = plugin, Window = "$ability", Data = data };
+  }
+
+  static ScarletPacket AbilityClearPacket(string plugin, int abilityGuid) =>
+    new() {
+      Type = "CAV", Plugin = plugin, Window = "$ability",
+      Data = new() { ["agid"] = abilityGuid.ToString() }
+    };
+
+  // ── Item visuals ────────────────────────────────────────────────────────────────
+  //
+  // Override the icon and/or the hover-tooltip text of an item TYPE, keyed by its PrefabGUID.
+  // The change is applied client-side on the game's own ManagedItemData, so it follows the item
+  // everywhere it is shown — the player inventory, the inventory with a container open, and
+  // external containers/chests — and the tooltip header. Because it is keyed by item type (global
+  // on the client), every stack of that item shows the same skin; individual stacks can't differ.
+  // Overrides persist until cleared or the client disconnects.
+
+  /// <summary>
+  /// Replaces the icon of an item type in a player's inventories/containers. <paramref name="icon"/>
+  /// is an http(s)/file URL (downloaded and disk-cached on the client) or the name of a native game
+  /// sprite. Pass an empty string to remove just the icon override.
+  /// <paramref name="itemGuid"/> is the item's PrefabGUID hash (e.g. <c>prefabGuid.GuidHash</c>).
+  /// </summary>
+  public static void SetItemIcon(PlayerData player, string plugin, int itemGuid, string icon) =>
+    PacketManager.SendPacket(player, ItemIconPacket(plugin, itemGuid, icon));
+
+  /// <summary>Replaces an item's icon on every connected player. See <see cref="SetItemIcon"/>.</summary>
+  public static void SetItemIconAll(string plugin, int itemGuid, string icon) =>
+    PacketManager.SendPacketToAll(ItemIconPacket(plugin, itemGuid, icon));
+
+  /// <summary>
+  /// Overrides an item type's hover-tooltip text. Pass null/empty for a field to keep the game's
+  /// own value for that field (e.g. change only the description).
+  /// <paramref name="itemGuid"/> is the item's PrefabGUID hash (e.g. <c>prefabGuid.GuidHash</c>).
+  /// </summary>
+  public static void SetItemTooltip(PlayerData player, string plugin, int itemGuid, string title, string description) =>
+    PacketManager.SendPacket(player, ItemTooltipPacket(plugin, itemGuid, title, description));
+
+  /// <summary>Overrides an item's tooltip text on every connected player. See <see cref="SetItemTooltip"/>.</summary>
+  public static void SetItemTooltipAll(string plugin, int itemGuid, string title, string description) =>
+    PacketManager.SendPacketToAll(ItemTooltipPacket(plugin, itemGuid, title, description));
+
+  /// <summary>Removes all overrides (icon + tooltip) for an item type on a player's client.</summary>
+  public static void ClearItemVisual(PlayerData player, string plugin, int itemGuid) =>
+    PacketManager.SendPacket(player, ItemClearPacket(plugin, itemGuid));
+
+  /// <summary>Removes all overrides for an item type on every connected player.</summary>
+  public static void ClearItemVisualAll(string plugin, int itemGuid) =>
+    PacketManager.SendPacketToAll(ItemClearPacket(plugin, itemGuid));
+
+  static ScarletPacket ItemIconPacket(string plugin, int itemGuid, string icon) =>
+    new() {
+      Type = "SII", Plugin = plugin, Window = "$item",
+      Data = new() { ["igid"] = itemGuid.ToString(), ["iic"] = icon ?? "" }
+    };
+
+  static ScarletPacket ItemTooltipPacket(string plugin, int itemGuid, string title, string description) {
+    var data = new Dictionary<string, string> { ["igid"] = itemGuid.ToString() };
+    if (!string.IsNullOrEmpty(title)) data["itl"] = title;
+    if (!string.IsNullOrEmpty(description)) data["ide"] = description;
+    return new ScarletPacket { Type = "SIT", Plugin = plugin, Window = "$item", Data = data };
+  }
+
+  static ScarletPacket ItemClearPacket(string plugin, int itemGuid) =>
+    new() {
+      Type = "CIV", Plugin = plugin, Window = "$item",
+      Data = new() { ["igid"] = itemGuid.ToString() }
+    };
+
+  /// <summary>
+  /// Hides or renames a secondary field of an item type's hover tooltip (the "Stackable" subheader,
+  /// the "Salvageable" footer line, "Durability", …). <paramref name="field"/> is a field key —
+  /// <c>"type"</c> (the subheader), <c>"subtext"</c>, <c>"presubtext"</c>, <c>"durability"</c>,
+  /// <c>"repair"</c>, <c>"equipped"</c>, <c>"bloodpotion"</c>. Pass an empty string for
+  /// <paramref name="text"/> to hide the field, or a string to rename it.
+  /// <paramref name="itemGuid"/> is the item's PrefabGUID hash.
+  /// </summary>
+  public static void SetItemTooltipField(PlayerData player, string plugin, int itemGuid, string field, string text) =>
+    PacketManager.SendPacket(player, ItemFieldPacket(plugin, itemGuid, field, text));
+
+  /// <summary>Hides/renames an item tooltip field on every connected player. See <see cref="SetItemTooltipField"/>.</summary>
+  public static void SetItemTooltipFieldAll(string plugin, int itemGuid, string field, string text) =>
+    PacketManager.SendPacketToAll(ItemFieldPacket(plugin, itemGuid, field, text));
+
+  static ScarletPacket ItemFieldPacket(string plugin, int itemGuid, string field, string text) =>
+    new() {
+      Type = "SIF", Plugin = plugin, Window = "$item",
+      Data = new() { ["igid"] = itemGuid.ToString(), ["ifd"] = field ?? "", ["ift"] = text ?? "" }
+    };
 
   // Milliseconds elapsed since the track's global start, measured now (send time).
   static string SyncElapsed(DateTime anchorUtc) =>
