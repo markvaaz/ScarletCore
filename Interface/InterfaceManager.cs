@@ -1,6 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using ScarletCore.Services;
 using ScarletCore.Interface.Builders;
 using ScarletCore.Interface.Models;
@@ -377,58 +379,47 @@ public static class InterfaceManager {
 
   // ── Item visuals ────────────────────────────────────────────────────────────────
   //
-  // Override the icon and/or the hover-tooltip text of an item TYPE, keyed by its PrefabGUID.
-  // The change is applied client-side on the game's own ManagedItemData, so it follows the item
-  // everywhere it is shown — the player inventory, the inventory with a container open, and
-  // external containers/chests — and the tooltip header. Because it is keyed by item type (global
-  // on the client), every stack of that item shows the same skin; individual stacks can't differ.
-  // Overrides persist until cleared or the client disconnects.
+  // Change how an item TYPE looks on a client, keyed by its PrefabGUID. The icon, name and
+  // description ride on the game's own ManagedItemData, so they follow the item everywhere it is
+  // drawn — the player inventory, the inventory with a container open, external containers, the
+  // quick-access bar and the tooltip header.
+  //
+  // Two consequences worth knowing before you use this:
+  //   * It is keyed by item TYPE and is global on the client. Reskinning a prefab reskins EVERY
+  //     copy of it, including ones your mod never created. If your item is a repurposed game item,
+  //     that vanilla item changes too.
+  //   * Numbers can still vary per instance: the tooltip's field text and stat rows are resolved
+  //     against the hovered item, driven by curves you sample from your own code. See
+  //     ItemVisualBuilder.
+  //
+  // Overrides persist on the client until changed or cleared.
 
   /// <summary>
-  /// Replaces the icon of an item type in a player's inventories/containers. <paramref name="icon"/>
-  /// is an http(s)/file URL (downloaded and disk-cached on the client) or the name of a native game
-  /// sprite. Pass an empty string to remove just the icon override.
+  /// Builds an item type's appearance for one player. Every string must already be localized for
+  /// them. See <see cref="ItemVisualBuilder"/> for the full shape.
   /// <paramref name="itemGuid"/> is the item's PrefabGUID hash (e.g. <c>prefabGuid.GuidHash</c>).
   /// </summary>
-  public static void SetItemIcon(PlayerData player, string plugin, int itemGuid, string icon) =>
-    PacketManager.SendPacket(player, ItemIconPacket(plugin, itemGuid, icon));
+  /// <example>
+  /// InterfaceManager.ItemVisual(player, "myplugin", itemGuid)
+  ///   .Icon("https://example.com/icon.png")
+  ///   .Name(Localizer.Get(player, "my_item_name"))
+  ///   .Send();
+  /// </example>
+  public static ItemVisualBuilder ItemVisual(PlayerData player, string plugin, int itemGuid) =>
+    new(plugin, player, itemGuid);
 
-  /// <summary>Replaces an item's icon on every connected player. See <see cref="SetItemIcon"/>.</summary>
-  public static void SetItemIconAll(string plugin, int itemGuid, string icon) =>
-    PacketManager.SendPacketToAll(ItemIconPacket(plugin, itemGuid, icon));
+  /// <summary>Builds an item type's appearance for every connected player. See <see cref="ItemVisual"/>.</summary>
+  public static ItemVisualBuilder ItemVisualAll(string plugin, int itemGuid) =>
+    new(plugin, null, itemGuid);
 
-  /// <summary>
-  /// Overrides an item type's hover-tooltip text. Pass null/empty for a field to keep the game's
-  /// own value for that field (e.g. change only the description).
-  /// <paramref name="itemGuid"/> is the item's PrefabGUID hash (e.g. <c>prefabGuid.GuidHash</c>).
-  /// </summary>
-  public static void SetItemTooltip(PlayerData player, string plugin, int itemGuid, string title, string description) =>
-    PacketManager.SendPacket(player, ItemTooltipPacket(plugin, itemGuid, title, description));
-
-  /// <summary>Overrides an item's tooltip text on every connected player. See <see cref="SetItemTooltip"/>.</summary>
-  public static void SetItemTooltipAll(string plugin, int itemGuid, string title, string description) =>
-    PacketManager.SendPacketToAll(ItemTooltipPacket(plugin, itemGuid, title, description));
-
-  /// <summary>Removes all overrides (icon + tooltip) for an item type on a player's client.</summary>
+  /// <summary>Removes every override for an item type on a player's client, restoring the game's own
+  /// icon, name and description.</summary>
   public static void ClearItemVisual(PlayerData player, string plugin, int itemGuid) =>
     PacketManager.SendPacket(player, ItemClearPacket(plugin, itemGuid));
 
-  /// <summary>Removes all overrides for an item type on every connected player.</summary>
+  /// <summary>Removes every override for an item type on all connected players.</summary>
   public static void ClearItemVisualAll(string plugin, int itemGuid) =>
     PacketManager.SendPacketToAll(ItemClearPacket(plugin, itemGuid));
-
-  static ScarletPacket ItemIconPacket(string plugin, int itemGuid, string icon) =>
-    new() {
-      Type = "SII", Plugin = plugin, Window = "$item",
-      Data = new() { ["igid"] = itemGuid.ToString(), ["iic"] = icon ?? "" }
-    };
-
-  static ScarletPacket ItemTooltipPacket(string plugin, int itemGuid, string title, string description) {
-    var data = new Dictionary<string, string> { ["igid"] = itemGuid.ToString() };
-    if (!string.IsNullOrEmpty(title)) data["itl"] = title;
-    if (!string.IsNullOrEmpty(description)) data["ide"] = description;
-    return new ScarletPacket { Type = "SIT", Plugin = plugin, Window = "$item", Data = data };
-  }
 
   static ScarletPacket ItemClearPacket(string plugin, int itemGuid) =>
     new() {
@@ -436,25 +427,79 @@ public static class InterfaceManager {
       Data = new() { ["igid"] = itemGuid.ToString() }
     };
 
+  // ── Buff visuals ────────────────────────────────────────────────────────────────
+  //
+  // Change how a character LOOKS while it carries a buff, keyed by the buff's PrefabGUID. You
+  // register the buff's visual once (per client, or on InterfaceAuth), and from then on simply
+  // applying or removing the buff server-side drives the look — no further packets.
+  //
+  // Why it works this way: a model's size cannot be replicated. Rendered units go through the game's
+  // Hybrid model path, where the visible mesh is a Unity GameObject whose transform the client rebuilds
+  // every frame — the ECS scale is never read. And nothing could carry it anyway: LocalTransform is not
+  // in the codegen'd replication whitelist, so no scale field exists on the wire. Buffs, on the other
+  // hand, DO replicate, which makes them the channel: the client watches for the buff and applies the
+  // registered scale itself.
+  //
+  // Applies to every entity carrying the buff, players and NPCs alike. Registrations persist on the
+  // client until cleared or the client disconnects.
+
   /// <summary>
-  /// Hides or renames a secondary field of an item type's hover tooltip (the "Stackable" subheader,
-  /// the "Salvageable" footer line, "Durability", …). <paramref name="field"/> is a field key —
-  /// <c>"type"</c> (the subheader), <c>"subtext"</c>, <c>"presubtext"</c>, <c>"durability"</c>,
-  /// <c>"repair"</c>, <c>"equipped"</c>, <c>"bloodpotion"</c>. Pass an empty string for
-  /// <paramref name="text"/> to hide the field, or a string to rename it.
-  /// <paramref name="itemGuid"/> is the item's PrefabGUID hash.
+  /// Scale meaning "leave the model at its own size". Note this is NOT <c>1f</c>: scales are absolute,
+  /// and many characters are natively 1.2, 1.5 and so on, so <c>1f</c> would actively resize them.
+  /// Register a buff at this value to park it on characters harmlessly, then change the registration
+  /// when you want them to grow — no need to re-apply the buff.
   /// </summary>
-  public static void SetItemTooltipField(PlayerData player, string plugin, int itemGuid, string field, string text) =>
-    PacketManager.SendPacket(player, ItemFieldPacket(plugin, itemGuid, field, text));
+  public const float OriginalScale = -1f;
 
-  /// <summary>Hides/renames an item tooltip field on every connected player. See <see cref="SetItemTooltipField"/>.</summary>
-  public static void SetItemTooltipFieldAll(string plugin, int itemGuid, string field, string text) =>
-    PacketManager.SendPacketToAll(ItemFieldPacket(plugin, itemGuid, field, text));
+  /// <summary>
+  /// Registers the absolute model scale applied to any entity carrying <paramref name="buffGuid"/> on a
+  /// player's client. <c>2f</c> is double the size; <see cref="OriginalScale"/> leaves the model at
+  /// whatever size it natively is. Takes effect for entities already carrying the buff, and entities go
+  /// back to their native size when the buff is removed.
+  /// <paramref name="buffGuid"/> is the buff's PrefabGUID hash (e.g. <c>prefabGuid.GuidHash</c>).
+  /// </summary>
+  /// <exception cref="ArgumentOutOfRangeException">
+  /// <paramref name="scale"/> is not a finite number greater than 0, nor <see cref="OriginalScale"/>.
+  /// </exception>
+  public static void SetBuffScale(PlayerData player, string plugin, int buffGuid, float scale) =>
+    PacketManager.SendPacket(player, BuffScalePacket(plugin, buffGuid, scale));
 
-  static ScarletPacket ItemFieldPacket(string plugin, int itemGuid, string field, string text) =>
+  /// <summary>Registers a buff's model scale on every connected player. See <see cref="SetBuffScale"/>.</summary>
+  public static void SetBuffScaleAll(string plugin, int buffGuid, float scale) =>
+    PacketManager.SendPacketToAll(BuffScalePacket(plugin, buffGuid, scale));
+
+  /// <summary>Removes a buff's visual registration on a player's client. Entities carrying the buff
+  /// return to their normal look.</summary>
+  public static void ClearBuffVisual(PlayerData player, string plugin, int buffGuid) =>
+    PacketManager.SendPacket(player, BuffClearPacket(plugin, buffGuid));
+
+  /// <summary>Removes a buff's visual registration on every connected player.</summary>
+  public static void ClearBuffVisualAll(string plugin, int buffGuid) =>
+    PacketManager.SendPacketToAll(BuffClearPacket(plugin, buffGuid));
+
+  static ScarletPacket BuffScalePacket(string plugin, int buffGuid, float scale) {
+    // Negative flips the mesh inside out, zero makes it vanish, and NaN/Infinity would poison the
+    // client's transition permanently. None of those are things a caller means; fail loudly here rather
+    // than let the client quietly drop the packet. (buffGuid is NOT checked — PrefabGUIDs are routinely
+    // negative.)
+    if (scale != OriginalScale && (!float.IsFinite(scale) || scale <= 0f))
+      throw new ArgumentOutOfRangeException(nameof(scale), scale,
+        $"Buff scale must be a finite number greater than 0, or InterfaceManager.OriginalScale ({OriginalScale}) to leave the model at its own size.");
+
+    return new ScarletPacket {
+      Type = "SBS", Plugin = plugin, Window = "$buff",
+      Data = new() {
+        ["bgid"] = buffGuid.ToString(),
+        // Invariant: the client parses invariant, and a comma decimal separator would not survive.
+        ["bsc"] = scale.ToString(CultureInfo.InvariantCulture)
+      }
+    };
+  }
+
+  static ScarletPacket BuffClearPacket(string plugin, int buffGuid) =>
     new() {
-      Type = "SIF", Plugin = plugin, Window = "$item",
-      Data = new() { ["igid"] = itemGuid.ToString(), ["ifd"] = field ?? "", ["ift"] = text ?? "" }
+      Type = "CBV", Plugin = plugin, Window = "$buff",
+      Data = new() { ["bgid"] = buffGuid.ToString() }
     };
 
   // Milliseconds elapsed since the track's global start, measured now (send time).
