@@ -71,19 +71,19 @@ public static class PlayerService {
       // Get all user entities and populate the cache
       var userEntities = query.ToEntityArray(Allocator.Temp);
 
-      foreach (var entity in userEntities) {
-        if (entity.Has<NameableInteractable>()) continue;
+      foreach(var entity in userEntities) {
+        if(entity.Has<NameableInteractable>()) continue;
 
         var user = entity.Read<User>();
 
         var initName = ExtractCleanName(user.CharacterName.Value);
-        if (!string.IsNullOrEmpty(initName)) AllCharacters[initName] = entity;
+        if(!string.IsNullOrEmpty(initName)) AllCharacters[initName] = entity;
 
-        if (user.PlatformId == 0 || user.CharacterName.Value.StartsWith("[NPC]")) continue;
+        if(user.PlatformId == 0 || user.CharacterName.Value.StartsWith("[NPC]")) continue;
         // Add each user to the cache system
         SetPlayerCache(entity, true);
       }
-    } catch (Exception e) {
+    } catch(Exception e) {
       Log.Error(e);
     } finally {
       // Always dispose of temporary allocations to prevent memory leaks
@@ -122,33 +122,33 @@ public static class PlayerService {
     // Guard: skip unbound/NPC characters — same rule as Initialize().
     // When a player is unbound their PlatformId becomes 0. We must not create a bogus
     // PlayerData entry at key 0 or overwrite PlayerNames with it.
-    if (userData.PlatformId == 0 || userData.CharacterName.Value.StartsWith("[NPC]")) {
+    if(userData.PlatformId == 0 || userData.CharacterName.Value.StartsWith("[NPC]")) {
       // On disconnect after unbind: look up the previously-cached PlayerData via the
       // NetworkId (which was stored during the last successful connect) so callers can
       // still fire disconnect events and clean up spatial data properly.
       PlayerNetworkIds.TryGetValue(networkId, out var existingPlayer);
 
-      if (existingPlayer != null) {
+      if(existingPlayer != null) {
         // Remove the stale PlayerNames entry that points to this now-unbound player.
         var existingName = existingPlayer.CachedName;
-        if (!string.IsNullOrEmpty(existingName) &&
+        if(!string.IsNullOrEmpty(existingName) &&
             PlayerNames.TryGetValue(existingName.ToLower(), out var staleData) &&
             staleData == existingPlayer) {
           PlayerNames.Remove(existingName.ToLower());
         }
 
-        if (isOffline) PlayerNetworkIds.Remove(networkId);
+        if(isOffline) PlayerNetworkIds.Remove(networkId);
       }
 
       return existingPlayer;
     }
 
     // Check if this is a new player we haven't seen before
-    if (!PlayerIds.TryGetValue(userData.PlatformId, out PlayerData playerData)) {
+    if(!PlayerIds.TryGetValue(userData.PlatformId, out PlayerData playerData)) {
       PlayerData newData = new();
 
       // Handle new players based on whether they have a character name set
-      if (string.IsNullOrEmpty(cleanName)) {
+      if(string.IsNullOrEmpty(cleanName)) {
         // New player with no character name - add to unnamed list for later processing
         // This happens when players create an account but haven't chosen a character name yet
         UnnamedPlayers.Add(newData);
@@ -169,7 +169,7 @@ public static class PlayerService {
     playerData.UserEntity = userEntity;
 
     // Manage network ID indexing based on online/offline status
-    if (isOffline) {
+    if(isOffline) {
       // Remove network ID when going offline as it may change on reconnection
       PlayerNetworkIds.Remove(networkId);
     } else {
@@ -187,9 +187,9 @@ public static class PlayerService {
     var nameIsNoLongerEmpty = string.IsNullOrEmpty(oldCachedName) && !string.IsNullOrEmpty(cleanName);
 
     // Handle name changes and transitions from unnamed to named
-    if (nameChanged || nameIsNoLongerEmpty) {
+    if(nameChanged || nameIsNoLongerEmpty) {
       // Remove old name from the lookup indexes
-      if (!string.IsNullOrEmpty(oldCachedName)) {
+      if(!string.IsNullOrEmpty(oldCachedName)) {
         PlayerNames.Remove(oldCachedName.ToLower());
         AllCharacters.Remove(oldCachedName);
       }
@@ -209,7 +209,7 @@ public static class PlayerService {
     // player. This fixes the window after an unbind-then-rebind where PlayerNames might still
     // hold a stale entry (created by the PlatformId=0 path on the previous disconnect) even
     // though the name did not change from the perspective of this newly-connecting player.
-    if (!string.IsNullOrEmpty(cleanName)) {
+    if(!string.IsNullOrEmpty(cleanName)) {
       PlayerNames[cleanName.ToLower()] = playerData;
       AllCharacters[cleanName] = userEntity;
     }
@@ -226,17 +226,17 @@ public static class PlayerService {
   /// Ensures a player has at least the default User role
   /// </summary>
   private static void EnsurePlayerHasDefaultRole(PlayerData player) {
-    if (player == null) return;
+    if(player == null) return;
 
     try {
       // Check if player has any roles
       var playerRoles = RoleService.GetPlayerRoles(player);
 
       // If player has no roles, assign the default User role
-      if (playerRoles.Count == 0) {
+      if(playerRoles.Count == 0) {
         RoleService.AddRoleToPlayer(player, DefaultRoles.Default);
       }
-    } catch (Exception ex) {
+    } catch(Exception ex) {
       Log.Error($"Failed to ensure default role for player {player.PlatformId}: {ex.Message}");
     }
   }
@@ -246,19 +246,19 @@ public static class PlayerService {
   /// </summary>
   /// <param name="player">The player data to check and assign the Owner role to</param>
   public static void EnsureOwnerRole(PlayerData player) {
-    if (player == null) return;
+    if(player == null) return;
 
     try {
       var owners = Plugin.Settings.Get<string>("Owners");
 
-      if (string.IsNullOrEmpty(owners)) return;
+      if(string.IsNullOrEmpty(owners)) return;
 
       var ownersIds = owners.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
-      if (!ownersIds.Contains(player.PlatformId.ToString())) return;
+      if(!ownersIds.Contains(player.PlatformId.ToString())) return;
 
       RoleService.AddRoleToPlayer(player, DefaultRoles.Owner);
-    } catch (Exception ex) {
+    } catch(Exception ex) {
       Log.Error($"Failed to ensure owner role for player {player.PlatformId}: {ex.Message}");
     }
   }
@@ -315,26 +315,26 @@ public static class PlayerService {
     var normalizedSearchName = cleanSearchName.ToLower();
 
     // First, try to get the player from the named players index (fastest lookup)
-    if (PlayerNames.TryGetValue(normalizedSearchName, out playerData)) {
+    if(PlayerNames.TryGetValue(normalizedSearchName, out playerData)) {
       return true;
     }
 
     // If not found in named players and no unnamed players exist, player doesn't exist
-    if (UnnamedPlayers.Count == 0) {
+    if(UnnamedPlayers.Count == 0) {
       playerData = null;
       return false;
     }
 
     // Search through unnamed players to see if any have the target clean name
     // This triggers lazy loading of names for unnamed players
-    foreach (var unnamedPlayer in UnnamedPlayers.ToList()) {
+    foreach(var unnamedPlayer in UnnamedPlayers.ToList()) {
       var unnamedPlayerFullName = unnamedPlayer.User.CharacterName.ToString();
       var unnamedPlayerCleanName = ExtractCleanName(unnamedPlayerFullName);
 
       // Skip if still empty
-      if (string.IsNullOrEmpty(unnamedPlayerCleanName)) continue;
+      if(string.IsNullOrEmpty(unnamedPlayerCleanName)) continue;
 
-      if (unnamedPlayerCleanName.Equals(normalizedSearchName, StringComparison.CurrentCultureIgnoreCase)) {
+      if(unnamedPlayerCleanName.Equals(normalizedSearchName, StringComparison.CurrentCultureIgnoreCase)) {
         // Found the player - promote them to named players
         playerData = unnamedPlayer;
 
@@ -376,12 +376,12 @@ public static class PlayerService {
 
     EventManager.Emit(PlayerEvents.CharacterRenamed, player);
 
-    if (!player.CharacterEntity.Has<AttachedBuffer>()) return;
+    if(!player.CharacterEntity.Has<AttachedBuffer>()) return;
 
     var attachedBuffer = player.CharacterEntity.ReadBuffer<AttachedBuffer>();
 
-    foreach (var entry in attachedBuffer) {
-      if (entry.PrefabGuid.GuidHash != -892362184) continue;
+    foreach(var entry in attachedBuffer) {
+      if(entry.PrefabGuid.GuidHash != -892362184) continue;
       var icon = entry.Entity.Read<PlayerMapIcon>();
       icon.UserName = newName;
       entry.Entity.Write(icon);
@@ -428,13 +428,13 @@ public static class PlayerService {
   /// <param name="tagIndex">The index of the tag to remove</param>
   /// <returns>True if tag was removed, false if player is null or index is invalid</returns>
   public static bool RemoveNameTag(PlayerData player, int tagIndex) {
-    if (player == null || tagIndex < 0) return false;
+    if(player == null || tagIndex < 0) return false;
 
     var cleanName = ExtractCleanName(player.FullName);
     var tags = ExtractTags(player.FullName);
 
     // Check if index exists
-    if (tagIndex >= tags.Count) return false;
+    if(tagIndex >= tags.Count) return false;
 
     // Remove the tag at the specified index
     tags.RemoveAt(tagIndex);
@@ -455,7 +455,7 @@ public static class PlayerService {
   /// <param name="tagText">The text of the tag to remove</param>
   /// <returns>True if tag was found and removed, false otherwise</returns>
   public static bool RemoveNameTag(PlayerData player, string tagText) {
-    if (player == null || string.IsNullOrWhiteSpace(tagText)) return false;
+    if(player == null || string.IsNullOrWhiteSpace(tagText)) return false;
 
     var cleanName = ExtractCleanName(player.FullName);
     var tags = ExtractTags(player.FullName);
@@ -464,15 +464,15 @@ public static class PlayerService {
 
     // Find the first tag that matches (searching from tag0 upwards)
     var indexToRemove = -1;
-    for (int i = 0; i < tags.Count; i++) {
-      if (tags[i].Equals(normalizedTagText, StringComparison.CurrentCultureIgnoreCase)) {
+    for(int i = 0; i < tags.Count; i++) {
+      if(tags[i].Equals(normalizedTagText, StringComparison.CurrentCultureIgnoreCase)) {
         indexToRemove = i;
         break;
       }
     }
 
     // Tag not found
-    if (indexToRemove == -1) return false;
+    if(indexToRemove == -1) return false;
 
     // Remove the tag
     tags.RemoveAt(indexToRemove);
@@ -491,12 +491,12 @@ public static class PlayerService {
   /// <param name="player">The player to remove all tags from</param>
   /// <returns>True if successful, false if player is null</returns>
   public static bool RemoveAllTags(PlayerData player) {
-    if (player == null) return false;
+    if(player == null) return false;
 
     var cleanName = ExtractCleanName(player.FullName);
 
     // If the clean name is the same as full name, no tags exist
-    if (cleanName == player.FullName.Trim()) return true;
+    if(cleanName == player.FullName.Trim()) return true;
 
     // Rename the player with just the clean name
     var newName = new FixedString64Bytes(cleanName);
@@ -513,7 +513,7 @@ public static class PlayerService {
   /// <param name="fullName">The full name that may contain tags (e.g., "ADM GOD S Mark")</param>
   /// <returns>The clean name without any tags (e.g., "Mark")</returns>
   public static string ExtractCleanName(string fullName) {
-    if (string.IsNullOrEmpty(fullName)) return fullName;
+    if(string.IsNullOrEmpty(fullName)) return fullName;
 
     var trimmed = fullName.Trim();
 
@@ -521,7 +521,7 @@ public static class PlayerService {
     var lastSpaceIndex = trimmed.LastIndexOf(' ');
 
     // If no space found, return the whole name (no tags present)
-    if (lastSpaceIndex == -1) return trimmed;
+    if(lastSpaceIndex == -1) return trimmed;
 
     // Return everything after the last space (the actual name)
     return trimmed[(lastSpaceIndex + 1)..].Trim();
@@ -534,18 +534,18 @@ public static class PlayerService {
   /// <param name="fullName">The full name with tags</param>
   /// <returns>List of tags indexed from right to left (tag0 first)</returns>
   public static List<string> ExtractTags(string fullName) {
-    if (string.IsNullOrEmpty(fullName)) return [];
+    if(string.IsNullOrEmpty(fullName)) return [];
 
     var trimmed = fullName.Trim();
     var lastSpaceIndex = trimmed.LastIndexOf(' ');
 
     // No tags if no space found
-    if (lastSpaceIndex == -1) return [];
+    if(lastSpaceIndex == -1) return [];
 
     // Get everything before the last space (all tags)
     var tagsSection = trimmed[..lastSpaceIndex].Trim();
 
-    if (string.IsNullOrEmpty(tagsSection)) return [];
+    if(string.IsNullOrEmpty(tagsSection)) return [];
 
     // Split by space and reverse to get right-to-left ordering
     var tags = tagsSection.Split([' '], StringSplitOptions.RemoveEmptyEntries);
@@ -563,7 +563,7 @@ public static class PlayerService {
   /// <param name="tags">List of tags ordered as tag0, tag1, tag2...</param>
   /// <returns>Full name with tags in correct format</returns>
   private static string BuildFullName(string cleanName, List<string> tags) {
-    if (tags == null || tags.Count == 0) return cleanName;
+    if(tags == null || tags.Count == 0) return cleanName;
 
     // Reverse tags to get left-to-right display order
     var reversedTags = new List<string>(tags);
@@ -583,11 +583,11 @@ public static class PlayerService {
   /// <returns>True if tag exists at that index, false otherwise</returns>
   public static bool TryGetTag(PlayerData player, int tagIndex, out string tag) {
     tag = null;
-    if (player == null || tagIndex < 0) return false;
+    if(player == null || tagIndex < 0) return false;
 
     var tags = ExtractTags(player.FullName);
 
-    if (tagIndex >= tags.Count) return false;
+    if(tagIndex >= tags.Count) return false;
 
     tag = tags[tagIndex];
     return true;
@@ -599,7 +599,7 @@ public static class PlayerService {
   /// <param name="player">The player to get tags from</param>
   /// <returns>List of tags ordered by index</returns>
   public static List<string> GetAllTags(PlayerData player) {
-    if (player == null) return [];
+    if(player == null) return [];
     return ExtractTags(player.FullName);
   }
 
@@ -613,8 +613,8 @@ public static class PlayerService {
     var nearByEntities = EntityLookupService.GetAllEntitiesInRadius(position, range);
     var playersInRange = new List<PlayerData>();
 
-    foreach (var entity in nearByEntities) {
-      if (!entity.IsPlayer()) continue;
+    foreach(var entity in nearByEntities) {
+      if(!entity.IsPlayer()) continue;
 
       playersInRange.Add(entity.GetPlayerData());
     }
@@ -632,8 +632,8 @@ public static class PlayerService {
     var nearByEntities = EntityLookupService.GetAllEntitiesInRadius(position, range);
     var playersInRange = new List<PlayerData>();
 
-    foreach (var entity in nearByEntities) {
-      if (!entity.IsPlayer()) continue;
+    foreach(var entity in nearByEntities) {
+      if(!entity.IsPlayer()) continue;
 
       playersInRange.Add(entity.GetPlayerData());
     }
@@ -650,13 +650,13 @@ public static class PlayerService {
   /// <param name="tag">The tag text to set</param>
   /// <returns>True if successful, false if player or tag is null/empty or index is negative</returns>
   public static bool SetTagAtIndex(PlayerData player, string tag, int tagIndex) {
-    if (player == null || string.IsNullOrWhiteSpace(tag) || tagIndex < 0) return false;
+    if(player == null || string.IsNullOrWhiteSpace(tag) || tagIndex < 0) return false;
 
     var cleanName = ExtractCleanName(player.FullName);
     var tags = ExtractTags(player.FullName);
 
     // Ensure the list is large enough to accommodate the index
-    while (tags.Count <= tagIndex) {
+    while(tags.Count <= tagIndex) {
       tags.Add(null); // Placeholder for empty slots
     }
 

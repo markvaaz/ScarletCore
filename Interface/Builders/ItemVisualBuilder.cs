@@ -26,7 +26,7 @@ public enum ItemVar {
 /// item type), plus tooltip field text and stat rows whose numbers come from the hovered item
 /// instance.
 ///
-/// A value that varies per instance is declared as a <see cref="Curve"/>: the mod samples its own
+/// A value that varies per instance is declared as a <see cref="Curve(string, ItemVar, ValueTuple{float, float}[])"/>: the mod samples its own
 /// function into points, the client interpolates between them and substitutes the result into any
 /// <c>{name}</c> placeholder. Nothing is evaluated as an expression, so there is no formula
 /// language to learn — the real calculation stays in your code, where it already is.
@@ -197,7 +197,7 @@ public sealed class ItemVisualBuilder(string plugin, PlayerData player, int item
   }
 }
 
-/// <summary>What a <see cref="ItemVisualBuilder.When"/> rule may set.</summary>
+/// <summary>What a <see cref="ItemVisualBuilder.When(ItemVar, float, Action{ItemRuleScope})"/> rule may set.</summary>
 public sealed class ItemRuleScope(object rule) {
   readonly ItemVisualBuilder.RuleDto _rule = (ItemVisualBuilder.RuleDto)rule;
 

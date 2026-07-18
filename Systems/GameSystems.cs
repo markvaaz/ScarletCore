@@ -51,7 +51,10 @@ public static class GameSystems {
   /// <summary>
   /// Provides access to the current server elapsed time.
   /// </summary>
-  public static double ServerTime => _server.Time.ElapsedTime;
+  // World.Time reads the TimeData struct through Il2CppInterop at a wrong offset and yields
+  // denormal garbage. ServerTime is a plain field the game rewrites every frame, so the cached
+  // ServerGameManager copy freezes at its boot value — fetch a fresh instance per read.
+  public static double ServerTime => _serverScriptMapper.GetServerGameManager().ServerTime;
 
   /// <summary>
   /// Provides access to the entity manager system instance.

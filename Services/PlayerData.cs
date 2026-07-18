@@ -48,7 +48,7 @@ public class PlayerData {
   public string Name {
     get {
       // Lazy load and cache the clean name to avoid repeated string conversions
-      if (string.IsNullOrEmpty(_name)) {
+      if(string.IsNullOrEmpty(_name)) {
         var fullName = User.CharacterName.ToString();
         _name = PlayerService.ExtractCleanName(fullName);
       }
@@ -133,7 +133,7 @@ public class PlayerData {
   public Language Language {
     get {
       var lang = Localizer.GetPlayerLanguage(this);
-      if (lang == Language.None) {
+      if(lang == Language.None) {
         lang = Localizer.CurrentServerLanguage;
       }
       return lang;
@@ -148,7 +148,7 @@ public class PlayerData {
     get {
       var clan = User.ClanEntity.GetEntityOnServer();
 
-      if (Entity.Null.Equals(clan) || !clan.Has<ClanTeam>()) return null; // No clan data available
+      if(Entity.Null.Equals(clan) || !clan.Has<ClanTeam>()) return null; // No clan data available
 
       var clanName = clan.Read<ClanTeam>().Name.ToString();
 
@@ -190,7 +190,7 @@ public class PlayerData {
   /// <param name="amount">The quantity of items to give (default: 1)</param>
   /// <returns>True if the item was successfully added, false if inventory is full</returns>
   public bool TryGiveItem(PrefabGUID itemGuid, int amount = 1) {
-    if (InventoryService.IsFull(CharacterEntity)) return false;
+    if(InventoryService.IsFull(CharacterEntity)) return false;
     InventoryService.AddItem(CharacterEntity, itemGuid, amount);
     return true;
   }
@@ -204,7 +204,7 @@ public class PlayerData {
   /// <param name="amount">The quantity of items to remove (default: 1)</param>
   /// <returns>True if the item was successfully removed, false otherwise</returns>
   public bool TryRemoveItem(PrefabGUID itemGuid, int amount = 1) {
-    if (InventoryService.IsInventoryEmpty(CharacterEntity)) return false;
+    if(InventoryService.IsInventoryEmpty(CharacterEntity)) return false;
     return InventoryService.RemoveItem(CharacterEntity, itemGuid, amount);
   }
 
@@ -678,16 +678,16 @@ public class PlayerData {
   /// </summary>
   /// <param name="radius">Search radius in world units.</param>
   /// <param name="results">List to fill with nearby players. Cleared before use.</param>
-  public void GetNearbyPlayers(float radius, System.Collections.Generic.List<PlayerData> results) {
+  public void GetNearbyPlayers(float radius, List<PlayerData> results) {
     PlayerSpatialHash.QueryNearby(this, radius, results);
   }
 
   /// <summary>
   /// Returns all online players within <paramref name="radius"/> world units of this player, excluding themselves.
-  /// Allocates a new list. Prefer the overload that accepts a <see cref="System.Collections.Generic.List{T}"/> for hot paths.
+  /// Allocates a new list. Prefer the overload that accepts a <see cref="List{T}"/> for hot paths.
   /// </summary>
   /// <param name="radius">Search radius in world units.</param>
-  public System.Collections.Generic.List<PlayerData> GetNearbyPlayers(float radius) {
+  public List<PlayerData> GetNearbyPlayers(float radius) {
     return PlayerSpatialHash.QueryNearby(this, radius);
   }
 
@@ -743,7 +743,7 @@ public class PlayerData {
   /// </summary>
   /// <param name="message">The message text to send</param>
   public void SendMessage(string message) {
-    if (string.IsNullOrWhiteSpace(message)) return;
+    if(string.IsNullOrWhiteSpace(message)) return;
     message = ProcessPlaceholders(message);
     MessageService.Send(this, message);
   }
@@ -753,7 +753,7 @@ public class PlayerData {
   /// </summary>
   /// <param name="message">The raw message text to send.</param>
   public void SendRawMessage(string message) {
-    if (string.IsNullOrWhiteSpace(message)) return;
+    if(string.IsNullOrWhiteSpace(message)) return;
     MessageService.SendRaw(this, message);
   }
 
@@ -881,15 +881,15 @@ public class PlayerData {
   /// <param name="message">The message text containing placeholders.</param>
   /// <returns>The message with placeholders replaced.</returns>
   private string ProcessPlaceholders(string message) {
-    if (string.IsNullOrEmpty(message)) return message;
+    if(string.IsNullOrEmpty(message)) return message;
 
     // Replace {playerName} with player's name
     message = message.Replace("{playerName}", Name);
 
     // Replace PrefabGuid(...) with localized name
     var prefabPattern = System.Text.RegularExpressions.Regex.Matches(message, @"PrefabGuid\((-?\d+)\)");
-    foreach (System.Text.RegularExpressions.Match match in prefabPattern) {
-      if (int.TryParse(match.Groups[1].Value, out int guidValue)) {
+    foreach(System.Text.RegularExpressions.Match match in prefabPattern) {
+      if(int.TryParse(match.Groups[1].Value, out int guidValue)) {
         var prefabGuid = new PrefabGUID(guidValue);
         var localizedName = prefabGuid.LocalizedName(Language);
         message = message.Replace(match.Value, localizedName);
