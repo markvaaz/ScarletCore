@@ -6,6 +6,7 @@ using System.Text.Json;
 using ScarletCore.Services;
 using ScarletCore.Interface.Builders;
 using ScarletCore.Interface.Models;
+using Unity.Mathematics;
 
 namespace ScarletCore.Interface;
 
@@ -817,24 +818,66 @@ public static class InterfaceManager {
   // <paramref name="oneShot"/>: fire only once, ever — persisted on the client across reconnects
   //   and game restarts. The persistence key is the (plugin, id) pair; bake a per-server or
   //   per-anything token into <paramref name="id"/> if you need finer scoping.
+  //
+  // Two flavours of trigger, chosen by the position overload:
+  //   * 3D — <c>float x,y,z</c> or <c>float3</c>: distance uses all three axes.
+  //   * 2D — <c>float2</c>: height-independent, only X and Z count (the float2 is (X, Z)).
 
-  /// <summary>Registers a world-position proximity trigger for one player. See remarks above.</summary>
+  /// <summary>Registers a 3D proximity trigger (x/y/z) for one player. See remarks above.</summary>
   public static void ProximityTrigger(PlayerData player, string plugin, string id,
       float x, float y, float z, float radius,
       string enterWindow = null, string exitWindow = null,
       string enterCommand = null, string exitCommand = null,
       bool mandatory = false, bool oneShot = false) =>
     PacketManager.SendPacket(player, ProximityPacket(plugin, id, x, y, z, radius,
-      enterWindow, exitWindow, enterCommand, exitCommand, mandatory, oneShot));
+      enterWindow, exitWindow, enterCommand, exitCommand, mandatory, oneShot, flat: false));
 
-  /// <summary>Registers a world-position proximity trigger for every connected player. See <see cref="ProximityTrigger"/>.</summary>
+  /// <summary>Registers a 3D proximity trigger for every connected player. See <see cref="ProximityTrigger(PlayerData,string,string,float,float,float,float,string,string,string,string,bool,bool)"/>.</summary>
   public static void ProximityTriggerAll(string plugin, string id,
       float x, float y, float z, float radius,
       string enterWindow = null, string exitWindow = null,
       string enterCommand = null, string exitCommand = null,
       bool mandatory = false, bool oneShot = false) =>
     PacketManager.SendPacketToAll(ProximityPacket(plugin, id, x, y, z, radius,
-      enterWindow, exitWindow, enterCommand, exitCommand, mandatory, oneShot));
+      enterWindow, exitWindow, enterCommand, exitCommand, mandatory, oneShot, flat: false));
+
+  /// <summary>Registers a 3D proximity trigger from a <see cref="float3"/> for one player.</summary>
+  public static void ProximityTrigger(PlayerData player, string plugin, string id,
+      float3 position, float radius,
+      string enterWindow = null, string exitWindow = null,
+      string enterCommand = null, string exitCommand = null,
+      bool mandatory = false, bool oneShot = false) =>
+    ProximityTrigger(player, plugin, id, position.x, position.y, position.z, radius,
+      enterWindow, exitWindow, enterCommand, exitCommand, mandatory, oneShot);
+
+  /// <summary>Registers a 3D proximity trigger from a <see cref="float3"/> for every connected player.</summary>
+  public static void ProximityTriggerAll(string plugin, string id,
+      float3 position, float radius,
+      string enterWindow = null, string exitWindow = null,
+      string enterCommand = null, string exitCommand = null,
+      bool mandatory = false, bool oneShot = false) =>
+    ProximityTriggerAll(plugin, id, position.x, position.y, position.z, radius,
+      enterWindow, exitWindow, enterCommand, exitCommand, mandatory, oneShot);
+
+  /// <summary>Registers a 2D (height-independent) proximity trigger for one player. The
+  /// <paramref name="position"/> is (X, Z); the player's Y is ignored.</summary>
+  public static void ProximityTrigger(PlayerData player, string plugin, string id,
+      float2 position, float radius,
+      string enterWindow = null, string exitWindow = null,
+      string enterCommand = null, string exitCommand = null,
+      bool mandatory = false, bool oneShot = false) =>
+    PacketManager.SendPacket(player, ProximityPacket(plugin, id, position.x, 0f, position.y, radius,
+      enterWindow, exitWindow, enterCommand, exitCommand, mandatory, oneShot, flat: true));
+
+  /// <summary>Registers a 2D (height-independent) proximity trigger for every connected player. The
+  /// <paramref name="position"/> is (X, Z); the player's Y is ignored.</summary>
+  public static void ProximityTriggerAll(string plugin, string id,
+      float2 position, float radius,
+      string enterWindow = null, string exitWindow = null,
+      string enterCommand = null, string exitCommand = null,
+      bool mandatory = false, bool oneShot = false) =>
+    PacketManager.SendPacketToAll(ProximityPacket(plugin, id, position.x, 0f, position.y, radius,
+      enterWindow, exitWindow, enterCommand, exitCommand, mandatory, oneShot, flat: true));
 
   /// <summary>Removes a proximity trigger by id for one player (closing its window if shown).</summary>
   public static void RemoveProximityTrigger(PlayerData player, string plugin, string id) =>
@@ -855,7 +898,7 @@ public static class InterfaceManager {
   static ScarletPacket ProximityPacket(string plugin, string id,
       float x, float y, float z, float radius,
       string enterWindow, string exitWindow, string enterCommand, string exitCommand,
-      bool mandatory, bool oneShot) {
+      bool mandatory, bool oneShot, bool flat) {
     var d = new Dictionary<string, string> {
       ["id"] = id,
       ["wx"] = F(x), ["wy"] = F(y), ["wz"] = F(z),
@@ -867,6 +910,7 @@ public static class InterfaceManager {
     if (!string.IsNullOrEmpty(exitCommand)) d["xc"] = exitCommand;
     if (mandatory) d["pmd"] = "1";
     if (oneShot) d["pos"] = "1";
+    if (flat) d["p2"] = "1";
     return new ScarletPacket { Type = "PXB", Plugin = plugin, Window = "$prox", Data = d };
   }
 
