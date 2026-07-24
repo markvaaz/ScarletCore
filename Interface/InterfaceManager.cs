@@ -254,9 +254,10 @@ public static class InterfaceManager {
   // ── Options-menu branding ───────────────────────────────────────────────────────
 
   /// <summary>
-  /// Sets the title shown for this mod's sections in the player's native Options menu
-  /// (the Sound volume section and the Controls keybinds section) — typically your server's
-  /// name. Persists client-side, so it still shows at the main menu before reconnecting.
+  /// Sets the name of this mod's own tab in the player's native Options menu (the fifth tab,
+  /// after General / Controls / Graphics / Sound, holding the audio settings and the
+  /// keybinds) — typically your server's name. Persists client-side, so it still shows at
+  /// the main menu before reconnecting.
   /// Call once on <c>InterfaceAuth</c> (and/or at load for already-connected players).
   /// </summary>
   public static void SetOptionsTitle(PlayerData player, string plugin, string title) =>
@@ -268,6 +269,54 @@ public static class InterfaceManager {
 
   static ScarletPacket OptionsBrandingPacket(string plugin, string title) =>
     new() { Type = "OB", Plugin = plugin, Window = "", Data = new() { ["tx"] = title ?? "" } };
+
+  /// <summary>
+  /// Replaces the V Rising logo at the top of the player's ESC menu with an image loaded
+  /// from <paramref name="url"/> — typically your server's logo. Pass null or an empty url
+  /// to restore the game's own logo. The image keeps its aspect ratio inside the logo slot,
+  /// which is shaped for the tall "V", so a wide banner will be letterboxed rather than
+  /// stretched. Call once on <c>InterfaceAuth</c>.
+  /// </summary>
+  public static void SetServerLogo(PlayerData player, string plugin, string url) =>
+    PacketManager.SendPacket(player, ServerLogoPacket(plugin, url));
+
+  /// <summary>Sets the ESC-menu logo on every connected player. See <see cref="SetServerLogo"/>.</summary>
+  public static void SetServerLogoAll(string plugin, string url) =>
+    PacketManager.SendPacketToAll(ServerLogoPacket(plugin, url));
+
+  static ScarletPacket ServerLogoPacket(string plugin, string url) =>
+    new() { Type = "SL", Plugin = plugin, Window = "", Data = new() { ["ur"] = url ?? "" } };
+
+  // ── Floating character HUD ────────────────────────────────────────────────────
+
+  /// <summary>
+  /// Pins parts of the HUD floating above characters so they are always visible instead of
+  /// only on hover / when damaged. The three flags are independent and combine freely — e.g.
+  /// health bars on every head but names left vanilla. False is vanilla behaviour, and applies
+  /// to all character types: players, regular units and V Bloods alike (a V Blood natively
+  /// shows its name but neither its health bar nor its level, so those two are what change).
+  ///
+  /// <b>This is a suggestion, not a setting.</b> The player owns these three toggles in the
+  /// mod's Options tab: what you send only takes effect for the ones they have never touched,
+  /// and once they do touch one it is theirs on your server and every other.
+  /// Call once on <c>InterfaceAuth</c>.
+  /// </summary>
+  public static void SetCharacterHud(PlayerData player, string plugin, bool alwaysName, bool alwaysHealth, bool alwaysLevel) =>
+    PacketManager.SendPacket(player, CharacterHudPacket(plugin, alwaysName, alwaysHealth, alwaysLevel));
+
+  /// <summary>Suggests the character-HUD pinning to every connected player. See <see cref="SetCharacterHud"/>.</summary>
+  public static void SetCharacterHudAll(string plugin, bool alwaysName, bool alwaysHealth, bool alwaysLevel) =>
+    PacketManager.SendPacketToAll(CharacterHudPacket(plugin, alwaysName, alwaysHealth, alwaysLevel));
+
+  static ScarletPacket CharacterHudPacket(string plugin, bool alwaysName, bool alwaysHealth, bool alwaysLevel) =>
+    new() {
+      Type = "CHV",
+      Plugin = plugin,
+      Window = "",
+      Data = new() { ["chn"] = B(alwaysName), ["chb"] = B(alwaysHealth), ["chl"] = B(alwaysLevel) },
+    };
+
+  static string B(bool v) => v ? "1" : "0";
 
   // ── Audio ─────────────────────────────────────────────────────────────────────
   //
@@ -745,4 +794,85 @@ public static class InterfaceManager {
   /// <summary>Pre-caches audio files on disk for a specific player's client. See <see cref="PreCacheAudio(string, string[])"/>.</summary>
   public static void PreCacheAudio(PlayerData player, string plugin, string[] urls) =>
     PacketManager.SendPacket(player, AudioPacket("PCA", plugin, new() { ["ul"] = string.Join("\n", urls) }));
+
+  // ── World-position proximity triggers ─────────────────────────────────────────────
+  //
+  // Registers a world point + radius on the player's client. When the local player moves within
+  // <c>radius</c> world units of the point the ENTER actions fire (open <paramref name="enterWindow"/>
+  // and/or run <paramref name="enterCommand"/>); when they move back out, the EXIT actions fire
+  // (open <paramref name="exitWindow"/> and/or run <paramref name="exitCommand"/>). The whole
+  // "got close → show" mechanic runs client-side; the server only registers the trigger.
+  //
+  // Entering also closes any exit window still up, and leaving closes the enter window — so a
+  // single window passed as both enterWindow and exitWindow behaves like the classic
+  // "approach → open, leave → close". A small fixed hysteresis on the client keeps the boundary
+  // from flickering when the player stands right on the edge.
+  //
+  // Windows referenced here must already exist on the client. Build each once with
+  // <c>new Window(player, plugin, id){...}.Send(WindowAction.None)</c> so it is created closed;
+  // this trigger then only decides when to show or hide it.
+  //
+  // <paramref name="mandatory"/>: if the player closes the shown window by hand while still in
+  //   range, reopen it (an obligatory popup). Default false = dismissible until they leave and return.
+  // <paramref name="oneShot"/>: fire only once, ever — persisted on the client across reconnects
+  //   and game restarts. The persistence key is the (plugin, id) pair; bake a per-server or
+  //   per-anything token into <paramref name="id"/> if you need finer scoping.
+
+  /// <summary>Registers a world-position proximity trigger for one player. See remarks above.</summary>
+  public static void ProximityTrigger(PlayerData player, string plugin, string id,
+      float x, float y, float z, float radius,
+      string enterWindow = null, string exitWindow = null,
+      string enterCommand = null, string exitCommand = null,
+      bool mandatory = false, bool oneShot = false) =>
+    PacketManager.SendPacket(player, ProximityPacket(plugin, id, x, y, z, radius,
+      enterWindow, exitWindow, enterCommand, exitCommand, mandatory, oneShot));
+
+  /// <summary>Registers a world-position proximity trigger for every connected player. See <see cref="ProximityTrigger"/>.</summary>
+  public static void ProximityTriggerAll(string plugin, string id,
+      float x, float y, float z, float radius,
+      string enterWindow = null, string exitWindow = null,
+      string enterCommand = null, string exitCommand = null,
+      bool mandatory = false, bool oneShot = false) =>
+    PacketManager.SendPacketToAll(ProximityPacket(plugin, id, x, y, z, radius,
+      enterWindow, exitWindow, enterCommand, exitCommand, mandatory, oneShot));
+
+  /// <summary>Removes a proximity trigger by id for one player (closing its window if shown).</summary>
+  public static void RemoveProximityTrigger(PlayerData player, string plugin, string id) =>
+    PacketManager.SendPacket(player, ProximityRemovePacket(plugin, id));
+
+  /// <summary>Removes a proximity trigger by id for every connected player.</summary>
+  public static void RemoveProximityTriggerAll(string plugin, string id) =>
+    PacketManager.SendPacketToAll(ProximityRemovePacket(plugin, id));
+
+  /// <summary>Removes every proximity trigger this plugin registered on one player's client.</summary>
+  public static void ClearProximityTriggers(PlayerData player, string plugin) =>
+    PacketManager.SendPacket(player, ProximityClearPacket(plugin));
+
+  /// <summary>Removes every proximity trigger this plugin registered on all players' clients.</summary>
+  public static void ClearProximityTriggersAll(string plugin) =>
+    PacketManager.SendPacketToAll(ProximityClearPacket(plugin));
+
+  static ScarletPacket ProximityPacket(string plugin, string id,
+      float x, float y, float z, float radius,
+      string enterWindow, string exitWindow, string enterCommand, string exitCommand,
+      bool mandatory, bool oneShot) {
+    var d = new Dictionary<string, string> {
+      ["id"] = id,
+      ["wx"] = F(x), ["wy"] = F(y), ["wz"] = F(z),
+      ["prd"] = F(radius),
+    };
+    if (!string.IsNullOrEmpty(enterWindow)) d["ew"] = enterWindow;
+    if (!string.IsNullOrEmpty(exitWindow)) d["xw"] = exitWindow;
+    if (!string.IsNullOrEmpty(enterCommand)) d["ec"] = enterCommand;
+    if (!string.IsNullOrEmpty(exitCommand)) d["xc"] = exitCommand;
+    if (mandatory) d["pmd"] = "1";
+    if (oneShot) d["pos"] = "1";
+    return new ScarletPacket { Type = "PXB", Plugin = plugin, Window = "$prox", Data = d };
+  }
+
+  static ScarletPacket ProximityRemovePacket(string plugin, string id) =>
+    new() { Type = "PXU", Plugin = plugin, Window = "$prox", Data = new() { ["id"] = id } };
+
+  static ScarletPacket ProximityClearPacket(string plugin) =>
+    new() { Type = "PXC", Plugin = plugin, Window = "$prox", Data = new() };
 }

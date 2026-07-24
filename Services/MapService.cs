@@ -4,8 +4,12 @@ using System.Linq;
 using ProjectM;
 using ProjectM.Network;
 using ProjectM.Terrain;
+using ScarletCore.Interface;
+using ScarletCore.Interface.Models;
 using ScarletCore.Localization;
 using ScarletCore.Systems;
+using ScarletCore.Utils;
+using Stunlock.Core;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -520,4 +524,226 @@ public static class MapService {
       SetPixelMaskInBuffer(revealBuffer, i, mapData[i]);
     }
   }
+
+  #region Map Icons
+
+  private static readonly PrefabGUID MAP_ICON_PREFAB = new(-892362184);
+
+  // PlayerMapIcon.UserName is a FixedString64Bytes, which holds 58 bytes of content.
+  private const int MAX_USERNAME_BYTES = 58;
+
+  // "plugin:id:platformId" → the spawned icon entity.
+  private static readonly Dictionary<string, Entity> MapIcons = [];
+
+  /// <summary>
+  /// Places a custom marker on a player's map and minimap.
+  /// </summary>
+  /// <remarks>
+  /// The marker is a real native MapIcon entity, so positioning, edge clamping, map rotation,
+  /// zoom, the full map, hover labels and draw order all come from the game itself.
+  ///
+  /// The icon adapts to the player's client:
+  /// <list type="bullet">
+  /// <item>Plain V Rising client — the label goes into <c>PlayerMapIcon.UserName</c> and the
+  /// default sprite is used. Nothing is sent and nothing looks broken.</item>
+  /// <item>ScarletInterface client — the marker's id goes into <c>PlayerMapIcon.UserName</c>
+  /// instead, and image plus label travel in a packet keyed by that same id. The client matches
+  /// icon to packet by id, so it repaints exactly the right one even when markers overlap.</item>
+  /// </list>
+  ///
+  /// Reusing an id moves and updates that marker rather than creating a second one.
+  /// </remarks>
+  /// <param name="player">The player who sees the marker</param>
+  /// <param name="plugin">Calling plugin — scopes the id so two mods can both use "boss"</param>
+  /// <param name="id">Caller-chosen identifier; pass it again to update this marker</param>
+  /// <param name="x">World X coordinate</param>
+  /// <param name="z">World Z coordinate</param>
+  /// <param name="icon">Image for ScarletInterface clients: an http(s)/file URL or a native sprite name; ignored by plain clients</param>
+  /// <param name="label">Text shown when hovering the marker on the full map</param>
+  /// <param name="color">Optional tint applied by ScarletInterface clients (e.g. "#ff0000")</param>
+  /// <param name="scale">Icon size multiplier for ScarletInterface clients; 1 keeps the game's own size. Relative rather than absolute, because the minimap and the full map draw icons at different base sizes</param>
+  /// <param name="clamp">Whether the game pins the marker to the minimap edge when off-screen</param>
+  /// <param name="showOnMinimap">Whether the marker shows on the minimap; false leaves it on the full map only. The full map has no per-icon toggle natively, so it always shows the marker</param>
+  /// <returns>False when the marker could not be created; the reason is logged</returns>
+  /// <remarks>
+  /// <paramref name="clamp"/> and <paramref name="showOnMinimap"/> map to the game's own
+  /// <c>MapIconData.ClampOnMinimap</c>/<c>ShowOnMinimap</c> fields, but that component is not
+  /// networked (no ghost serializer), so the values set on the server never reach the client.
+  /// They travel in the packet instead and the ScarletInterface client writes them onto the
+  /// local icon entity, where the game's own minimap job reads them each frame. Plain clients
+  /// therefore always get the prefab defaults for these two.
+  /// </remarks>
+  public static bool SetIcon(PlayerData player, string plugin, string id, float x, float z,
+      string icon = null, string label = null, string color = null, float scale = 1f, bool clamp = true, bool showOnMinimap = true) {
+    if (player == null || string.IsNullOrEmpty(plugin) || string.IsNullOrEmpty(id)) return false;
+
+    var token = $"{plugin}:{id}";
+    var tokenBytes = System.Text.Encoding.UTF8.GetByteCount(token);
+
+    // Scoped id must stay intact: it is the handle the caller uses to update or remove this
+    // marker, and truncating it would silently collapse two distinct markers into one.
+    if (tokenBytes > MAX_USERNAME_BYTES) {
+      Log.Error($"[MapService] Marker id '{token}' is {tokenBytes} bytes; the game's label field holds {MAX_USERNAME_BYTES}. Use a shorter plugin name or id.");
+      return false;
+    }
+
+    // The label always lives on the icon, for every client: the game's own tooltip then shows it
+    // with no help from us. Identity travels as the icon's NetworkId in the packet instead, so
+    // nothing the player can see has to be sacrificed to make markers identifiable.
+    var userName = SanitizeLabel(label);
+
+    var position = new float3(x, 0f, z);
+    var key = $"{plugin}:{id}:{player.PlatformId}";
+
+    if (MapIcons.TryGetValue(key, out var entity) && entity.Exists()) {
+      entity.SetPosition(position);
+      SetIconUserName(entity, userName);
+    } else {
+      entity = MapIcons[key] = SpawnMapIcon(player, position, userName, clamp, showOnMinimap);
+    }
+
+    if (PacketManager.HasInterface(player)) {
+      // A freshly spawned entity has no NetworkId yet — reading it here returns 0:0, which
+      // identifies nothing. The id is assigned later in the frame, so the packet waits for it.
+      var pending = entity;
+      ActionScheduler.NextFrame(() => {
+        if (!pending.Exists()) return;
+        var netId = pending.Read<NetworkId>();
+        if (netId.Normal_Index == 0 && netId.Normal_Generation == 0) {
+          Log.Warning($"[MapService] Marker '{plugin}:{id}' still has no NetworkId; ScarletInterface clients cannot identify it.");
+          return;
+        }
+        var data = new Dictionary<string, string> {
+          ["Id"] = id,
+          ["Net"] = $"{netId.Normal_Index}:{netId.Normal_Generation}",
+          ["Icon"] = icon ?? string.Empty,
+        };
+        if (!string.IsNullOrEmpty(color)) data["Color"] = color;
+        if (scale > 0f && scale != 1f) data["Scale"] = scale.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // Sent only when off the default so the packet stays small; the client treats an absent
+        // key as the default, which also makes an update that flips the flag back revert cleanly.
+        if (!clamp) data["Clamp"] = "0";
+        if (!showOnMinimap) data["Mini"] = "0";
+        SendIconPacket(player, "SetMapIcon", plugin, data);
+      });
+    }
+
+    return true;
+  }
+
+  /// <summary>
+  /// Places a marker for every connected player, each getting their own icon so the flavour
+  /// matches whether that player has ScarletInterface installed.
+  /// </summary>
+  // ponytail: players connecting later don't receive existing markers — call this again on join
+  // if that matters. Storing marker definitions and replaying them on connect is the upgrade path.
+  public static void SetIconAll(string plugin, string id, float x, float z,
+      string icon = null, string label = null, string color = null, float scale = 1f, bool clamp = true, bool showOnMinimap = true) {
+    foreach (var player in PlayerService.GetAllConnected()) {
+      SetIcon(player, plugin, id, x, z, icon, label, color, scale, clamp, showOnMinimap);
+    }
+  }
+
+  /// <summary>Removes a single marker from a single player.</summary>
+  public static void RemoveIcon(PlayerData player, string plugin, string id) {
+    if (player == null || string.IsNullOrEmpty(plugin) || string.IsNullOrEmpty(id)) return;
+
+    DestroyMapIcon($"{plugin}:{id}:{player.PlatformId}");
+
+    if (PacketManager.HasInterface(player)) {
+      SendIconPacket(player, "RemoveMapIcon", plugin, new Dictionary<string, string> { ["Id"] = id });
+    }
+  }
+
+  /// <summary>Removes a single marker from every connected player.</summary>
+  public static void RemoveIconAll(string plugin, string id) {
+    foreach (var player in PlayerService.GetAllConnected()) {
+      RemoveIcon(player, plugin, id);
+    }
+  }
+
+  /// <summary>Removes every marker created by the given plugin, for all players.</summary>
+  public static void ClearIcons(string plugin) {
+    if (string.IsNullOrEmpty(plugin)) return;
+
+    var prefix = $"{plugin}:";
+    var stale = new List<string>();
+    foreach (var key in MapIcons.Keys) {
+      if (key.StartsWith(prefix)) stale.Add(key);
+    }
+    foreach (var key in stale) {
+      DestroyMapIcon(key);
+    }
+
+    foreach (var player in PlayerService.GetAllConnected()) {
+      if (!PacketManager.HasInterface(player)) continue;
+      SendIconPacket(player, "ClearMapIcons", plugin, []);
+    }
+  }
+
+  private static void SendIconPacket(PlayerData player, string type, string plugin, Dictionary<string, string> data) {
+    PacketManager.SendPacket(player, new ScarletPacket {
+      Type = type,
+      Plugin = plugin,
+      Window = string.Empty,
+      Data = data
+    });
+  }
+
+  private static void DestroyMapIcon(string key) {
+    if (!MapIcons.TryGetValue(key, out var entity)) return;
+    if (entity.Exists()) entity.Destroy();
+    MapIcons.Remove(key);
+  }
+
+  private static Entity SpawnMapIcon(PlayerData player, float3 position, string userName, bool clamp, bool showOnMinimap) {
+    var entity = SpawnerService.ImmediateSpawn(MAP_ICON_PREFAB, position, lifeTime: -1f);
+
+    entity.HasWith((ref MapIconData iconData) => {
+      iconData.AllySetting = MapIconShowSettings.Global;
+      iconData.EnemySetting = MapIconShowSettings.None;
+      iconData.ClampOnMinimap = clamp;
+      iconData.RequiresReveal = false;
+      iconData.ShowOnMinimap = showOnMinimap;
+      iconData.ShowOutsideVision = true;
+      iconData.CustomImplementation = true;
+      iconData.IsSiegeWeapon = false;
+      iconData.TargetUser = player.UserEntity;
+    });
+
+    entity.HasWith((ref MapIconTargetEntity iconTarget) => {
+      iconTarget.TargetEntity = NetworkedEntity.ServerEntity(entity);
+      iconTarget.TargetNetworkId = entity.Read<NetworkId>();
+    });
+
+    entity.SetPosition(position);
+    entity.SetTeam(player.CharacterEntity);
+    entity.ReadBuffer<SyncToUserBuffer>().Add(new SyncToUserBuffer {
+      UserEntity = player.UserEntity
+    });
+
+    SetIconUserName(entity, userName);
+    return entity;
+  }
+
+  private static void SetIconUserName(Entity entity, string userName) {
+    entity.AddWith((ref PlayerMapIcon playerIcon) => {
+      playerIcon.UserName = new(userName);
+    });
+  }
+
+  /// <summary>
+  /// Trims a label to what the game's fixed-size label field can hold and drops markup it
+  /// cannot render. Ids go through the length check in <see cref="SetIcon"/> instead, since
+  /// silently shortening an identifier would collapse two markers into one.
+  /// </summary>
+  private static string SanitizeLabel(string text) {
+    text = text?.Replace("*", "").Replace("~", "") ?? string.Empty;
+    while (text.Length > 0 && System.Text.Encoding.UTF8.GetByteCount(text) > MAX_USERNAME_BYTES) {
+      text = text[..^1];
+    }
+    return text;
+  }
+
+  #endregion
 }
