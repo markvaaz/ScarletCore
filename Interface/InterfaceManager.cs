@@ -6,9 +6,26 @@ using System.Text.Json;
 using ScarletCore.Services;
 using ScarletCore.Interface.Builders;
 using ScarletCore.Interface.Models;
+using Unity.Entities;
 using Unity.Mathematics;
+using ProjectM.Network;
 
 namespace ScarletCore.Interface;
+
+/// <summary>
+/// How many instances of a <see cref="InterfaceManager.UnitHud"/> bind are visible, and how they are
+/// triggered. See the <c>ush</c> clause in the Unit Proximity HUD spec.
+/// </summary>
+public enum UnitHudShow {
+  /// <summary>Every matched entity in range shows an instance (default).</summary>
+  All,
+  /// <summary>Only the nearest matched entity — or the nearest <c>showCount</c> — is shown.</summary>
+  Closest,
+  /// <summary>An instance exists only while the pointer is over the entity (or the window), with a linger grace period.</summary>
+  Hover,
+  /// <summary>An instance toggles open on right-click on the entity.</summary>
+  Click,
+}
 
 /// <summary>
 /// Main entry point for the ScarletInterface server-side API.
@@ -919,4 +936,128 @@ public static class InterfaceManager {
 
   static ScarletPacket ProximityClearPacket(string plugin) =>
     new() { Type = "PXC", Plugin = plugin, Window = "$prox", Data = new() };
+
+  // ── Unit proximity HUD ─────────────────────────────────────────────────────────
+  //
+  // Registers an entity-anchored HUD "bind" on the player's client: a radius plus a set of match
+  // clauses, all client-side. Every entity within <paramref name="radius"/> world units that satisfies
+  // the clauses gets a floating window that follows it (like the native nameplate).
+  //
+  // Two shapes of window drive the instance:
+  //   * TEMPLATE — pass <paramref name="templateWindow"/> (the id of a window sent with
+  //     <c>new Window(player, plugin, id){ Template = true, ... }.Send()</c>). The client reproduces
+  //     that recipe once per matched entity, resolving these tokens at creation:
+  //       {Name} {Level} {Hp} {HpMax} {Distance} {NetId} {PrefabGuid}
+  //     Put {NetId} in a button's Command to carry the unit's identity back to the server.
+  //     LIMITATION: tokens are resolved ONCE, at instance creation. A value that changes while the
+  //     window is open (a live health bar) does not follow — cover that by pushing SendUpdate to the
+  //     instance window, whose id is InterfaceManager.UnitHudWindowId(plugin, id, entity).
+  //   * INSTANCE WINDOW — a bind with a <paramref name="net"/> clause and NO template: the server
+  //     pushes a window straight to the deterministic instance id (see UnitHudWindowId). Until the
+  //     server sends something to that id, the instance stays hidden — no empty default panel.
+  //
+  // Match clauses. All optional, combined with AND; each accepts a comma-separated any-of list and a
+  // leading '!' to negate the whole clause. None is ever required — in particular PrefabGUID never is.
+  //   net    (unt) — NetworkId list, each "index:generation" (identifies specific entities)
+  //   prefab (upf) — PrefabGUID hash list
+  //   buff   (ubf) — buff PrefabGUID list ("has the buff"; "!guid" for "must not have it")
+  //   name   (unm) — substring of the entity name
+  //   owned  (uow) — true = must have a living owner, false = must not
+  //   team   (utm) — "ally" | "enemy" | "self"
+  //
+  // Display: show/showCount/hoverLinger, fade ("native"|"off"|"dist"), scale ("native"|"off"),
+  // offsetY ("auto" or a world-unit Y offset), interactive (window receives raycast), priority
+  // (int Z tie-break between binds). Defaults match the client; only non-defaults go on the wire.
+  //
+  // The bind is wholesale: sending a bind with the same <paramref name="id"/> replaces the previous
+  // one. A radius <= 0 removes the bind (same as RemoveUnitHud). Ids are unique per plugin.
+
+  /// <summary>Registers (or replaces) a Unit HUD bind on one player. See remarks above for the clauses and tokens.</summary>
+  public static void UnitHud(PlayerData player, string plugin, string id, float radius,
+      string templateWindow = null,
+      string net = null, string prefab = null, string buff = null, string name = null,
+      bool? owned = null, string team = null,
+      UnitHudShow show = UnitHudShow.All, int showCount = 1, float hoverLinger = 0f,
+      bool interactive = false, int priority = 0,
+      string offsetY = null, string fade = null, string scale = null) =>
+    PacketManager.SendPacket(player, UnitHudBindPacket(plugin, id, radius, templateWindow, net, prefab,
+      buff, name, owned, team, show, showCount, hoverLinger, interactive, priority, offsetY, fade, scale));
+
+  /// <summary>Registers (or replaces) a Unit HUD bind on every connected player. See <see cref="UnitHud"/>.</summary>
+  public static void UnitHudAll(string plugin, string id, float radius,
+      string templateWindow = null,
+      string net = null, string prefab = null, string buff = null, string name = null,
+      bool? owned = null, string team = null,
+      UnitHudShow show = UnitHudShow.All, int showCount = 1, float hoverLinger = 0f,
+      bool interactive = false, int priority = 0,
+      string offsetY = null, string fade = null, string scale = null) =>
+    PacketManager.SendPacketToAll(UnitHudBindPacket(plugin, id, radius, templateWindow, net, prefab,
+      buff, name, owned, team, show, showCount, hoverLinger, interactive, priority, offsetY, fade, scale));
+
+  /// <summary>Removes a single Unit HUD bind by id for one player, destroying its live instances.</summary>
+  public static void RemoveUnitHud(PlayerData player, string plugin, string id) =>
+    PacketManager.SendPacket(player, UnitHudUnbindPacket(plugin, id));
+
+  /// <summary>Removes a single Unit HUD bind by id for every connected player.</summary>
+  public static void RemoveUnitHudAll(string plugin, string id) =>
+    PacketManager.SendPacketToAll(UnitHudUnbindPacket(plugin, id));
+
+  /// <summary>Removes every Unit HUD bind this plugin registered on one player's client.</summary>
+  public static void ClearUnitHuds(PlayerData player, string plugin) =>
+    PacketManager.SendPacket(player, UnitHudClearPacket(plugin));
+
+  /// <summary>Removes every Unit HUD bind this plugin registered on all players' clients.</summary>
+  public static void ClearUnitHudsAll(string plugin) =>
+    PacketManager.SendPacketToAll(UnitHudClearPacket(plugin));
+
+  /// <summary>
+  /// The deterministic window id of a bind's instance for one entity —
+  /// <c>{plugin}:{bindId}#{netIndex}:{netGeneration}</c>. Push a window to this id (via
+  /// <c>new Window(player, plugin, UnitHudWindowId(...))</c> or <c>Window.SendUpdate</c>) to fill a
+  /// template-less bind's instance, or to live-update a template instance.
+  /// </summary>
+  public static string UnitHudWindowId(string plugin, string bindId, Entity entity) {
+    var net = entity.Read<NetworkId>();
+    return $"{plugin}:{bindId}#{net.Normal_Index}:{net.Normal_Generation}";
+  }
+
+  static ScarletPacket UnitHudBindPacket(string plugin, string id, float radius,
+      string templateWindow, string net, string prefab, string buff, string name,
+      bool? owned, string team, UnitHudShow show, int showCount, float hoverLinger,
+      bool interactive, int priority, string offsetY, string fade, string scale) {
+    var d = new Dictionary<string, string> {
+      ["uid"] = id,
+      ["urd"] = F(radius),
+    };
+    if (!string.IsNullOrEmpty(templateWindow)) d["uwn"] = templateWindow;
+    if (!string.IsNullOrEmpty(net)) d["unt"] = net;
+    if (!string.IsNullOrEmpty(prefab)) d["upf"] = prefab;
+    if (!string.IsNullOrEmpty(buff)) d["ubf"] = buff;
+    if (!string.IsNullOrEmpty(name)) d["unm"] = name;
+    if (owned.HasValue) d["uow"] = owned.Value ? "1" : "0";
+    if (!string.IsNullOrEmpty(team)) d["utm"] = team;
+    var showToken = ShowToken(show, showCount);
+    if (showToken != null) d["ush"] = showToken;
+    if (hoverLinger > 0f) d["uhl"] = F(hoverLinger);
+    if (interactive) d["uix"] = "1";
+    if (priority != 0) d["upr"] = priority.ToString(CultureInfo.InvariantCulture);
+    if (!string.IsNullOrEmpty(offsetY)) d["uoy"] = offsetY;
+    if (!string.IsNullOrEmpty(fade)) d["ufd"] = fade;
+    if (!string.IsNullOrEmpty(scale)) d["usc"] = scale;
+    return new ScarletPacket { Type = "UHB", Plugin = plugin, Window = "", Data = d };
+  }
+
+  // All → null: "all" is the client default, so it is omitted from the wire.
+  static string ShowToken(UnitHudShow show, int showCount) => show switch {
+    UnitHudShow.Closest => showCount > 1 ? $"closest:{showCount}" : "closest",
+    UnitHudShow.Hover => "hover",
+    UnitHudShow.Click => "click",
+    _ => null,
+  };
+
+  static ScarletPacket UnitHudUnbindPacket(string plugin, string id) =>
+    new() { Type = "UHU", Plugin = plugin, Window = "", Data = new() { ["uid"] = id } };
+
+  static ScarletPacket UnitHudClearPacket(string plugin) =>
+    new() { Type = "UHC", Plugin = plugin, Window = "", Data = new() };
 }

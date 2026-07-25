@@ -126,6 +126,19 @@ public class Window : IEnumerable<UIElement>
   /// <summary>If true, window is hidden when any in-game menu opens. Default: false.</summary>
   public bool HideOnMenuOpen { get; set; } = false;
 
+  /// <summary>
+  /// If true, this window is a <b>recipe</b> for the Unit Proximity HUD instead of a window to open.
+  /// The client stores its packets and reproduces them once per entity a <see cref="InterfaceManager.UnitHud"/>
+  /// bind matches (with tokens like <c>{Name}</c>/<c>{Hp}</c>/<c>{NetId}</c> resolved per instance).
+  /// <para>
+  /// Two rules the client enforces on a template:
+  /// its <c>SetWindow</c> packet must be first (it opens the recording), and the window flow only accepts
+  /// <see cref="Elements.Row"/> and <see cref="Elements.Accordion"/> as direct children — put every element
+  /// inside a Row. When set, <see cref="Send"/> marks the window and does not send an open/close action.
+  /// </para>
+  /// </summary>
+  public bool Template { get; set; } = false;
+
   // ─── Animations ──────────────────────────────────────────────────────────
 
   /// <summary>Animation played when the window opens. Default: None.</summary>
@@ -206,7 +219,9 @@ public class Window : IEnumerable<UIElement>
   {
     var packets = ElementSerializer.Serialize(this, _plugin, _id);
 
-    string actionToken = action switch
+    // A template is a recipe, not a window: no open/close action — the client records it and
+    // opens instances itself. The SW packet already carries utp=1 (added by the serializer).
+    string actionToken = Template ? null : action switch
     {
       WindowAction.Open => "OP",
       WindowAction.Close => "CL",

@@ -3,6 +3,7 @@ using System.Globalization;
 using ScarletCore.Interface.Builders;
 using ScarletCore.Interface.Elements;
 using ScarletCore.Interface.Models;
+using ScarletCore.Utils;
 
 namespace ScarletCore.Interface;
 
@@ -56,6 +57,21 @@ internal static class ElementSerializer
     if (window.AnimationDuration != 0.2f) wd["ad"] = F(window.AnimationDuration);
     if (window.AutoClose > 0f) wd["ax"] = F(window.AutoClose);
     if (window.CloseKey.HasValue) wd["kc"] = window.CloseKey.Value.ToString();
+    // Template recipe marker. Must ride on the SW packet, which is emitted first here — the client
+    // treats this SW as the start of the recording, so anything before it renders as a normal window.
+    if (window.Template)
+    {
+      wd["utp"] = "1";
+      // The window flow only accepts Row/Accordion; a loose element as a direct child floats out of
+      // layout. Harmless-looking in a 2-line balloon, so warn rather than let it pass silently.
+      foreach (var child in window.Children)
+        if (child is not Row && child is not Accordion)
+        {
+          Log.Warning($"[ScarletInterface] Template window '{windowId}' has a direct child of type " +
+                      $"{child.GetType().Name}; only Row and Accordion are laid out — wrap it in a Row.");
+          break;
+        }
+    }
     packets.Add(Packet(plugin, windowId, "SW", wd));
 
     // ── Custom Texture ─────────────────────────────────────────────────────
