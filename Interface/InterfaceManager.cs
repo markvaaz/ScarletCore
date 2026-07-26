@@ -308,30 +308,31 @@ public static class InterfaceManager {
   // ── Floating character HUD ────────────────────────────────────────────────────
 
   /// <summary>
-  /// Pins parts of the HUD floating above characters so they are always visible instead of
-  /// only on hover / when damaged. The three flags are independent and combine freely — e.g.
-  /// health bars on every head but names left vanilla. False is vanilla behaviour, and applies
-  /// to all character types: players, regular units and V Bloods alike (a V Blood natively
-  /// shows its name but neither its health bar nor its level, so those two are what change).
+  /// Pins the nameplate floating above characters so it is always visible instead of only on
+  /// hover / when damaged. It is the whole nameplate — name, health bar and level together — for
+  /// every character type: players, regular units and V Bloods alike. False is vanilla behaviour.
   ///
-  /// <b>This is a suggestion, not a setting.</b> The player owns these three toggles in the
-  /// mod's Options tab: what you send only takes effect for the ones they have never touched,
-  /// and once they do touch one it is theirs on your server and every other.
-  /// Call once on <c>InterfaceAuth</c>.
+  /// The parts are not separable, because the game draws the nameplate as one thing and offers no
+  /// lever to split it: pinning works by convincing the client that every character on screen is
+  /// under the cursor, and a hover shows all three.
+  ///
+  /// <b>This is a suggestion, not a setting.</b> The player owns this toggle in the mod's Options
+  /// tab: what you send only takes effect while they have never touched it, and the moment they do
+  /// it is theirs on your server and every other. Call once on <c>InterfaceAuth</c>.
   /// </summary>
-  public static void SetCharacterHud(PlayerData player, string plugin, bool alwaysName, bool alwaysHealth, bool alwaysLevel) =>
-    PacketManager.SendPacket(player, CharacterHudPacket(plugin, alwaysName, alwaysHealth, alwaysLevel));
+  public static void SetCharacterHud(PlayerData player, string plugin, bool alwaysShow) =>
+    PacketManager.SendPacket(player, CharacterHudPacket(plugin, alwaysShow));
 
-  /// <summary>Suggests the character-HUD pinning to every connected player. See <see cref="SetCharacterHud"/>.</summary>
-  public static void SetCharacterHudAll(string plugin, bool alwaysName, bool alwaysHealth, bool alwaysLevel) =>
-    PacketManager.SendPacketToAll(CharacterHudPacket(plugin, alwaysName, alwaysHealth, alwaysLevel));
+  /// <summary>Suggests the nameplate pinning to every connected player. See <see cref="SetCharacterHud"/>.</summary>
+  public static void SetCharacterHudAll(string plugin, bool alwaysShow) =>
+    PacketManager.SendPacketToAll(CharacterHudPacket(plugin, alwaysShow));
 
-  static ScarletPacket CharacterHudPacket(string plugin, bool alwaysName, bool alwaysHealth, bool alwaysLevel) =>
+  static ScarletPacket CharacterHudPacket(string plugin, bool alwaysShow) =>
     new() {
       Type = "CHV",
       Plugin = plugin,
       Window = "",
-      Data = new() { ["chn"] = B(alwaysName), ["chb"] = B(alwaysHealth), ["chl"] = B(alwaysLevel) },
+      Data = new() { ["chn"] = B(alwaysShow) },
     };
 
   static string B(bool v) => v ? "1" : "0";
