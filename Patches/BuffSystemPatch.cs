@@ -1,6 +1,7 @@
 using HarmonyLib;
 using ProjectM;
 using ScarletCore.Interface;
+using ScarletCore.Services;
 using ScarletCore.Systems;
 using Unity.Collections;
 
@@ -29,6 +30,25 @@ public static class BuffSystemPatch {
       if (!owner.Exists() || !owner.TryGetPlayerData(out var player)) continue;
 
       SyncUnitModService.SendUnitMods(player);
+    }
+  }
+
+  /// <summary>
+  /// Prefix on <see cref="UpdateBuffsBuffer_Destroy.OnUpdate"/> that re-applies queued
+  /// stat modifiers the moment their buff is destroyed. This is what lets
+  /// <see cref="StatModifierService"/> avoid schedulers: the destroy event marks the
+  /// exact point the old ModificationIDs are gone, so re-applying now is error-free.
+  /// </summary>
+  [HarmonyPatch(typeof(UpdateBuffsBuffer_Destroy), nameof(UpdateBuffsBuffer_Destroy.OnUpdate))]
+  [HarmonyPrefix]
+  public static void DestroyPrefix(UpdateBuffsBuffer_Destroy __instance) {
+    if (!GameSystems.Initialized || !StatModifierService.HasPending) return;
+
+    var entities = __instance.__query_401358717_0.ToEntityArray(Allocator.Temp);
+
+    foreach (var entity in entities) {
+      if (!entity.Has<EntityOwner>()) continue;
+      StatModifierService.OnBuffDestroyed(entity.Read<EntityOwner>().Owner, entity.GetPrefabGuid());
     }
   }
 }

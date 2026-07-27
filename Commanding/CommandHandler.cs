@@ -69,7 +69,12 @@ public static class CommandHandler {
       PlayerData playerSender = null;
 
       messageEntity.HasWith((ref FromCharacter fromChar) => {
-        playerSender = fromChar.Character.GetPlayerData();
+        // Character first, but fall back to User: while a player is controlling another
+        // entity (Controller.Controlled repointed), FromCharacter.Character is the
+        // controlled unit, which has no PlayerCharacter and resolves to null. The User
+        // entity never changes, so it identifies the sender in both cases — without it,
+        // a possessed player cannot run any command, including the one that frees them.
+        playerSender = fromChar.Character.GetPlayerData() ?? fromChar.User.GetPlayerData();
       });
 
       if (playerSender == null) {

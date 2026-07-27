@@ -1,5 +1,4 @@
 using ProjectM;
-using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Stunlock.Core;
 using System.Collections.Generic;
@@ -34,17 +33,23 @@ public static class StatModifierService {
   // In-place buffer edits have no effect on live stats, so a remove + re-apply cycle
   // is required for every update.
   //
-  // To avoid "modification id doesn't exist" errors on rapid consecutive calls:
-  //   - Never cancel a running removal cycle once the buff has been destroyed.
-  //     Cancelling and restarting causes the stat system to look for ModificationIDs
-  //     that no longer exist, producing errors and corrupted stat values.
-  //   - Instead, overwrite the pending modifiers so the already-scheduled re-apply
-  //     uses the latest values — coalescing all rapid calls into one clean cycle.
+  // The game does not clean up the old ModificationIDs instantly: re-applying the buff
+  // before the previous one is fully destroyed makes the stat system look for IDs that
+  // no longer exist in its buffers, producing "modification id doesn't exist" errors.
+  //
+  // Instead of guessing a delay with a scheduler, we react to the actual buff-destroy
+  // event (see BuffSystemPatch.OnBuffDestroyed): remove the buff, queue the latest
+  // modifiers, and only re-apply once the game reports the old buff destroyed — the
+  // exact moment its ModificationIDs are gone. Rapid consecutive calls simply overwrite
+  // the queued modifiers, coalescing into one clean re-apply cycle.
 
-  // ActionId of the scheduled re-apply per (entity, buff) key, if one is in flight.
-  private static readonly Dictionary<(Entity, PrefabGUID), ActionId> pendingActions = [];
-  // Latest modifiers to apply when the scheduled re-apply fires.
+  // Latest modifiers to re-apply once the destroy event for the removed buff fires.
+  // This dictionary IS the pending queue — a key present means a re-apply is awaiting
+  // the buff-destroy event for that (entity, buff).
   private static readonly Dictionary<(Entity, PrefabGUID), Modifier[]> pendingModifiers = [];
+
+  /// <summary>True when at least one re-apply is queued — lets the destroy patch skip work cheaply.</summary>
+  public static bool HasPending => pendingModifiers.Count > 0;
 
   /// <summary>
   /// Applies an array of stat modifiers to a character entity using a specified modifier buff.
@@ -60,10 +65,9 @@ public static class StatModifierService {
 
     var key = (character, modifierBuff);
 
-    // A removal cycle is already in flight — just update the pending modifiers.
-    // Do NOT cancel or restart the cycle; the buff is already destroyed and the
-    // stat system needs the full delay to clean up its modification entries.
-    if (pendingActions.ContainsKey(key)) {
+    // A re-apply is already queued (buff removed, awaiting its destroy event) — just
+    // overwrite the queued modifiers so the pending re-apply uses the latest values.
+    if (pendingModifiers.ContainsKey(key)) {
       pendingModifiers[key] = modifiers;
       return;
     }
@@ -75,20 +79,22 @@ public static class StatModifierService {
       return;
     }
 
-    // Buff is present — destroy it and schedule re-apply after 2 frames.
-    // 2 frames gives the ECS stat system one full cycle to deregister the old
-    // modification entries before new ones are registered.
-    BuffService.TryRemoveBuff(character, modifierBuff);
+    // Buff is present — queue the new modifiers and remove it. The re-apply happens
+    // in OnBuffDestroyed once the game reports the old buff destroyed, guaranteeing
+    // its ModificationIDs are gone before the new ones are registered.
     pendingModifiers[key] = modifiers;
+    BuffService.TryRemoveBuff(character, modifierBuff);
+  }
 
-    var actionId = ActionScheduler.DelayedFrames(() => {
-      pendingActions.Remove(key);
-      if (!pendingModifiers.Remove(key, out var latest)) return;
-      if (!character.Exists()) return;
-      ApplyBuffNow(character, modifierBuff, latest);
-    }, 2);
-
-    pendingActions[key] = actionId;
+  /// <summary>
+  /// Re-applies queued modifiers once the modifier buff's destroy event fires.
+  /// Called by the buff-destroy patch for every destroyed buff; no-ops unless a
+  /// re-apply is queued for that (character, buff).
+  /// </summary>
+  public static void OnBuffDestroyed(Entity character, PrefabGUID modifierBuff) {
+    if (!pendingModifiers.Remove((character, modifierBuff), out var latest)) return;
+    if (!character.Exists() || latest.Length == 0) return;
+    ApplyBuffNow(character, modifierBuff, latest);
   }
 
   /// <summary>
@@ -99,12 +105,8 @@ public static class StatModifierService {
   public static void RemoveModifiers(Entity character, PrefabGUID modifierBuff) {
     if (!character.Exists()) return;
 
-    var key = (character, modifierBuff);
-
-    // Cancel any pending re-apply so we don't resurrect the buff after removal.
-    if (pendingActions.Remove(key, out var existingActionId))
-      ActionScheduler.CancelAction(existingActionId);
-    pendingModifiers.Remove(key);
+    // Drop any queued re-apply so we don't resurrect the buff after removal.
+    pendingModifiers.Remove((character, modifierBuff));
 
     BuffService.TryRemoveBuff(character, modifierBuff);
   }
@@ -116,10 +118,7 @@ public static class StatModifierService {
   /// <param name="modifierBuff">The prefab GUID of the modifier buff to remove.</param>
   /// <returns>True if the buff was removed; otherwise, false.</returns>
   public static bool TryRemoveModifierBuff(Entity character, PrefabGUID modifierBuff) {
-    var key = (character, modifierBuff);
-    if (pendingActions.Remove(key, out var existingActionId))
-      ActionScheduler.CancelAction(existingActionId);
-    pendingModifiers.Remove(key);
+    pendingModifiers.Remove((character, modifierBuff));
 
     return BuffService.TryRemoveBuff(character, modifierBuff);
   }
