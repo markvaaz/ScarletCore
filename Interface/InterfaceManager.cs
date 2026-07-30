@@ -1061,4 +1061,152 @@ public static class InterfaceManager {
 
   static ScarletPacket UnitHudClearPacket(string plugin) =>
     new() { Type = "UHC", Plugin = plugin, Window = "", Data = new() };
+
+  // ── Nameplate background ───────────────────────────────────────────────────────
+  //
+  // Puts a background behind the game's OWN floating nameplate — the plate with the name, health bar
+  // and level that a character carries over its head. Same match clauses as UnitHud, so this dresses
+  // only the characters you choose; a character matching no bind keeps the vanilla plate untouched.
+  //
+  // There is no width or height. The client fits the background to the union of the plate parts that
+  // are actually being drawn, every few frames, plus padding — the only workable rule, since a
+  // nameplate's width is its name and its height depends on whether that character has a level badge
+  // at all. Padding accepts negative values to pull the box in.
+  //
+  // Three layers, drawn in this order and freely combinable:
+  //   * FILL   — background: a colour or a gradient, rounded by border's radius.
+  //   * ART    — either NINE separate images (the corner/border parameters, exactly the key set
+  //              Window.SetCustomTexture uses), or ONE image cut into a 9-slice automatically. The
+  //              single-image form is the default for background images here, because this box
+  //              changes size with every name it sits behind; pass ImageFit.Stretch to opt out.
+  //   * BORDER — border: colour + width, drawn as a ring outside the fill.
+  //
+  // Sizing the art: a 9-slice draws its corners at their native pixel size, and UGUI shrinks borders
+  // that do not fit the rect — so frame art authored at 1200 px does not merely look thick on a 50 px
+  // plate, its corners collapse and it renders as a plain stretch. The client therefore scales the
+  // slice to the box it measured, and `sliceScale` (0 = automatic) is the override for when you want
+  // a specific thickness: it is how large one source pixel is drawn, so 0.1 is a tenth of native.
+  // `slice` overrides where the source is cut ("" = auto, a third of the shorter side; or "24",
+  // "12,20", "l,b,r,t"). For the nine-image form, `cornerSize` is the drawn corner size in pixels.
+  //
+  // Sign-horses (the invisible horses used as signs, whose nameplate name IS the sign text) are
+  // spared by a bind that does not name them: to dress one, list its PrefabGUID in `prefab`.
+  //
+  // The bind is wholesale: the same `id` replaces the previous one, live plates included.
+
+  /// <summary>Registers (or replaces) a nameplate-background bind on one player. See the remarks above.</summary>
+  public static void NameplateBackground(PlayerData player, string plugin, string id,
+      string prefab = null, string net = null, string buff = null, string name = null,
+      bool? owned = null, string team = null, int priority = 0,
+      UIBackground? background = null, Border? border = null, Spacing? padding = null,
+      string slice = null, float sliceScale = 0f, UIColor? imageColor = null,
+      string topLeftCorner = null, string topRightCorner = null,
+      string bottomLeftCorner = null, string bottomRightCorner = null,
+      string topBorder = null, string bottomBorder = null,
+      string leftBorder = null, string rightBorder = null,
+      int cornerSize = 32, int frameExpand = 0, bool tileArt = false) =>
+    PacketManager.SendPacket(player, NameplateBindPacket(plugin, id, prefab, net, buff, name, owned,
+      team, priority, background, border, padding, slice, sliceScale, imageColor,
+      topLeftCorner, topRightCorner, bottomLeftCorner, bottomRightCorner,
+      topBorder, bottomBorder, leftBorder, rightBorder, cornerSize, frameExpand, tileArt));
+
+  /// <summary>Registers (or replaces) a nameplate-background bind on every connected player. See <see cref="NameplateBackground"/>.</summary>
+  public static void NameplateBackgroundAll(string plugin, string id,
+      string prefab = null, string net = null, string buff = null, string name = null,
+      bool? owned = null, string team = null, int priority = 0,
+      UIBackground? background = null, Border? border = null, Spacing? padding = null,
+      string slice = null, float sliceScale = 0f, UIColor? imageColor = null,
+      string topLeftCorner = null, string topRightCorner = null,
+      string bottomLeftCorner = null, string bottomRightCorner = null,
+      string topBorder = null, string bottomBorder = null,
+      string leftBorder = null, string rightBorder = null,
+      int cornerSize = 32, int frameExpand = 0, bool tileArt = false) =>
+    PacketManager.SendPacketToAll(NameplateBindPacket(plugin, id, prefab, net, buff, name, owned,
+      team, priority, background, border, padding, slice, sliceScale, imageColor,
+      topLeftCorner, topRightCorner, bottomLeftCorner, bottomRightCorner,
+      topBorder, bottomBorder, leftBorder, rightBorder, cornerSize, frameExpand, tileArt));
+
+  /// <summary>Removes a single nameplate-background bind by id, taking its live backgrounds down.</summary>
+  public static void RemoveNameplateBackground(PlayerData player, string plugin, string id) =>
+    PacketManager.SendPacket(player, NameplateUnbindPacket(plugin, id));
+
+  /// <summary>Removes a single nameplate-background bind by id for every connected player.</summary>
+  public static void RemoveNameplateBackgroundAll(string plugin, string id) =>
+    PacketManager.SendPacketToAll(NameplateUnbindPacket(plugin, id));
+
+  /// <summary>Removes every nameplate-background bind this plugin registered on one player's client.</summary>
+  public static void ClearNameplateBackgrounds(PlayerData player, string plugin) =>
+    PacketManager.SendPacket(player, NameplateClearPacket(plugin));
+
+  /// <summary>Removes every nameplate-background bind this plugin registered on all players' clients.</summary>
+  public static void ClearNameplateBackgroundsAll(string plugin) =>
+    PacketManager.SendPacketToAll(NameplateClearPacket(plugin));
+
+  static ScarletPacket NameplateBindPacket(string plugin, string id,
+      string prefab, string net, string buff, string name, bool? owned, string team, int priority,
+      UIBackground? background, Border? border, Spacing? padding,
+      string slice, float sliceScale, UIColor? imageColor,
+      string tlCorner, string trCorner, string blCorner, string brCorner,
+      string topBorder, string bottomBorder, string leftBorder, string rightBorder,
+      int cornerSize, int frameExpand, bool tileArt) {
+    var d = new Dictionary<string, string> { ["uid"] = id };
+
+    // Clause tokens are the UnitHud ones, deliberately: the client reads one clause set for both.
+    if (!string.IsNullOrEmpty(prefab)) d["upf"] = prefab;
+    if (!string.IsNullOrEmpty(net)) d["unt"] = net;
+    if (!string.IsNullOrEmpty(buff)) d["ubf"] = buff;
+    if (!string.IsNullOrEmpty(name)) d["unm"] = name;
+    if (owned.HasValue) d["uow"] = owned.Value ? "1" : "0";
+    if (!string.IsNullOrEmpty(team)) d["utm"] = team;
+    if (priority != 0) d["upr"] = priority.ToString(CultureInfo.InvariantCulture);
+
+    // bcl/bgr/bim/bsp/bif — the same background tokens every element uses.
+    if (background.HasValue && background.Value.HasValue) {
+      background.Value.Apply(d);
+      // Everywhere else Stretch is the client's default and so is omitted from the wire. Here it is
+      // not: a nameplate background resizes with every name it sits behind, so the client slices art
+      // by default. The fit is therefore always spelled out, and asking for Stretch means Stretch.
+      if ((d.ContainsKey("bim") || d.ContainsKey("bsp")) && !d.ContainsKey("bif")) d["bif"] = "Stretch";
+    }
+    if (border.HasValue) {
+      d["dc"] = border.Value.Color;
+      d["dw"] = F(border.Value.Width);
+      d["dr"] = F(border.Value.Radius);
+    }
+    if (padding.HasValue) {
+      d["pt"] = F(padding.Value.Top);
+      d["pr"] = F(padding.Value.Right);
+      d["pb"] = F(padding.Value.Bottom);
+      d["pl"] = F(padding.Value.Left);
+    }
+    if (!string.IsNullOrEmpty(slice)) d["bsl"] = slice;
+    if (sliceScale > 0f) d["bss"] = F(sliceScale);
+    if (imageColor.HasValue) d["bic"] = imageColor.Value;
+
+    // Nine-image frame. Only sent when at least one piece is, so the client can tell a frame from an
+    // ordinary background image by the payload alone.
+    bool hasFrame = tlCorner != null || trCorner != null || blCorner != null || brCorner != null
+                 || topBorder != null || bottomBorder != null || leftBorder != null || rightBorder != null;
+    if (hasFrame) {
+      if (tlCorner != null) d["t1"] = tlCorner;
+      if (trCorner != null) d["t2"] = trCorner;
+      if (blCorner != null) d["b1"] = blCorner;
+      if (brCorner != null) d["b2"] = brCorner;
+      if (topBorder != null) d["tb"] = topBorder;
+      if (bottomBorder != null) d["bb"] = bottomBorder;
+      if (leftBorder != null) d["lb"] = leftBorder;
+      if (rightBorder != null) d["rb"] = rightBorder;
+      d["cs"] = cornerSize.ToString(CultureInfo.InvariantCulture);
+      if (frameExpand != 0) d["fe"] = frameExpand.ToString(CultureInfo.InvariantCulture);
+      if (tileArt) d["br"] = "1";
+    }
+
+    return new ScarletPacket { Type = "NPB", Plugin = plugin, Window = "", Data = d };
+  }
+
+  static ScarletPacket NameplateUnbindPacket(string plugin, string id) =>
+    new() { Type = "NPU", Plugin = plugin, Window = "", Data = new() { ["uid"] = id } };
+
+  static ScarletPacket NameplateClearPacket(string plugin) =>
+    new() { Type = "NPC", Plugin = plugin, Window = "", Data = new() };
 }
