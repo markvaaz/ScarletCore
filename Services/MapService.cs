@@ -564,6 +564,7 @@ public static class MapService {
   /// <param name="scale">Icon size multiplier for ScarletInterface clients; 1 keeps the game's own size. Relative rather than absolute, because the minimap and the full map draw icons at different base sizes</param>
   /// <param name="clamp">Whether the game pins the marker to the minimap edge when off-screen</param>
   /// <param name="showOnMinimap">Whether the marker shows on the minimap; false leaves it on the full map only. The full map has no per-icon toggle natively, so it always shows the marker</param>
+  /// <param name="showIndicator">ScarletInterface clients only: draw the game's own screen-edge arrow with direction and distance to this marker while it is off-screen. Off by default; plain clients never show it because the game only gives that arrow to its own player-placed pings</param>
   /// <returns>False when the marker could not be created; the reason is logged</returns>
   /// <remarks>
   /// <paramref name="clamp"/> and <paramref name="showOnMinimap"/> map to the game's own
@@ -574,7 +575,7 @@ public static class MapService {
   /// therefore always get the prefab defaults for these two.
   /// </remarks>
   public static bool SetIcon(PlayerData player, string plugin, string id, float x, float z,
-      string icon = null, string label = null, string color = null, float scale = 1f, bool clamp = true, bool showOnMinimap = true) {
+      string icon = null, string label = null, string color = null, float scale = 1f, bool clamp = true, bool showOnMinimap = true, bool showIndicator = false) {
     if (player == null || string.IsNullOrEmpty(plugin) || string.IsNullOrEmpty(id)) return false;
 
     var token = $"{plugin}:{id}";
@@ -624,6 +625,8 @@ public static class MapService {
         // key as the default, which also makes an update that flips the flag back revert cleanly.
         if (!clamp) data["Clamp"] = "0";
         if (!showOnMinimap) data["Mini"] = "0";
+        // Opt-in: sent only when on, so the client's absent-key default keeps it off.
+        if (showIndicator) data["Edge"] = "1";
         SendIconPacket(player, "SetMapIcon", plugin, data);
       });
     }
@@ -638,9 +641,9 @@ public static class MapService {
   // ponytail: players connecting later don't receive existing markers — call this again on join
   // if that matters. Storing marker definitions and replaying them on connect is the upgrade path.
   public static void SetIconAll(string plugin, string id, float x, float z,
-      string icon = null, string label = null, string color = null, float scale = 1f, bool clamp = true, bool showOnMinimap = true) {
+      string icon = null, string label = null, string color = null, float scale = 1f, bool clamp = true, bool showOnMinimap = true, bool showIndicator = false) {
     foreach (var player in PlayerService.GetAllConnected()) {
-      SetIcon(player, plugin, id, x, z, icon, label, color, scale, clamp, showOnMinimap);
+      SetIcon(player, plugin, id, x, z, icon, label, color, scale, clamp, showOnMinimap, showIndicator);
     }
   }
 
