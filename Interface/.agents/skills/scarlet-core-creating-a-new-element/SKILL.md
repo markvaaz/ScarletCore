@@ -316,7 +316,8 @@ Add the packet type token to `Types` and the data key tokens to `Keys`.
 - Data key tokens: 2–4 chars, lowercase. Must not clash with any existing entry.
 - Background family keys follow the pattern `{prefix}{suffix}` where prefix is a
   single char (b=Bg, h=HoverBg, q=PressedBg, etc.) and suffix is 2 chars
-  (cl=Color, gr=Gradient, im=Image, sp=Sprite…). Don't use those slots for new keys.
+  (cl=Color, gr=Gradient, im=Image, sp=Sprite, mt=Material, ms=MaterialSprite,
+  mc=MaterialColor…). Don't use those slots for new keys.
 
 ---
 
