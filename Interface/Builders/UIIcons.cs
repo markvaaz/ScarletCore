@@ -6,7 +6,8 @@ public static class UIIcons {
   /// Returns an inline icon token for the item identified by <paramref name="guidHash"/>.
   /// Embed this inside any <c>text</c> parameter:
   /// <code>$"Craft: 5x {UIIcons.Icon(-1234567890)}"</code>
-  /// The client resolves the GUID to the item's sprite via <c>ManagedItemData.Icon</c>
+  /// The client resolves the GUID to the sprite via <c>ManagedItemData.Icon</c>
+  /// (falling back to <c>ManagedAbilityGroupData.Icon</c> for ability GUIDs)
   /// and renders it as an inline <c>Image</c> component.
   /// </summary>
   /// <param name="guidHash">The integer hash of the <c>PrefabGUID</c> (i.e. the raw int32 GUID value).</param>

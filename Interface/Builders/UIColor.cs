@@ -35,6 +35,15 @@ public readonly struct UIColor {
       : new(((v >> 16) & 0xFF) / 255f, ((v >> 8) & 0xFF) / 255f, (v & 0xFF) / 255f, 1f);
   }
 
+  /// <summary>
+  /// Scales RGB by <paramref name="gain"/> (alpha unchanged), so you pick the hue with
+  /// <see cref="Hex"/> and set brightness with one number instead of pre-multiplied channels.
+  /// Values above 1 are meaningful only as a material tint (<c>WithMaterialTint</c>), where the
+  /// shader's <c>_Color</c> multiplies per channel and accepts HDR — as an ordinary fill the
+  /// result is clamped to white. Example: <c>UIColor.Hex("#9b6dcc").Brighten(1.8f)</c>.
+  /// </summary>
+  public UIColor Brighten(float gain) => new(_r * gain, _g * gain, _b * gain, _a);
+
   internal string Serialize() => string.Format(CultureInfo.InvariantCulture, "{0},{1},{2},{3}", _r, _g, _b, _a);
   /// <summary>Implicitly converts a <see cref="UIColor"/> to its serialized <c>"r,g,b,a"</c> string form.</summary>
   public static implicit operator string(UIColor c) => c.Serialize();
