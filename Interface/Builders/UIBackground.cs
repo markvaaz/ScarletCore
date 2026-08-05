@@ -55,6 +55,18 @@ public readonly struct UIBackground {
     public static UIBackground FromMaterial(string materialName, string spriteName = null) =>
         new(null, null, null, null, null, null, UIBackgroundMaterial.From(materialName, spriteName));
 
+    /// <summary>
+    /// Same as <see cref="FromMaterial"/>, but the art the shader works on is your own image at
+    /// <paramref name="imageUrl"/> instead of a native game sprite — the game's animated effect
+    /// over your own background.
+    /// <para>
+    /// The effect composites additively, so it only reads over DARK art: the same material over
+    /// a white image saturates and shows nothing.
+    /// </para>
+    /// </summary>
+    public static UIBackground FromMaterialImage(string materialName, string imageUrl) =>
+        new(null, null, null, null, null, null, UIBackgroundMaterial.FromUrl(materialName, imageUrl));
+
     // ── Animated backgrounds ──────────────────────────────────────────────────
 
     /// <summary>
@@ -94,6 +106,14 @@ public readonly struct UIBackground {
             UIBackgroundMaterial.From(materialName, spriteName));
 
     /// <summary>
+    /// Layers a game material over the current background, working on your own image instead of
+    /// a native sprite. See <see cref="FromMaterialImage"/> for the dark-art caveat.
+    /// </summary>
+    public UIBackground WithMaterialImage(string materialName, string imageUrl) =>
+        new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
+            UIBackgroundMaterial.FromUrl(materialName, imageUrl));
+
+    /// <summary>
     /// Tints the material layer. The tint <b>multiplies</b> the rendered result, so it darkens and
     /// shifts but never brightens: a white/grey material (<c>GlowMat</c>,
     /// <c>JournalBackgroundSmoke</c>, <c>TreeBGSmoke_Bottom</c>) takes any color you give it,
@@ -103,6 +123,31 @@ public readonly struct UIBackground {
     public UIBackground WithMaterialColor(UIColor color) =>
         new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
             Material.HasValue ? Material.Value.WithColor(color) : null);
+
+    /// <summary>
+    /// Writes the material's <c>_Color</c>. Unlike <see cref="WithMaterialColor"/> — which is the
+    /// Image tint, clamped to 0..1 and therefore only able to darken — this multiplies the
+    /// shader's output per channel and accepts values above 1, so it can brighten and hue-shift.
+    /// It is the only way to colour one of the game's flowmap materials, which are all neutral
+    /// grey. Use <see cref="UIMaterialTint"/> for measured presets, e.g.
+    /// <c>UIMaterialTint.PassivesPurple</c>. No-op without a material.
+    /// </summary>
+    public UIBackground WithMaterialTint(UIColor tint) =>
+        new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
+            Material.HasValue ? Material.Value.WithTint(tint) : null);
+
+    /// <summary>
+    /// Overrides one named float property of the material's shader — chain it for several.
+    /// The useful ones on the <c>Stunlock/UI/UIFlowmap*</c> family: <c>_MotionStrength</c> and
+    /// <c>_MotionStrength2</c> (how far the flowmap drags the art), <c>_PhaseLength</c> and
+    /// <c>_PhaseLength2</c> (seconds per cycle — bigger is slower), <c>_NoiseTextureStrength</c>,
+    /// <c>_MainMotionStrength</c>, <c>_MainTextureDisplacement</c>.
+    /// A property the material does not declare is skipped with a client-side warning.
+    /// No-op without a material.
+    /// </summary>
+    public UIBackground WithMaterialParam(string property, float value) =>
+        new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
+            Material.HasValue ? Material.Value.WithParam(property, value) : null);
 
     // ── Animation modifiers ───────────────────────────────────────────────────
 

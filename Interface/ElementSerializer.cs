@@ -317,7 +317,7 @@ internal static class ElementSerializer
     // Hub: a branch whose only children are other branches — rendered as a transparent
     // connector so the parent draws V-fork lines directly to the grandchildren.
     bool isHub = branch.Children.Count > 0 && !branch.Children.Exists(c => c is not Branch);
-    if (isHub) d["hb"] = "1";
+    if (isHub) d["hub"] = "1";
     packets.Add(Packet(plugin, windowId, "ABR", d));
 
     // Children is a mixed list: Branch items form tree children (positioned below,
