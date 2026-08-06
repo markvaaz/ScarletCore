@@ -14,8 +14,8 @@ public class Button : UIElement, ITextElement {
   public UIBackground? HoverBackground { get; set; }
   /// <summary>Background shown while the button is pressed.</summary>
   public UIBackground? PressedBackground { get; set; }
-  /// <summary>When true, the button scales slightly on hover (1.0 → 1.05).</summary>
-  public bool HoverScale { get; set; }
+  /// <summary>Scale applied on hover (e.g. 1.05). 0 or 1 disables the effect.</summary>
+  public float HoverScale { get; set; }
   /// <summary>Horizontal alignment of the button label. Default: Left.</summary>
   public TextAlignment TextAlign { get; set; } = TextAlignment.Center;
 

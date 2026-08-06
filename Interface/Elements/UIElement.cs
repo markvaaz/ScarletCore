@@ -66,6 +66,17 @@ public abstract class UIElement {
   /// </summary>
   public Pivot? Pivot { get; set; }
 
+  // ─── World positioning (inside a MiniMap) ────────────────────────────────
+
+  /// <summary>
+  /// World X coordinate. Only meaningful when this element is a child of a
+  /// <see cref="Elements.MiniMap"/>: the element is then placed at this world spot on the map
+  /// after layout instead of following flow. Set together with <see cref="WorldZ"/>.
+  /// </summary>
+  public float? WorldX { get; set; }
+  /// <summary>World Z coordinate (+Z = north). See <see cref="WorldX"/>.</summary>
+  public float? WorldZ { get; set; }
+
   // ─── Interaction ─────────────────────────────────────────────────────────
 
   /// <summary>

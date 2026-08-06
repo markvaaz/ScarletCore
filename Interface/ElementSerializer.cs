@@ -105,6 +105,12 @@ internal static class ElementSerializer
         SerializeAccordion(packets, plugin, windowId, accordion, ref rowCounter, elemCounters);
       else if (child is Container container)
         SerializeContainer(packets, plugin, windowId, container, ref rowCounter, elemCounters);
+      else if (child is MiniMap minimap)
+      {
+        string mmId = minimap.ElemId ?? $"minimap_{rowCounter}";
+        rowCounter++;
+        SerializeMiniMap(packets, plugin, windowId, minimap, mmId, null, elemCounters);
+      }
       else if (child is ScrollCanvas scrollCanvas)
         SerializeScrollCanvas(packets, plugin, windowId, scrollCanvas, ref rowCounter, elemCounters);
       else if (child is VirtualList vl)
@@ -230,6 +236,7 @@ internal static class ElementSerializer
     if (ct.ScrollbarWidth != 8f) d["sw"] = F(ct.ScrollbarWidth);
     if (ct.Rotation != 0f) d["ro"] = F(ct.Rotation);
     if (ct.BoxShadow.HasValue) d["bx"] = ct.BoxShadow.Value.Raw;
+    SerializeRebuild(d, ct);
     // Standalone container (direct window child): emit anchor/position when either
     // Anchor or Position is explicitly set. Anchor defaults to TopLeft when only
     // Position is provided (e.g. Position = new Position(0, -34) without an Anchor).
@@ -245,6 +252,37 @@ internal static class ElementSerializer
     // Container children
     foreach (var child in ct.Children)
       SerializeRowElement(packets, plugin, windowId, child, containerId, elemCounters);
+  }
+
+  // ─── MiniMap ──────────────────────────────────────────────────────────────
+
+  /// <summary>
+  /// Emits an AMM (AddMiniMap) packet followed by one packet per marker child (each carrying
+  /// <c>pa</c> = this minimap and its own <c>wx</c>/<c>wz</c> world coords). Used for both a
+  /// standalone minimap (direct window child — emits anchor/position) and a nested one
+  /// (<paramref name="parentId"/> set — emits <c>pa</c>).
+  /// </summary>
+  static void SerializeMiniMap(List<ScarletPacket> packets, string plugin, string windowId,
+      MiniMap mm, string minimapId, string parentId, Dictionary<string, int> elemCounters)
+  {
+    elemCounters[minimapId] = 0;
+    var (type, d) = BuildElementData(mm, minimapId);
+    if (parentId != null)
+    {
+      d["pa"] = parentId;
+    }
+    else
+    {
+      // Standalone (direct window child): the client places it absolutely, so it needs an anchor.
+      d["an"] = (mm.Anchor ?? Anchor.TopLeft).ToString();
+      SerializePosition(d, mm.Position);
+      if (mm.Pivot.HasValue) d["pv"] = mm.Pivot.Value.ToString();
+    }
+    packets.Add(Packet(plugin, windowId, type, d));
+
+    // Markers — parented into the minimap; their world coords ride on each packet via SerializeBase.
+    foreach (var child in mm.Children)
+      SerializeRowElement(packets, plugin, windowId, child, minimapId, elemCounters);
   }
 
   // ─── ScrollCanvas ─────────────────────────────────────────────────────────
@@ -517,10 +555,19 @@ internal static class ElementSerializer
       if (ct.ScrollbarWidth != 8f) cd["sw"] = F(ct.ScrollbarWidth);
       if (ct.Rotation != 0f) cd["ro"] = F(ct.Rotation);
       if (ct.BoxShadow.HasValue) cd["bx"] = ct.BoxShadow.Value.Raw;
+      SerializeRebuild(cd, ct);
       packets.Add(Packet(plugin, windowId, "AC", cd));
       // Recurse into children using this container as the new parent.
       foreach (var child in ct.Children)
         SerializeRowElement(packets, plugin, windowId, child, containerId, elemCounters);
+      return;
+    }
+
+    // MiniMap nested inside a Row/Accordion/Container.
+    if (elem is MiniMap nestedMm)
+    {
+      string mmId = nestedMm.ElemId ?? NextElemId(elemCounters, parentId);
+      SerializeMiniMap(packets, plugin, windowId, nestedMm, mmId, parentId, elemCounters);
       return;
     }
 
@@ -536,6 +583,16 @@ internal static class ElementSerializer
     string elemId = elem.ElemId ?? NextElemId(elemCounters, parentId);
     var (type, d) = BuildElementData(elem, elemId);
     d["pa"] = parentId;
+    // Absolute-in-parent (position:absolute): a nested leaf with an explicit Anchor/Position is
+    // pinned relative to its parent instead of flowing among the siblings. Only standalone
+    // (window-direct) elements emitted this before, so a card's floating detail button was sent
+    // without its anchor and fell into the flow. Emit only when set, so flow leaves are unaffected.
+    if (elem.Anchor.HasValue || (elem.Position.HasValue && elem.Position.Value.HasValue))
+    {
+      d["an"] = (elem.Anchor ?? Anchor.TopLeft).ToString();
+      SerializePosition(d, elem.Position);
+      if (elem.Pivot.HasValue) d["pv"] = elem.Pivot.Value.ToString();
+    }
     packets.Add(Packet(plugin, windowId, type, d));
     SerializeTooltip(packets, plugin, windowId, elem, elemId);
   }
@@ -565,7 +622,7 @@ internal static class ElementSerializer
         if (b.TextAlign != TextAlignment.Left) d["ta"] = b.TextAlign.ToString();
         SerializeTextStyle(d, b);
         SerializeHoverBackground(d, b.HoverBackground, b.PressedBackground);
-        if (b.HoverScale) d["hs"] = "true";
+        if (b.HoverScale > 0f && b.HoverScale != 1f) d["hs"] = b.HoverScale.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return ("AB", d);
 
       case Input inp:
@@ -707,6 +764,16 @@ internal static class ElementSerializer
         if (acc.Gap > 0f) d["gp"] = F(acc.Gap);
         return ("AA", d);
 
+      case MiniMap mm:
+        // Base already emitted w/h/border/bg (bg = tint behind unrevealed areas). World rectangle
+        // is optional per-corner — an unset corner falls back to the full map client-side.
+        if (mm.MinWorldX.HasValue) d["mm0x"] = F(mm.MinWorldX.Value);
+        if (mm.MinWorldZ.HasValue) d["mm0z"] = F(mm.MinWorldZ.Value);
+        if (mm.MaxWorldX.HasValue) d["mm1x"] = F(mm.MaxWorldX.Value);
+        if (mm.MaxWorldZ.HasValue) d["mm1z"] = F(mm.MaxWorldZ.Value);
+        if (!mm.Clip) d["mcl"] = "0";
+        return ("AMM", d);
+
       case Container ct:
         d["cn"] = elemId;
         d["jc"] = ct.JustifyContent.ToString();
@@ -717,6 +784,7 @@ internal static class ElementSerializer
         if (ct.ScrollbarColor.HasValue) d["sc"] = ct.ScrollbarColor.Value;
         if (ct.ScrollbarBackgroundColor.HasValue) d["sb"] = ct.ScrollbarBackgroundColor.Value;
         if (ct.ScrollbarWidth != 8f) d["sw"] = F(ct.ScrollbarWidth);
+        SerializeRebuild(d, ct);
         return ("AC", d);
 
       default:
@@ -739,6 +807,9 @@ internal static class ElementSerializer
     SerializeSpacing(d, 'm', elem.Margin);
     if (elem.Rotation != 0f) d["ro"] = F(elem.Rotation);
     if (elem.BoxShadow.HasValue) d["bx"] = elem.BoxShadow.Value.Raw;
+    // World coords for MiniMap markers — harmless on any other element (ignored client-side).
+    if (elem.WorldX.HasValue) d["wx"] = F(elem.WorldX.Value);
+    if (elem.WorldZ.HasValue) d["wz"] = F(elem.WorldZ.Value);
   }
 
   /// <summary>Serializes UIBackground into data keys.</summary>
@@ -757,6 +828,15 @@ internal static class ElementSerializer
     if (t.TextGradient.HasValue && t.TextGradient.Value.HasValue) d["tg"] = t.TextGradient.Value.Raw;
     if (t.TextShadow.HasValue) d["ts"] = t.TextShadow.Value.Raw;
     if (t.TextOutline.HasValue) d["to"] = t.TextOutline.Value.Raw;
+  }
+
+  /// <summary>Emits the container Rebuild keys (rbd=1 + optional rfi/rfo) when opted in.</summary>
+  static void SerializeRebuild(Dictionary<string, string> d, Container ct)
+  {
+    if (!ct.Rebuild) return;
+    d["rbd"] = "1";
+    if (ct.RebuildFadeIn != 120) d["rfi"] = ct.RebuildFadeIn.ToString(IC);
+    if (ct.RebuildFadeOut != 0) d["rfo"] = ct.RebuildFadeOut.ToString(IC);
   }
 
   /// <summary>Serializes Border into data keys (dc=BorderColor, dw=BorderWidth, dr=BorderRadius).</summary>
@@ -866,6 +946,22 @@ internal static class ElementSerializer
       var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
       var counters = new Dictionary<string, int>();
       foreach (var child in ct.Children)
+      {
+        string childId = child.ElemId ?? NextElemId(counters, elemId);
+        var (childType, childData) = BuildElementData(child, childId);
+        childData["pa"] = elemId;
+        packets.Add(Packet(plugin, windowId, childType, childData));
+        SerializeTooltip(packets, plugin, windowId, child, childId);
+      }
+      return packets;
+    }
+
+    if (elem is MiniMap mm)
+    {
+      d["ck"] = "1";
+      var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
+      var counters = new Dictionary<string, int>();
+      foreach (var child in mm.Children)
       {
         string childId = child.ElemId ?? NextElemId(counters, elemId);
         var (childType, childData) = BuildElementData(child, childId);
