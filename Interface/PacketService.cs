@@ -179,6 +179,13 @@ internal static class PacketManager {
   [EventPriority(EventPriority.First)]
   public static void Auth(PlayerData player) {
     _handshakeSentAt[player.PlatformId] = DateTime.UtcNow;
+    // Interface auth is per-session, but the "interface-user" role is persisted to disk by RoleService.
+    // A player who authenticated in any past session would rejoin already carrying the role, so
+    // HasInterface() would report true and the server would start streaming packets to a client that
+    // never authenticated this session (e.g. running without the interface mod at all). Clear it on
+    // join; the client re-adds it via HELLO_TOKEN below if the interface is actually loaded now.
+    if (player.HasRole("interface-user"))
+      player.RemoveRole("interface-user");
   }
 
   /// <summary>Removes pending packets, handshake state, and the interface role from a disconnecting player.</summary>
