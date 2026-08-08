@@ -34,6 +34,19 @@ public class MiniMap : UIElement, IEnumerable<UIElement> {
   /// <summary>Clip markers to the map rectangle. Default: true.</summary>
   public bool Clip { get; set; } = true;
 
+  /// <summary>
+  /// Draw a live dot for the local player on this minimap, an arrow that follows the player's world
+  /// position and rotates with the camera exactly like the game's own minimap. Entirely client-side:
+  /// the position is read from the local player each frame and never travels over the network — the
+  /// server only decides <em>whether</em> the marker is shown. The dot uses the game's own
+  /// <c>MapIcon_Player</c> sprite and hides itself when the player leaves the visible rectangle.
+  /// Default: false.
+  /// </summary>
+  public bool ShowPlayerMarker { get; set; } = false;
+
+  /// <summary>Size of the player marker in pixels, when <see cref="ShowPlayerMarker"/> is on. Default: 24.</summary>
+  public float PlayerMarkerSize { get; set; } = 24f;
+
   /// <summary>Adds a marker element (enables collection initializer syntax).</summary>
   public void Add(UIElement child) => Children.Add(child);
   public IEnumerator<UIElement> GetEnumerator() => Children.GetEnumerator();

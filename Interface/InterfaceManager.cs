@@ -28,6 +28,19 @@ public enum UnitHudShow {
 }
 
 /// <summary>
+/// Whether the ability bar's extra (shift) slot is shown on the client. See
+/// <see cref="InterfaceManager.SetExtraSlot"/>.
+/// </summary>
+public enum ExtraSlotMode {
+  /// <summary>Pinned visible even while the slot is empty.</summary>
+  Always,
+  /// <summary>Visible only while an ability is bound to it — the game's own default behaviour.</summary>
+  WhenBound,
+  /// <summary>Kept hidden even while an ability is bound to it.</summary>
+  Hidden,
+}
+
+/// <summary>
 /// Main entry point for the ScarletInterface server-side API.
 /// Build windows directly with <c>new Window(player, plugin, id) { ... }.Send();</c>.
 /// </summary>
@@ -336,6 +349,32 @@ public static class InterfaceManager {
     };
 
   static string B(bool v) => v ? "1" : "0";
+
+  // ── Ability bar extra (shift) slot ─────────────────────────────────────────────
+
+  /// <summary>
+  /// Suggests whether the ability bar's <b>extra (shift) slot</b> is shown: the fourth slot the
+  /// game normally reveals only once a shift-cast ability is bound to it. <see cref="ExtraSlotMode"/>
+  /// picks between always shown, shown only when bound (the game's own default), and always hidden.
+  ///
+  /// <b>This is a suggestion, not a setting.</b> The player owns this toggle in the mod's Options
+  /// tab: what you send only takes effect while they have never touched it, and the moment they do
+  /// it is theirs on your server and every other. Call once on <c>InterfaceAuth</c>.
+  /// </summary>
+  public static void SetExtraSlot(PlayerData player, string plugin, ExtraSlotMode mode) =>
+    PacketManager.SendPacket(player, ExtraSlotPacket(plugin, mode));
+
+  /// <summary>Suggests the extra-slot visibility to every connected player. See <see cref="SetExtraSlot"/>.</summary>
+  public static void SetExtraSlotAll(string plugin, ExtraSlotMode mode) =>
+    PacketManager.SendPacketToAll(ExtraSlotPacket(plugin, mode));
+
+  static ScarletPacket ExtraSlotPacket(string plugin, ExtraSlotMode mode) =>
+    new() {
+      Type = "ESV",
+      Plugin = plugin,
+      Window = "",
+      Data = new() { ["esm"] = ((int)mode).ToString(CultureInfo.InvariantCulture) },
+    };
 
   // ── Audio ─────────────────────────────────────────────────────────────────────
   //

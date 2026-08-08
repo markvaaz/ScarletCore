@@ -772,6 +772,9 @@ internal static class ElementSerializer
         if (mm.MaxWorldX.HasValue) d["mm1x"] = F(mm.MaxWorldX.Value);
         if (mm.MaxWorldZ.HasValue) d["mm1z"] = F(mm.MaxWorldZ.Value);
         if (!mm.Clip) d["mcl"] = "0";
+        // Live local-player dot (client-side only — position never travels; server just opts in).
+        if (mm.ShowPlayerMarker) d["mpm"] = "1";
+        if (mm.ShowPlayerMarker && mm.PlayerMarkerSize != 24f) d["mps"] = F(mm.PlayerMarkerSize);
         return ("AMM", d);
 
       case Container ct:
