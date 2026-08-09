@@ -126,6 +126,21 @@ public class Window : IEnumerable<UIElement>
   /// <summary>If true, window is hidden when any in-game menu opens. Default: false.</summary>
   public bool HideOnMenuOpen { get; set; } = false;
 
+  // ─── Rebuild ─────────────────────────────────────────────────────────────
+
+  /// <summary>
+  /// Per-send opt-in: when true, every top-level element of this window is cleared and rebuilt
+  /// from scratch on the client (with a fade-in) instead of diff-patched in place. The whole-window
+  /// mirror of <see cref="Elements.UIElement.Rebuild"/> — use for a full view swap where morphing
+  /// the old layout into the new one leaves visual residue. Leave false (default) for in-place
+  /// updates. Ignored on the first send (a fresh window is already built from nothing).
+  /// </summary>
+  public bool Rebuild { get; set; }
+  /// <summary>Fade-in duration of the new content in ms when <see cref="Rebuild"/> is set. 0 = no fade.</summary>
+  public int RebuildFadeIn { get; set; } = 120;
+  /// <summary>Fade-out duration of the old content in ms. v1 client ignores this (fade-in only).</summary>
+  public int RebuildFadeOut { get; set; } = 0;
+
   /// <summary>
   /// If true, this window is a <b>recipe</b> for the Unit Proximity HUD instead of a window to open.
   /// The client stores its packets and reproduces them once per entity a <see cref="InterfaceManager.UnitHud"/>

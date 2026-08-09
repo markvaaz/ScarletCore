@@ -77,6 +77,21 @@ public abstract class UIElement {
   /// <summary>World Z coordinate (+Z = north). See <see cref="WorldX"/>.</summary>
   public float? WorldZ { get; set; }
 
+  // ─── Rebuild (parent elements: Row / Accordion / Container / …) ───────────
+
+  /// <summary>
+  /// Per-send opt-in: when true, this element's children are cleared and rebuilt from scratch on
+  /// the client (with a fade-in) instead of diff-patched in place. Use for a clean view swap
+  /// (e.g. tab content) where morphing the old children into the new ones leaves visual residue.
+  /// Leave false (default) for in-place value updates — diff-patch is cheaper and doesn't flash.
+  /// No effect on leaf elements (they have no children to rebuild).
+  /// </summary>
+  public bool Rebuild { get; set; }
+  /// <summary>Fade-in duration of the new content in ms when <see cref="Rebuild"/> is set. 0 = no fade.</summary>
+  public int RebuildFadeIn { get; set; } = 120;
+  /// <summary>Fade-out duration of the old content in ms. v1 client ignores this (fade-in only).</summary>
+  public int RebuildFadeOut { get; set; } = 0;
+
   // ─── Interaction ─────────────────────────────────────────────────────────
 
   /// <summary>

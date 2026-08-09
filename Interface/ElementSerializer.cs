@@ -51,6 +51,12 @@ internal static class ElementSerializer
     if (window.NativeParent != null) wd["np"] = window.NativeParent;
     if (window.Rotation != 0f) wd["ro"] = F(window.Rotation);
     if (window.HideOnMenuOpen) wd["hm"] = "true";
+    if (window.Rebuild)
+    {
+      wd["rbd"] = "1";
+      if (window.RebuildFadeIn != 120) wd["rfi"] = window.RebuildFadeIn.ToString(IC);
+      if (window.RebuildFadeOut != 0) wd["rfo"] = window.RebuildFadeOut.ToString(IC);
+    }
     if (window.BoxShadow.HasValue) wd["bx"] = window.BoxShadow.Value.Raw;
     if (window.OpenAnimation != WindowAnimation.None) wd["oa"] = window.OpenAnimation.ToString();
     if (window.CloseAnimation != WindowAnimation.None) wd["ca"] = window.CloseAnimation.ToString();
@@ -164,6 +170,7 @@ internal static class ElementSerializer
     if (row.ScrollbarWidth != 8f) d["sw"] = F(row.ScrollbarWidth);
     if (row.Rotation != 0f) d["ro"] = F(row.Rotation);
     if (row.BoxShadow.HasValue) d["bx"] = row.BoxShadow.Value.Raw;
+    SerializeRebuild(d, row);
     packets.Add(Packet(plugin, windowId, "AR", d));
 
     // Row children
@@ -200,6 +207,7 @@ internal static class ElementSerializer
     if (acc.Gap > 0f) d["gp"] = F(acc.Gap);
     if (acc.Rotation != 0f) d["ro"] = F(acc.Rotation);
     if (acc.BoxShadow.HasValue) d["bx"] = acc.BoxShadow.Value.Raw;
+    SerializeRebuild(d, acc);
     packets.Add(Packet(plugin, windowId, "AA", d));
 
     // Accordion children behave like row children
@@ -747,6 +755,7 @@ internal static class ElementSerializer
         if (row.ScrollbarColor.HasValue) d["sc"] = row.ScrollbarColor.Value;
         if (row.ScrollbarBackgroundColor.HasValue) d["sb"] = row.ScrollbarBackgroundColor.Value;
         if (row.ScrollbarWidth != 8f) d["sw"] = F(row.ScrollbarWidth);
+        SerializeRebuild(d, row);
         return ("AR", d);
 
       case Accordion acc:
@@ -762,6 +771,7 @@ internal static class ElementSerializer
         if (acc.ContentBackground.HasValue) acc.ContentBackground.Value.Apply(d, "j");
         if (acc.FontSize > 0f) d["fs"] = F(acc.FontSize);
         if (acc.Gap > 0f) d["gp"] = F(acc.Gap);
+        SerializeRebuild(d, acc);
         return ("AA", d);
 
       case MiniMap mm:
@@ -833,13 +843,14 @@ internal static class ElementSerializer
     if (t.TextOutline.HasValue) d["to"] = t.TextOutline.Value.Raw;
   }
 
-  /// <summary>Emits the container Rebuild keys (rbd=1 + optional rfi/rfo) when opted in.</summary>
-  static void SerializeRebuild(Dictionary<string, string> d, Container ct)
+  /// <summary>Emits the Rebuild keys (rbd=1 + optional rfi/rfo) when opted in. Works for any
+  /// parent element (Row, Accordion, Container) — the props live on UIElement.</summary>
+  static void SerializeRebuild(Dictionary<string, string> d, UIElement elem)
   {
-    if (!ct.Rebuild) return;
+    if (!elem.Rebuild) return;
     d["rbd"] = "1";
-    if (ct.RebuildFadeIn != 120) d["rfi"] = ct.RebuildFadeIn.ToString(IC);
-    if (ct.RebuildFadeOut != 0) d["rfo"] = ct.RebuildFadeOut.ToString(IC);
+    if (elem.RebuildFadeIn != 120) d["rfi"] = elem.RebuildFadeIn.ToString(IC);
+    if (elem.RebuildFadeOut != 0) d["rfo"] = elem.RebuildFadeOut.ToString(IC);
   }
 
   /// <summary>Serializes Border into data keys (dc=BorderColor, dw=BorderWidth, dr=BorderRadius).</summary>
