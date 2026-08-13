@@ -449,13 +449,18 @@ public static class InterfaceManager {
   /// Overrides an ability's hover-tooltip text in a player's ability bar. Pass null/empty for a
   /// field to keep the game's own value for that field (e.g. change only the description).
   /// <paramref name="abilityGuid"/> is the ability's PrefabGUID hash (e.g. <c>prefabGuid.GuidHash</c>).
+  /// <paramref name="subtitle"/> overrides the SubHeader "category" line (e.g. "Veil, Travel").
+  /// <paramref name="rows"/> overrides the value rows (cooldown, cast time, charges, …) by their
+  /// visible index, top to bottom starting at 0; an empty string hides that row.
   /// </summary>
-  public static void SetAbilityTooltip(PlayerData player, string plugin, int abilityGuid, string title, string description) =>
-    PacketManager.SendPacket(player, AbilityTooltipPacket(plugin, abilityGuid, title, description));
+  public static void SetAbilityTooltip(PlayerData player, string plugin, int abilityGuid, string title, string description,
+      string subtitle = null, Dictionary<int, string> rows = null) =>
+    PacketManager.SendPacket(player, AbilityTooltipPacket(plugin, abilityGuid, title, description, subtitle, rows));
 
   /// <summary>Overrides an ability's tooltip text on every connected player. See <see cref="SetAbilityTooltip"/>.</summary>
-  public static void SetAbilityTooltipAll(string plugin, int abilityGuid, string title, string description) =>
-    PacketManager.SendPacketToAll(AbilityTooltipPacket(plugin, abilityGuid, title, description));
+  public static void SetAbilityTooltipAll(string plugin, int abilityGuid, string title, string description,
+      string subtitle = null, Dictionary<int, string> rows = null) =>
+    PacketManager.SendPacketToAll(AbilityTooltipPacket(plugin, abilityGuid, title, description, subtitle, rows));
 
   /// <summary>Removes all overrides (icon + tooltip) for an ability on a player's client.</summary>
   public static void ClearAbilityVisual(PlayerData player, string plugin, int abilityGuid) =>
@@ -471,10 +476,15 @@ public static class InterfaceManager {
       Data = new() { ["agid"] = abilityGuid.ToString(), ["aic"] = icon ?? "" }
     };
 
-  static ScarletPacket AbilityTooltipPacket(string plugin, int abilityGuid, string title, string description) {
+  static ScarletPacket AbilityTooltipPacket(string plugin, int abilityGuid, string title, string description,
+      string subtitle = null, Dictionary<int, string> rows = null) {
     var data = new Dictionary<string, string> { ["agid"] = abilityGuid.ToString() };
     if (!string.IsNullOrEmpty(title)) data["atl"] = title;
     if (!string.IsNullOrEmpty(description)) data["ade"] = description;
+    if (!string.IsNullOrEmpty(subtitle)) data["asb"] = subtitle;
+    // Wire format the client parses: newline-separated "index=text" (empty text hides the row).
+    if (rows != null && rows.Count > 0)
+      data["arw"] = string.Join("\n", rows.Select(kv => $"{kv.Key}={kv.Value}"));
     return new ScarletPacket { Type = "SAT", Plugin = plugin, Window = "$ability", Data = data };
   }
 
