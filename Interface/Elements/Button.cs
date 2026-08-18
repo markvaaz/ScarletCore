@@ -18,6 +18,10 @@ public class Button : UIElement, ITextElement {
   public float HoverScale { get; set; }
   /// <summary>Horizontal alignment of the button label. Default: Left.</summary>
   public TextAlignment TextAlign { get; set; } = TextAlignment.Center;
+  /// <summary>Wrap the label onto multiple lines when it exceeds the button width,
+  /// instead of overflowing past the edges. Off by default (single-line). Give the button
+  /// enough height (or Height="auto") for the extra lines.</summary>
+  public bool Wrap { get; set; }
 
   // ─── ITextElement ────────────────────────────────────────────────────────
   public UIColor? TextColor { get; set; }

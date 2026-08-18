@@ -628,6 +628,7 @@ internal static class ElementSerializer
         d["cm"] = b.Command ?? string.Empty;
         if (b.BoxSizing != BoxSizing.ContentBox) d["bs"] = b.BoxSizing.ToString();
         if (b.TextAlign != TextAlignment.Left) d["ta"] = b.TextAlign.ToString();
+        if (b.Wrap) d["wr"] = "true";
         SerializeTextStyle(d, b);
         SerializeHoverBackground(d, b.HoverBackground, b.PressedBackground);
         if (b.HoverScale > 0f && b.HoverScale != 1f) d["hs"] = b.HoverScale.ToString(System.Globalization.CultureInfo.InvariantCulture);

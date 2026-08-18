@@ -149,6 +149,17 @@ public readonly struct UIBackground {
         new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
             Material.HasValue ? Material.Value.WithParam(property, value) : null);
 
+    /// <summary>
+    /// Feeds this background's own generated art — its <see cref="WithColor"/> or
+    /// <see cref="WithGradient"/>, baked to a sprite with the same corner radius — to the material's
+    /// shader, so the native material animates over the mod's custom background instead of a native
+    /// sprite or remote image. No-op without a material; ignored if a MaterialSprite/MaterialImage
+    /// is also set (those win). Pair with <see cref="WithMaterial"/>.
+    /// </summary>
+    public UIBackground WithMaterialFromBackground() =>
+        new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
+            Material.HasValue ? Material.Value.WithFromBackground() : null);
+
     // ── Animation modifiers ───────────────────────────────────────────────────
 
     /// <summary>Sets the trigger(s) that start this animation.</summary>

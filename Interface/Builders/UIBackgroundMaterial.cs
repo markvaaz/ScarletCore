@@ -22,11 +22,15 @@ public readonly struct UIBackgroundMaterial {
   internal readonly UIColor? Color;
   internal readonly UIColor? Tint;
   internal readonly string Parameters;
+  // When true and no sprite/image is set, the client feeds the background's own generated art
+  // (its Color or Gradient, baked to a sprite with the same corner radius) to the shader — so the
+  // native material animates over the mod's custom background instead of a native/remote texture.
+  internal readonly bool FromBackground;
 
   UIBackgroundMaterial(string name, string spriteName, string imageUrl, UIColor? color,
-      UIColor? tint, string parameters) {
+      UIColor? tint, string parameters, bool fromBackground = false) {
     Name = name; SpriteName = spriteName; ImageUrl = imageUrl; Color = color;
-    Tint = tint; Parameters = parameters;
+    Tint = tint; Parameters = parameters; FromBackground = fromBackground;
   }
 
   internal static UIBackgroundMaterial From(string name, string spriteName) =>
@@ -37,11 +41,19 @@ public readonly struct UIBackgroundMaterial {
 
   /// <summary>Sets the native game sprite that feeds the shader's main texture.</summary>
   public UIBackgroundMaterial WithSprite(string spriteName) =>
-      new(Name, spriteName, ImageUrl, Color, Tint, Parameters);
+      new(Name, spriteName, ImageUrl, Color, Tint, Parameters, FromBackground);
 
   /// <summary>Sets a remote image as the art the shader works on. The sprite wins if both are set.</summary>
   public UIBackgroundMaterial WithImage(string imageUrl) =>
-      new(Name, SpriteName, imageUrl, Color, Tint, Parameters);
+      new(Name, SpriteName, imageUrl, Color, Tint, Parameters, FromBackground);
+
+  /// <summary>
+  /// Feeds the background's own generated art (its Color or Gradient) to the shader instead of a
+  /// native sprite or remote image — so the material animates over the mod's custom background.
+  /// No-op when a sprite or image is also set (those win).
+  /// </summary>
+  public UIBackgroundMaterial WithFromBackground() =>
+      new(Name, SpriteName, ImageUrl, Color, Tint, Parameters, true);
 
   /// <summary>
   /// Writes the shader's <c>_Color</c>. Unlike <see cref="WithColor"/> this multiplies per channel
@@ -49,7 +61,7 @@ public readonly struct UIBackgroundMaterial {
   /// See <see cref="UIMaterialTint"/> for measured presets.
   /// </summary>
   public UIBackgroundMaterial WithTint(UIColor tint) =>
-      new(Name, SpriteName, ImageUrl, Color, tint, Parameters);
+      new(Name, SpriteName, ImageUrl, Color, tint, Parameters, FromBackground);
 
   /// <summary>
   /// Overrides one named float property of the shader, e.g. <c>_MotionStrength</c> (how far the
@@ -59,7 +71,7 @@ public readonly struct UIBackgroundMaterial {
   public UIBackgroundMaterial WithParam(string property, float value) {
     var entry = $"{property}={value.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
     var merged = string.IsNullOrEmpty(Parameters) ? entry : $"{Parameters}|{entry}";
-    return new(Name, SpriteName, ImageUrl, Color, Tint, merged);
+    return new(Name, SpriteName, ImageUrl, Color, Tint, merged, FromBackground);
   }
 
   /// <summary>
@@ -70,12 +82,12 @@ public readonly struct UIBackgroundMaterial {
   /// its own hue. Alpha fades the whole layer.
   /// </summary>
   public UIBackgroundMaterial WithColor(UIColor color) =>
-      new(Name, SpriteName, ImageUrl, color, Tint, Parameters);
+      new(Name, SpriteName, ImageUrl, color, Tint, Parameters, FromBackground);
 
   /// <summary>
   /// Writes material keys using a short-token prefix (matches UIBackground.Apply prefix).
   /// Suffixes: mt=Material, ms=MaterialSprite, mi=MaterialImage, mc=MaterialColor,
-  /// mn=MaterialTint, mp=MaterialParams.
+  /// mn=MaterialTint, mp=MaterialParams, mb=MaterialFromBackground.
   /// </summary>
   internal void Apply(Dictionary<string, string> data, string prefix) {
     data[$"{prefix}mt"] = Name;
@@ -84,5 +96,6 @@ public readonly struct UIBackgroundMaterial {
     if (Color.HasValue) data[$"{prefix}mc"] = Color.Value;
     if (Tint.HasValue) data[$"{prefix}mn"] = Tint.Value;
     if (Parameters != null) data[$"{prefix}mp"] = Parameters;
+    if (FromBackground) data[$"{prefix}mb"] = "1";
   }
 }
