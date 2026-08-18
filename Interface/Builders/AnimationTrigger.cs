@@ -6,6 +6,7 @@ namespace ScarletCore.Interface.Builders;
 /// </summary>
 [System.Flags]
 public enum AnimationTrigger {
+  /// <summary>No trigger — the animation never starts on its own.</summary>
   None = 0,
   /// <summary>Starts immediately when the element is created and runs indefinitely.</summary>
   Always = 1,

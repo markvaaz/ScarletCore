@@ -18,11 +18,16 @@ namespace ScarletCore.Interface.Builders;
 ///   new Keybind(InputKey.F5, ".refreshshop",     "Refresh Shop"));
 /// </example>
 public readonly struct Keybind {
+  /// <summary>Default key, used until the player rebinds it from the Controls menu.</summary>
   public InputKey Key { get; }
+  /// <summary>Chat command run on press; also the stable identity the player's override is keyed to.</summary>
   public string Command { get; }
+  /// <summary>Text shown next to the rebind button in the Controls menu. Falls back to <see cref="Command"/> when null.</summary>
   public string Label { get; }
+  /// <summary>Window id to toggle: press closes it when open, otherwise runs <see cref="Command"/>. Null = not a toggle.</summary>
   public string ToggleWindow { get; }
 
+  /// <summary>Creates a keybind. See the type summary for how <paramref name="toggleWindow"/> turns the key into a window toggle.</summary>
   public Keybind(InputKey key, string command, string label = null, string toggleWindow = null) {
     Key = key;
     Command = command;

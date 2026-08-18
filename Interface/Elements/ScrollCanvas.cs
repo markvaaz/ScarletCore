@@ -70,6 +70,7 @@ public class ScrollCanvas : UIElement, IEnumerable<Branch>
 
   /// <summary>Adds a root branch (enables collection initializer syntax).</summary>
   public void Add(Branch branch) => Branches.Add(branch);
+  /// <summary>Enumerates the root branches.</summary>
   public IEnumerator<Branch> GetEnumerator() => Branches.GetEnumerator();
   IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

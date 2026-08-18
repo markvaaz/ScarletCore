@@ -41,10 +41,16 @@ public class Input : UIElement, ITextElement
   public string OnSubmit { get; set; }
 
   // ─── ITextElement ────────────────────────────────────────────────────────
+  /// <inheritdoc/>
   public UIColor? TextColor { get; set; }
+  /// <inheritdoc/>
   public float FontSize { get; set; }
+  /// <inheritdoc/>
   public string Font { get; set; }
+  /// <inheritdoc/>
   public UITextGradient? TextGradient { get; set; }
+  /// <inheritdoc/>
   public UITextShadow? TextShadow { get; set; }
+  /// <inheritdoc/>
   public UITextOutline? TextOutline { get; set; }
 }

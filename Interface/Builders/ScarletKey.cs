@@ -20,6 +20,7 @@ namespace ScarletCore.Interface.Builders;
 /// </code>
 /// </example>
 /// </summary>
+#pragma warning disable CS1591 // self-documenting KeyCode mirror; per-key summaries would be noise
 public enum InputKey {
   None = 0,
 
@@ -130,3 +131,4 @@ public enum InputKey {
   Mouse5 = 328,
   Mouse6 = 329,
 }
+#pragma warning restore CS1591

@@ -38,6 +38,7 @@ public class Accordion : UIElement, IEnumerable<UIElement> {
 
   /// <summary>Adds a child element (enables collection initializer syntax).</summary>
   public void Add(UIElement child) => Children.Add(child);
+  /// <summary>Enumerates the child elements.</summary>
   public IEnumerator<UIElement> GetEnumerator() => Children.GetEnumerator();
   IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

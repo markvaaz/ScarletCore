@@ -36,6 +36,7 @@ public class Branch : UIElement, IEnumerable<UIElement>
   /// </summary>
   public List<UIElement> Children { get; set; } = [];
 
+  /// <summary>Creates an empty branch.</summary>
   public Branch() { }
 
   /// <summary>Creates a branch with an explicit element ID.</summary>
@@ -43,6 +44,7 @@ public class Branch : UIElement, IEnumerable<UIElement>
 
   /// <summary>Adds any child element (enables collection initializer syntax).</summary>
   public void Add(UIElement child) => Children.Add(child);
+  /// <summary>Enumerates the child elements.</summary>
   public IEnumerator<UIElement> GetEnumerator() => Children.GetEnumerator();
   IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

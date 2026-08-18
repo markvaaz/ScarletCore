@@ -49,6 +49,7 @@ public class MiniMap : UIElement, IEnumerable<UIElement> {
 
   /// <summary>Adds a marker element (enables collection initializer syntax).</summary>
   public void Add(UIElement child) => Children.Add(child);
+  /// <summary>Enumerates the child elements.</summary>
   public IEnumerator<UIElement> GetEnumerator() => Children.GetEnumerator();
   IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

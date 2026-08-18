@@ -329,6 +329,7 @@ public class Window : IEnumerable<UIElement>
     PacketManager.SendPacket(player, ElementSerializer.SerializeDeleteElement(plugin, windowId, elemId));
   }
 
+  /// <summary>Enumerates the window's child elements.</summary>
   public IEnumerator<UIElement> GetEnumerator() => Children.GetEnumerator();
   IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
