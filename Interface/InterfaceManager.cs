@@ -167,6 +167,38 @@ public static class InterfaceManager {
     });
 
   /// <summary>
+  /// Lazy counterpart to <see cref="PreCacheImages(string, string[])"/>: same disk caching and same
+  /// "size changed → re-download" check, but meant to be sent alongside the window that uses these
+  /// URLs rather than eagerly at load time. Each image is only downloaded the first time a window
+  /// needs it. Use this for images that not every session will display, so clients don't pay to
+  /// fetch the whole set up front. Sends to every connected player's client.
+  /// </summary>
+  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
+  /// <param name="urls">The URLs the window you are about to send uses.</param>
+  public static void LazyCacheImages(string plugin, string[] urls) =>
+    PacketManager.SendPacketToAll(new ScarletPacket {
+      Type = "LI",
+      Plugin = plugin,
+      Window = "$precache",
+      Data = new() { ["ul"] = string.Join("\n", urls) }
+    });
+
+  /// <summary>
+  /// Lazy counterpart to <see cref="PreCacheImages(PlayerData, string, string[])"/> for a specific
+  /// player's client. See <see cref="LazyCacheImages(string, string[])"/>.
+  /// </summary>
+  /// <param name="player">The player to send the lazy-cache request to.</param>
+  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
+  /// <param name="urls">The URLs the window you are about to send uses.</param>
+  public static void LazyCacheImages(PlayerData player, string plugin, string[] urls) =>
+    PacketManager.SendPacket(player, new ScarletPacket {
+      Type = "LI",
+      Plugin = plugin,
+      Window = "$precache",
+      Data = new() { ["ul"] = string.Join("\n", urls) }
+    });
+
+  /// <summary>
   /// Pre-builds the sprite name index on every connected player's client so that
   /// subsequent windows that reference game sprites by name open without a freeze.
   /// Call this once at load time (e.g. on InterfaceAuth), before sending any windows
