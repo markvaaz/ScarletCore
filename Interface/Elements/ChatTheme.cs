@@ -136,12 +136,18 @@ public sealed class ChatInputStyle : ChatArea {
   public UIColor? TextColor { get; set; }
   public UIColor? PlaceholderColor { get; set; }
   public UIColor? CaretColor { get; set; }
+  /// <summary>Input text size (typed text + placeholder), px. Negative = keep default.</summary>
+  public float FontSize { get; set; } = -1;
+  /// <summary>Height of the input box, px. Negative = keep default.</summary>
+  public float Height { get; set; } = -1;
 
   internal override Dictionary<string, string> Data() {
     var d = base.Data();
     if (TextColor.HasValue) d["TextColor"] = TextColor.Value;
     if (PlaceholderColor.HasValue) d["PlaceholderColor"] = PlaceholderColor.Value;
     if (CaretColor.HasValue) d["CaretColor"] = CaretColor.Value;
+    if (FontSize > 0) d["FontSize"] = ChatTheme.F(FontSize);
+    if (Height > 0) d["Height"] = ChatTheme.F(Height);
     return d;
   }
 }
@@ -187,6 +193,9 @@ public sealed class ChatLinesStyle {
   public float Spacing { get; set; } = -1;
   /// <summary>Default text colour for untagged message text.</summary>
   public UIColor? TextColor { get; set; }
+  /// <summary>Message text size, px. Negative = keep default. The timestamp's Scale is relative
+  /// to this, so it follows along.</summary>
+  public float FontSize { get; set; } = -1;
 
   internal Dictionary<string, string> Data() {
     var d = new Dictionary<string, string>();
@@ -195,6 +204,7 @@ public sealed class ChatLinesStyle {
     if (BubblePadding.HasValue) d["BubblePadding"] = ChatTheme.Sp(BubblePadding.Value);
     if (Spacing >= 0) d["Spacing"] = ChatTheme.F(Spacing);
     if (TextColor.HasValue) d["TextColor"] = TextColor.Value;
+    if (FontSize > 0) d["FontSize"] = ChatTheme.F(FontSize);
     return d;
   }
 }
@@ -220,6 +230,8 @@ public sealed class ChatTagStyle {
   /// <summary>Chip outline — a keycap-style frame around the card. Its Radius, when set, wins over
   /// <see cref="Radius"/>.</summary>
   public Border? Border { get; set; }
+  /// <summary>Tag label size, px (the chip resizes with it). Negative = keep the line size.</summary>
+  public float FontSize { get; set; } = -1;
 
   /// <summary>
   /// Per-channel colour overrides — the chip shape (radius/width/padding) stays global, the colours
@@ -247,6 +259,7 @@ public sealed class ChatTagStyle {
         $"{(c.BorderColor.HasValue ? (string)c.BorderColor.Value : "")}";
     }
     if (TextColor.HasValue) d["TextColor"] = TextColor.Value;
+    if (FontSize > 0) d["FontSize"] = ChatTheme.F(FontSize);
     if (Uppercase) d["Uppercase"] = "1";
     if (HideBrackets) d["HideBrackets"] = "1";
     if (Hide) d["Hide"] = "1";
@@ -312,6 +325,8 @@ public sealed class ChatHintStyle {
   public UIColor? KeyTextColor { get; set; }
   /// <summary>Keycap corner radius (default 4).</summary>
   public float KeyRadius { get; set; } = -1;
+  /// <summary>Hint text size (keycap + label), px. Negative = default (12).</summary>
+  public float FontSize { get; set; } = -1;
   /// <summary>Remove the hint row entirely.</summary>
   public bool Hide { get; set; }
 
@@ -323,6 +338,7 @@ public sealed class ChatHintStyle {
     if (KeyBackground.HasValue) d["KeyBgColor"] = KeyBackground.Value;
     if (KeyTextColor.HasValue) d["KeyTextColor"] = KeyTextColor.Value;
     if (KeyRadius >= 0) d["KeyRadius"] = ChatTheme.F(KeyRadius);
+    if (FontSize > 0) d["FontSize"] = ChatTheme.F(FontSize);
     if (Hide) d["Hide"] = "1";
     return d;
   }
