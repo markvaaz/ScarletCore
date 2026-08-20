@@ -561,6 +561,18 @@ public static class InterfaceManager {
   public static ItemVisualBuilder ItemVisualAll(string plugin, int itemGuid) =>
     new(plugin, null, itemGuid);
 
+  /// <summary>
+  /// Restyles part of the ScarletInterface client's native chat (message container, input box, or the
+  /// filter-tab bar) with a background/border/material skin. See <see cref="ChatStyleBuilder"/>.
+  /// Resend on <c>PlayerEvents.InterfaceAuth</c> so it survives a relog.
+  /// </summary>
+  public static ChatStyleBuilder ChatStyle(PlayerData player, string plugin, ChatTarget target) =>
+    new(plugin, player, target);
+
+  /// <summary>Restyles the chat for every connected player. See <see cref="ChatStyle"/>.</summary>
+  public static ChatStyleBuilder ChatStyleAll(string plugin, ChatTarget target) =>
+    new(plugin, null, target);
+
   /// <summary>Removes every override for an item type on a player's client, restoring the game's own
   /// icon, name and description.</summary>
   public static void ClearItemVisual(PlayerData player, string plugin, int itemGuid) =>
