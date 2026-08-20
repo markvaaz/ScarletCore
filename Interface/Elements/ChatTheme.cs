@@ -307,21 +307,20 @@ public sealed class ChatIconsStyle {
 }
 
 /// <summary>
-/// The native "Tab — Cycle Chat Channel" hint below the input. When the theme's Container is Full,
-/// the client pulls this row inside the panel; this section restyles it — a keycap chip behind the
-/// "Tab" key name, plus label text/colour overrides (the label follows the game language unless
-/// <see cref="Text"/> replaces it).
+/// The "Tab — switch channel" hint below the input. When the theme's Container is Full, the client
+/// pulls this row inside the panel; this section restyles it — the keycap chip colours/shape and
+/// the label colour. The key name(s) on the keycap ("Tab", "@") are decided by the CLIENT, not the
+/// server, so there is no key-text config here. The label follows the game language unless
+/// <see cref="Text"/> replaces it.
 /// </summary>
 public sealed class ChatHintStyle {
-  /// <summary>The key name on the keycap (default "Tab").</summary>
-  public string Key { get; set; }
-  /// <summary>Replaces the "Cycle Chat Channel" label (e.g. "Trocar canal"). Null = keep native.</summary>
+  /// <summary>Replaces the localized "switch channel" label. Null = client's localized default.</summary>
   public string Text { get; set; }
   /// <summary>Label colour.</summary>
   public UIColor? TextColor { get; set; }
-  /// <summary>Keycap chip colour behind the "Tab" key name.</summary>
+  /// <summary>Keycap chip colour behind the key name.</summary>
   public UIColor? KeyBackground { get; set; }
-  /// <summary>"Tab" key-name text colour.</summary>
+  /// <summary>Key-name text colour.</summary>
   public UIColor? KeyTextColor { get; set; }
   /// <summary>Keycap corner radius (default 4).</summary>
   public float KeyRadius { get; set; } = -1;
@@ -332,7 +331,6 @@ public sealed class ChatHintStyle {
 
   internal Dictionary<string, string> Data() {
     var d = new Dictionary<string, string>();
-    if (!string.IsNullOrEmpty(Key)) d["Key"] = Key;
     if (!string.IsNullOrEmpty(Text)) d["Text"] = Text;
     if (TextColor.HasValue) d["TextColor"] = TextColor.Value;
     if (KeyBackground.HasValue) d["KeyBgColor"] = KeyBackground.Value;
