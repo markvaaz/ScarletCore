@@ -736,6 +736,19 @@ internal static class ElementSerializer
         d["ft"] = img.Fit.ToString();
         return ("AM", d);
 
+      case ItemViewer iv:
+        // Resolve once (entity read + stat-roll registration); base already emitted box styling.
+        iv.EnsureResolved();
+        d["ivg"] = iv.RGuid.ToString(IC);
+        if (!float.IsNaN(iv.RLevel)) d["ivl"] = F(iv.RLevel);
+        if (!float.IsNaN(iv.RDur)) d["ivd"] = F(iv.RDur);
+        if (!float.IsNaN(iv.RMaxDur)) d["ivm"] = F(iv.RMaxDur);
+        if (iv.RTier >= 0) d["ivt"] = iv.RTier.ToString(IC);
+        if (iv.RModsSyncId != 0) d["ivy"] = iv.RModsSyncId.ToString(IC);
+        if (iv.RMods is { Count: > 0 }) d["ivs"] = ModsWire(iv.RMods);
+        if (iv.Lines is { Length: > 0 }) d["ivx"] = string.Join("\n", iv.Lines);
+        return ("AIV", d);
+
       case CloseButton:
         SerializeTextStyle(d, (ITextElement)elem);
         return ("AZ", d);
@@ -994,6 +1007,14 @@ internal static class ElementSerializer
     Packet(plugin, windowId, "DE", new Dictionary<string, string> { ["ei"] = elemId });
 
   static string F(float v) => v.ToString(IC);
+
+  // "guid:power;guid:power" — the item-viewer stat-roll wire (mirrors ItemShareSystem.ModsWire).
+  static string ModsWire(System.Collections.Generic.List<(int Guid, float Power)> mods) {
+    var parts = new string[mods.Count];
+    for (int i = 0; i < mods.Count; i++)
+      parts[i] = $"{mods[i].Guid.ToString(IC)}:{mods[i].Power.ToString(IC)}";
+    return string.Join(";", parts);
+  }
 
   static ScarletPacket Packet(string plugin, string windowId, string type, Dictionary<string, string> data) =>
     new() { Type = type, Plugin = plugin, Window = windowId, Data = data };
