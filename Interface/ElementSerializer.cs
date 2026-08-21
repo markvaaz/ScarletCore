@@ -746,6 +746,10 @@ internal static class ElementSerializer
         if (iv.RTier >= 0) d["ivt"] = iv.RTier.ToString(IC);
         if (iv.RModsSyncId != 0) d["ivy"] = iv.RModsSyncId.ToString(IC);
         if (iv.RMods is { Count: > 0 }) d["ivs"] = ModsWire(iv.RMods);
+        if (iv.RAbil0 is { Count: > 0 }) d["iva"] = ModsWire(iv.RAbil0);
+        if (iv.RAbil0SyncId != 0) d["ivas"] = iv.RAbil0SyncId.ToString(IC);
+        if (iv.RAbil1 is { Count: > 0 }) d["ivb"] = ModsWire(iv.RAbil1);
+        if (iv.RAbil1SyncId != 0) d["ivbs"] = iv.RAbil1SyncId.ToString(IC);
         if (iv.Lines is { Length: > 0 }) d["ivx"] = string.Join("\n", iv.Lines);
         return ("AIV", d);
 

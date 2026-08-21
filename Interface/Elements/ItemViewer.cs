@@ -62,6 +62,10 @@ public class ItemViewer : UIElement {
   internal int RModsSyncId;
   internal float RLevel = float.NaN, RDur = float.NaN, RMaxDur = float.NaN;
   internal List<(int Guid, float Power)> RMods;
+  // Ability-modification groups (the tooltip's "Ability Modification" section) — two native mod
+  // sets, each registered for its own sync id.
+  internal List<(int Guid, float Power)> RAbil0, RAbil1;
+  internal int RAbil0SyncId, RAbil1SyncId;
 
   /// <summary>Resolves the entity (if any) and registers stat rolls once. Runs on the main thread
   /// (called from serialization during <c>Window.Send</c>/<c>SendUpdate</c>).</summary>
@@ -76,7 +80,9 @@ public class ItemViewer : UIElement {
       foreach (var m in StatMods) if (m.Guid != 0) RMods.Add(m);
     }
     if (NetworkId.HasValue) ResolveEntity(NetworkId.Value);
-    if (RMods is { Count: > 0 }) RegisterMods();
+    RModsSyncId = RegisterSet(RMods);
+    RAbil0SyncId = RegisterSet(RAbil0);
+    RAbil1SyncId = RegisterSet(RAbil1);
   }
 
   // Mirrors ScarletChannels.ItemShareSystem.ResolveToken's entity read (minus the inventory-slot
@@ -91,26 +97,37 @@ public class ItemViewer : UIElement {
         RLevel = e.Read<WeaponLevelSource>().Level; // RAW — client curves use raw units
       if (RTier < 0 && e.Has<LegendaryItemInstance>())
         RTier = e.Read<LegendaryItemInstance>().TierIndex;
-      if (RMods == null && e.Has<LegendaryItemSpellModSetComponent>()) {
-        var set = e.Read<LegendaryItemSpellModSetComponent>().StatMods;
-        for (int i = 0; i < 8; i++) {
-          var mod = ModAt(set, i);
-          if (mod.Id.GuidHash != 0) (RMods ??= new List<(int, float)>()).Add((mod.Id.GuidHash, mod.Power));
-        }
+      if (e.Has<LegendaryItemSpellModSetComponent>()) {
+        var comp = e.Read<LegendaryItemSpellModSetComponent>();
+        RMods ??= Extract(comp.StatMods);       // → "Attributes"
+        RAbil0 ??= Extract(comp.AbilityMods0);  // → "Ability Modification"
+        RAbil1 ??= Extract(comp.AbilityMods1);
       }
     } catch (Exception ex) {
       Log.Warning($"[ItemViewer] entity resolve failed: {ex.Message}");
     }
   }
 
-  // Builds a SpellModSet from the rolls and registers it via the game's own server system so the
-  // viewing client resolves the rolls (localized text + tier diamond) from its sync registry by id.
-  void RegisterMods() {
+  // Non-empty mods of a SpellModSet as a (guid,power) list, or null when the set is empty.
+  static List<(int Guid, float Power)> Extract(SpellModSet set) {
+    List<(int, float)> list = null;
+    for (int i = 0; i < 8; i++) {
+      var mod = ModAt(set, i);
+      if (mod.Id.GuidHash != 0) (list ??= new List<(int, float)>()).Add((mod.Id.GuidHash, mod.Power));
+    }
+    return list;
+  }
+
+  // Builds a SpellModSet from a rolls list and registers it via the game's own server system, so
+  // the viewing client resolves the rolls (localized text + tier diamond) from its sync registry
+  // by id. Returns the fresh SyncId (0 when there is nothing to register).
+  static int RegisterSet(List<(int Guid, float Power)> mods) {
+    if (mods is not { Count: > 0 }) return 0;
     try {
       var set = new SpellModSet();
-      int n = Math.Min(RMods.Count, 8);
+      int n = Math.Min(mods.Count, 8);
       for (int i = 0; i < n; i++) {
-        var mod = new SpellMod { Id = new PrefabGUID(RMods[i].Guid), Power = RMods[i].Power };
+        var mod = new SpellMod { Id = new PrefabGUID(mods[i].Guid), Power = mods[i].Power };
         switch (i) {
           case 0: set.Mod0 = mod; break;
           case 1: set.Mod1 = mod; break;
@@ -125,9 +142,10 @@ public class ItemViewer : UIElement {
       set.Count = (byte)n;
       var sys = GameSystems.Server.GetExistingSystemManaged<SpellModSyncSystem_Server>();
       if (sys != null) sys.AddSpellMod(ref set); // stamps a fresh SyncId + queues the client push
-      RModsSyncId = set.SyncId;
+      return set.SyncId;
     } catch (Exception ex) {
-      Log.Warning($"[ItemViewer] stat-mod register failed: {ex.Message}");
+      Log.Warning($"[ItemViewer] spell-mod register failed: {ex.Message}");
+      return 0;
     }
   }
 
