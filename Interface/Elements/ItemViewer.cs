@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using ProjectM;
 using ProjectM.Network;
 using ProjectM.Shared;
+using ScarletCore.Interface.Builders;
 using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Stunlock.Core;
@@ -53,6 +54,20 @@ public class ItemViewer : UIElement {
   public (int Guid, float Power)[] StatMods { get; set; }
   /// <summary>Extra pre-rendered tooltip text rows (e.g. custom attributes).</summary>
   public string[] Lines { get; set; }
+
+  // ── Native-tooltip positioning (same model as ScarletInterface tooltips) ──
+  // Without these the tooltip opens at the cursor growing up-right; near a screen edge it can spill
+  // off-screen. Set them to attach the tooltip to a fixed point of THIS icon and grow inward.
+
+  /// <summary>Which point of THIS icon the tooltip attaches to (e.g. <c>Anchor.TopRight</c>).
+  /// Unset = open at the cursor (legacy behaviour).</summary>
+  public Anchor? TooltipAnchor { get; set; }
+  /// <summary>Which corner of the tooltip box sits at the anchor point — the box grows away from it
+  /// (e.g. <c>Pivot.BottomLeft</c> grows up-right). Defaults to the same corner as
+  /// <see cref="TooltipAnchor"/> when unset.</summary>
+  public Pivot? TooltipPivot { get; set; }
+  /// <summary>Offset (X,Y) from the anchor point, in canvas units (+X right, +Y up).</summary>
+  public Position? TooltipPosition { get; set; }
 
   // ── Resolved output, computed once. Re-serialize (SendUpdate) must NOT re-register a fresh
   //    SpellMod sync id, so all reads/registration are cached behind the Resolved guard. ──

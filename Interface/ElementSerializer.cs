@@ -751,6 +751,12 @@ internal static class ElementSerializer
         if (iv.RAbil1 is { Count: > 0 }) d["ivb"] = ModsWire(iv.RAbil1);
         if (iv.RAbil1SyncId != 0) d["ivbs"] = iv.RAbil1SyncId.ToString(IC);
         if (iv.Lines is { Length: > 0 }) d["ivx"] = string.Join("\n", iv.Lines);
+        if (iv.TooltipAnchor.HasValue) d["ivta"] = iv.TooltipAnchor.Value.ToString();
+        if (iv.TooltipPivot.HasValue) d["ivtp"] = iv.TooltipPivot.Value.ToString();
+        if (iv.TooltipPosition.HasValue) {
+          if (iv.TooltipPosition.Value.X.HasValue) d["ivtx"] = iv.TooltipPosition.Value.X.Raw;
+          if (iv.TooltipPosition.Value.Y.HasValue) d["ivty"] = iv.TooltipPosition.Value.Y.Raw;
+        }
         return ("AIV", d);
 
       case CloseButton:
