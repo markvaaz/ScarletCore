@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Globalization;
 using ScarletCore.Interface.Builders;
 using ScarletCore.Interface.Elements;
@@ -355,6 +355,8 @@ internal static class ElementSerializer
     };
     if (branch.Width.HasValue) d["w"] = branch.Width.Raw;
     if (branch.Height.HasValue) d["h"] = branch.Height.Raw;
+    if (branch.JustifyContent != default) d["jc"] = branch.JustifyContent.ToString();
+    if (branch.AlignItems != default) d["ali"] = branch.AlignItems.ToString();
     SerializeBackground(d, branch.Background);
     SerializeBorder(d, branch.Border);
     SerializeSpacing(d, 'p', branch.Padding);
@@ -945,72 +947,30 @@ internal static class ElementSerializer
   {
     var (type, d) = BuildElementData(elem, elemId);
     d["ue"] = "1";
+    var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
 
-    if (elem is Row row)
+    // Containers: ck=1 clears the old children on the client, then the subtree is re-sent through
+    // the same recursive path the full window uses (nested rows/containers, absolute-in-parent
+    // leaves, tooltips). A one-level loop here silently dropped every grandchild.
+    IEnumerable<UIElement>? children = elem switch
+    {
+      Row row => row.Children,
+      Accordion acc => acc.Children,
+      Container ct => ct.Children,
+      MiniMap mm => mm.Children,
+      _ => null,
+    };
+    if (children != null)
     {
       d["ck"] = "1";
-      var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
-      var counters = new Dictionary<string, int>();
-      foreach (var child in row.Children)
-      {
-        string childId = child.ElemId ?? NextElemId(counters, elemId);
-        var (childType, childData) = BuildElementData(child, childId);
-        childData["pa"] = elemId;
-        packets.Add(Packet(plugin, windowId, childType, childData));
-        SerializeTooltip(packets, plugin, windowId, child, childId);
-      }
-      return packets;
+      var counters = new Dictionary<string, int> { [elemId] = 0 };
+      foreach (var child in children)
+        SerializeRowElement(packets, plugin, windowId, child, elemId, counters);
+      // End-of-update marker: packets travel as separate messages, so the client can't tell when
+      // the subtree is complete. It reconciles children by id and deletes the leftovers on this.
+      packets.Add(Packet(plugin, windowId, "UE", new Dictionary<string, string> { ["ei"] = elemId }));
     }
-
-    if (elem is Accordion acc)
-    {
-      d["ck"] = "1";
-      var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
-      var counters = new Dictionary<string, int>();
-      foreach (var child in acc.Children)
-      {
-        string childId = child.ElemId ?? NextElemId(counters, elemId);
-        var (childType, childData) = BuildElementData(child, childId);
-        childData["pa"] = elemId;
-        packets.Add(Packet(plugin, windowId, childType, childData));
-        SerializeTooltip(packets, plugin, windowId, child, childId);
-      }
-      return packets;
-    }
-
-    if (elem is Container ct)
-    {
-      d["ck"] = "1";
-      var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
-      var counters = new Dictionary<string, int>();
-      foreach (var child in ct.Children)
-      {
-        string childId = child.ElemId ?? NextElemId(counters, elemId);
-        var (childType, childData) = BuildElementData(child, childId);
-        childData["pa"] = elemId;
-        packets.Add(Packet(plugin, windowId, childType, childData));
-        SerializeTooltip(packets, plugin, windowId, child, childId);
-      }
-      return packets;
-    }
-
-    if (elem is MiniMap mm)
-    {
-      d["ck"] = "1";
-      var packets = new List<ScarletPacket> { Packet(plugin, windowId, type, d) };
-      var counters = new Dictionary<string, int>();
-      foreach (var child in mm.Children)
-      {
-        string childId = child.ElemId ?? NextElemId(counters, elemId);
-        var (childType, childData) = BuildElementData(child, childId);
-        childData["pa"] = elemId;
-        packets.Add(Packet(plugin, windowId, childType, childData));
-        SerializeTooltip(packets, plugin, windowId, child, childId);
-      }
-      return packets;
-    }
-
-    return [Packet(plugin, windowId, type, d)];
+    return packets;
   }
 
   internal static ScarletPacket SerializeDeleteElement(string plugin, string windowId, string elemId) =>

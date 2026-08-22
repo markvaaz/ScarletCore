@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using ScarletCore.Interface.Builders;
 
 namespace ScarletCore.Interface.Elements;
 
@@ -35,6 +36,12 @@ public class Branch : UIElement, IEnumerable<UIElement>
   /// Collection initializer syntax: <c>new Branch { elem1, branch1, elem2 }</c>.
   /// </summary>
   public List<UIElement> Children { get; set; } = [];
+
+  /// <summary>Vertical placement of the node's content (Start = top, Center, End = bottom).</summary>
+  public JustifyContent JustifyContent { get; set; }
+
+  /// <summary>Horizontal placement of the node's content (Start = left, Center, End = right).</summary>
+  public AlignItems AlignItems { get; set; }
 
   /// <summary>Creates an empty branch.</summary>
   public Branch() { }
