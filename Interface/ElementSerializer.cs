@@ -842,6 +842,20 @@ internal static class ElementSerializer
         SerializeRebuild(d, ct);
         return ("AC", d);
 
+      case Branch br:
+        // SendUpdate path only (full sends go through SerializeBranch): same keys, but no
+        // children — the packet patches the node's stored data (EdgeColor/Glow/LinkFrom) and
+        // the client re-runs the canvas layout to recolor the edges in place.
+        d["bid"] = elemId;
+        if (br.JustifyContent != default) d["jc"] = br.JustifyContent.ToString();
+        if (br.AlignItems != default) d["ali"] = br.AlignItems.ToString();
+        if (br.LinkFrom.Count > 0) d["lkf"] = string.Join(",", br.LinkFrom);
+        if (br.EdgeColor.HasValue) d["elc"] = br.EdgeColor.Value;
+        if (br.GlowWidth.HasValue) d["glw"] = F(br.GlowWidth.Value);
+        if (br.GlowColor.HasValue) d["glc"] = br.GlowColor.Value;
+        if (br.GlowFalloff.HasValue) d["glf"] = F(br.GlowFalloff.Value);
+        return ("ABR", d);
+
       default:
         return ("AU", d);
     }
