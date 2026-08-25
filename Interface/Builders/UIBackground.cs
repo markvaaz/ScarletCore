@@ -98,20 +98,56 @@ public readonly struct UIBackground {
     // ── Material modifiers ────────────────────────────────────────────────────
 
     /// <summary>
-    /// Layers one of the game's animated UI materials on top of the current background.
-    /// See <see cref="FromMaterial"/> for the verified material/sprite pairs.
+    /// Layers game material <paramref name="materialName"/> over this background's OWN art — its
+    /// image, sprite, gradient or color, whatever was already set — with no need to pass it again.
+    /// (Without art most of these shaders render flat, which is why reusing the background is the
+    /// default.) Chain <see cref="WithMaterialTint"/> to colour it, or use the
+    /// <see cref="WithMaterial(string, UIColor, float)"/> overload to do both in one call.
     /// </summary>
-    public UIBackground WithMaterial(string materialName, string spriteName = null) =>
+    public UIBackground WithMaterial(string materialName) =>
+        new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
+            UIBackgroundMaterial.From(materialName, null).WithFromBackground());
+
+    /// <summary>
+    /// Layers game material <paramref name="materialName"/> over an explicit native game sprite
+    /// (see <see cref="FromMaterial"/> for the verified material/sprite pairs) instead of the
+    /// background's own art.
+    /// </summary>
+    public UIBackground WithMaterial(string materialName, string spriteName) =>
         new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
             UIBackgroundMaterial.From(materialName, spriteName));
 
     /// <summary>
-    /// Layers a game material over the current background, working on your own image instead of
-    /// a native sprite. See <see cref="FromMaterialImage"/> for the dark-art caveat.
+    /// One-call material layer: draws game material <paramref name="materialName"/> over this
+    /// background's OWN art — its image, sprite, gradient or color, whatever was already set, with
+    /// no need to pass it again — tinted by <paramref name="tint"/> at <paramref name="brightness"/>
+    /// gain. The tint is written to the shader's HDR <c>_Color</c>, so a gain above 1 brightens and
+    /// is what colours the game's neutral flowmap materials. Shorthand for
+    /// <c>.WithMaterial(name).WithMaterialTint(tint.Brighten(brightness))</c>.
+    /// </summary>
+    public UIBackground WithMaterial(string materialName, UIColor tint, float brightness = 1f) =>
+        new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
+            UIBackgroundMaterial.From(materialName, null)
+                .WithFromBackground().WithTint(tint.Brighten(brightness)));
+
+    /// <summary>
+    /// Layers a game material over your own image at <paramref name="imageUrl"/> instead of the
+    /// background's own art — the game's animated effect over an image that is not the background.
+    /// See <see cref="FromMaterialImage"/> for the dark-art caveat.
     /// </summary>
     public UIBackground WithMaterialImage(string materialName, string imageUrl) =>
         new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
             UIBackgroundMaterial.FromUrl(materialName, imageUrl));
+
+    /// <summary>
+    /// <see cref="WithMaterialImage(string, string)"/> plus a one-call HDR tint: colours the
+    /// material's shader <c>_Color</c> with <paramref name="tint"/> at <paramref name="brightness"/>
+    /// gain, the same fold as <see cref="WithMaterial(string, UIColor, float)"/> but over an
+    /// explicit image rather than the background's own art.
+    /// </summary>
+    public UIBackground WithMaterialImage(string materialName, string imageUrl, UIColor tint, float brightness = 1f) =>
+        new(Color, Gradient, ImageUrl, SpriteName, Fit, Animation,
+            UIBackgroundMaterial.FromUrl(materialName, imageUrl).WithTint(tint.Brighten(brightness)));
 
     /// <summary>
     /// Tints the material layer. The tint <b>multiplies</b> the rendered result, so it darkens and

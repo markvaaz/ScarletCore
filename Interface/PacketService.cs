@@ -39,6 +39,9 @@ internal static class PacketManager {
   // Invisible zero-width chars sent by the client on init to announce presence.
   // Renders as blank if it ever leaks into visible chat.
   const string HELLO_TOKEN = "\u200B\u200C\u200D";
+  // Client \u2192 server window open/close notifications (see WindowStateService).
+  const string WIN_OPEN_TOKEN = "[[SIWO]]";
+  const string WIN_CLOSE_TOKEN = "[[SIWC]]";
   // Minimum JSON length (chars) before attempting DEFLATE compression.
   const int COMPRESSION_THRESHOLD = 256;
   // Rate limit for player-initiated commands (chat commands + button commands).
@@ -170,6 +173,16 @@ internal static class PacketManager {
         SyncUnitModService.SendUnitMods(player);
     });
 
+    // Client announces window open/close so the server knows which windows a player is looking at.
+    // Format: "<token> <plugin> <window>". Gated on HasInterface so a client without the mod can't
+    // spoof state. See WindowStateService.
+    OnMessage(WIN_OPEN_TOKEN, (player, args) => {
+      if (HasInterface(player)) WindowStateService.HandleOpen(player, args);
+    });
+    OnMessage(WIN_CLOSE_TOKEN, (player, args) => {
+      if (HasInterface(player)) WindowStateService.HandleClose(player, args);
+    });
+
     // Remove role and pending packets when the player disconnects.
     EventManager.On(PlayerEvents.PlayerLeft, Deauth);
   }
@@ -179,6 +192,9 @@ internal static class PacketManager {
   [EventPriority(EventPriority.First)]
   public static void Auth(PlayerData player) {
     _handshakeSentAt[player.PlatformId] = DateTime.UtcNow;
+    // Client resets its UIManager on (re)connect and re-emits opens as it rebuilds, so any window
+    // state carried over from a previous session (e.g. an unclean drop / server restart) is stale.
+    WindowStateService.Clear(player.PlatformId);
     // Interface auth is per-session, but the "interface-user" role is persisted to disk by RoleService.
     // A player who authenticated in any past session would rejoin already carrying the role, so
     // HasInterface() would report true and the server would start streaming packets to a client that
@@ -197,6 +213,7 @@ internal static class PacketManager {
     player.RemoveRole("interface-user");
     // Clear per-player rate limit bucket so the next session starts fresh.
     _cmdBuckets.Remove(player.PlatformId);
+    WindowStateService.Clear(player.PlatformId);
   }
 
   static void FlushPendingPackets(PlayerData player) {
@@ -398,7 +415,8 @@ internal static class PacketManager {
           if (!text.StartsWith(prefix, StringComparison.Ordinal)) continue;
           // System protocol messages (handshake, sync) are never rate-limited.
           // User-facing raw handlers (custom button commands, etc.) consume a command token.
-          bool isSystemToken = prefix == HELLO_TOKEN || prefix == "[[SCARLET_SYNC]]";
+          bool isSystemToken = prefix == HELLO_TOKEN || prefix == "[[SCARLET_SYNC]]"
+                            || prefix == WIN_OPEN_TOKEN || prefix == WIN_CLOSE_TOKEN;
           if (!isSystemToken && !TryConsumeCommandToken(player)) continue;
           var rest = prefix.Length < text.Length ? text.Substring(prefix.Length).Trim() : string.Empty;
           var args = rest.Length > 0 ? rest.Split(' ', StringSplitOptions.RemoveEmptyEntries) : Array.Empty<string>();

@@ -322,7 +322,13 @@ internal static class ElementSerializer
     if (sc.BoxShadow.HasValue) d["bx"] = sc.BoxShadow.Value.Raw;
     if (sc.ViewOrigin != Anchor.TopLeft) d["vo"] = sc.ViewOrigin.ToString();
     if (sc.LineColor.HasValue) d["lnc"] = sc.LineColor.Value;
+    if (sc.LinkColor.HasValue) d["lkc"] = sc.LinkColor.Value;
+    if (sc.GlowWidth > 0f) d["glw"] = F(sc.GlowWidth);
+    if (sc.GlowColor.HasValue) d["glc"] = sc.GlowColor.Value;
+    if (sc.GlowFalloff != 2f) d["glf"] = F(sc.GlowFalloff);
     if (sc.LineStyle != Builders.LineStyle.Direct) d["ls"] = sc.LineStyle.ToString();
+    // Canvas-wide x-assignment mode: centre every node on its incoming connections.
+    if (sc.CenterOnParents) d["cop"] = "1";
 
     // Standalone ScrollCanvas (direct window child): emit anchor/position when either
     // Anchor or Position is explicitly set.
@@ -365,7 +371,14 @@ internal static class ElementSerializer
     // Hub: a branch whose only children are other branches — rendered as a transparent
     // connector so the parent draws V-fork lines directly to the grandchildren.
     bool isHub = branch.Children.Count > 0 && !branch.Children.Exists(c => c is not Branch);
-    if (isHub) d["hub"] = "1";
+    if (isHub) d["hb"] = "1";
+    // Shared-node extra incoming edges (cross-branch / convergence). Comma-joined source ElemIds.
+    if (branch.LinkFrom.Count > 0) d["lkf"] = string.Join(",", branch.LinkFrom);
+    // Per-node incoming-edge color override (e.g. highlight the unlocked path).
+    if (branch.EdgeColor.HasValue) d["elc"] = branch.EdgeColor.Value;
+    if (branch.GlowWidth.HasValue) d["glw"] = F(branch.GlowWidth.Value);
+    if (branch.GlowColor.HasValue) d["glc"] = branch.GlowColor.Value;
+    if (branch.GlowFalloff.HasValue) d["glf"] = F(branch.GlowFalloff.Value);
     packets.Add(Packet(plugin, windowId, "ABR", d));
 
     // Children is a mixed list: Branch items form tree children (positioned below,
@@ -886,6 +899,11 @@ internal static class ElementSerializer
     d["dc"] = border.Value.Color;
     d["dw"] = F(border.Value.Width);
     d["dr"] = F(border.Value.Radius);
+    if (border.Value.GlowColor.HasValue && border.Value.GlowWidth > 0f) {
+      d["dgc"] = border.Value.GlowColor.Value;
+      d["dgw"] = F(border.Value.GlowWidth);
+      if (border.Value.GlowFalloff != 2f) d["dgf"] = F(border.Value.GlowFalloff);
+    }
   }
 
   /// <summary>Serializes Spacing using a 1-char prefix: 'p'=Padding, 'm'=Margin → pt/pr/pb/pl or mt/mr/mb/ml.</summary>

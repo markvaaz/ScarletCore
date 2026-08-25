@@ -51,6 +51,57 @@ public static class InterfaceManager {
   public static void CloseWindow(PlayerData player, string plugin, string windowId) =>
     new Window(player, plugin, windowId).Send(WindowAction.Close);
 
+  // ── Window open-state tracking ────────────────────────────────────────────────────
+  //
+  // The client reports every window open/close back to the server automatically (no mod code
+  // needed on the client side, and nothing to wire up per plugin). Use this to avoid pushing
+  // updates to a window the player currently has closed — SendUpdate to a closed window is already
+  // dropped by the client, but the packet still costs bandwidth, so gate on IsWindowOpen instead.
+  //
+  // Tooltips and world-anchored HUD windows are intentionally NOT tracked (they open/close on hover
+  // or per-frame). Everything a player opens as a normal window is.
+
+  /// <summary>
+  /// True if <paramref name="player"/> currently has the window (<paramref name="plugin"/>,
+  /// <paramref name="windowId"/>) open on their client. False if the player is null, has no
+  /// interface, or the window is closed / never opened.
+  /// </summary>
+  public static bool IsWindowOpen(PlayerData player, string plugin, string windowId) =>
+    player != null && WindowStateService.IsOpen(player.PlatformId, plugin, windowId);
+
+  /// <summary>
+  /// True if <paramref name="player"/> has a window with this id open under <b>any</b> plugin.
+  /// Window ids are global on the client, so use this when you don't care which plugin owns it.
+  /// </summary>
+  public static bool IsWindowOpen(PlayerData player, string windowId) =>
+    player != null && WindowStateService.IsOpenAnyPlugin(player.PlatformId, windowId);
+
+  /// <summary>
+  /// Every (plugin, window) pair <paramref name="player"/> currently has open. Empty if the player
+  /// is null or has nothing open. The returned list is a snapshot copy — safe to hold and mutate.
+  /// </summary>
+  public static IReadOnlyList<(string Plugin, string Window)> GetOpenWindows(PlayerData player) =>
+    player == null ? [] : WindowStateService.GetOpen(player.PlatformId);
+
+  /// <summary>
+  /// Fires when a player opens a tracked window (server-driven or client-driven, e.g. a keybind).
+  /// Args: (player, plugin, windowId). Handle this to push a fresh snapshot the moment a window
+  /// opens — it closes the tiny window between a client-initiated open and the next periodic update.
+  /// </summary>
+  public static event Action<PlayerData, string, string> OnWindowOpened {
+    add => WindowStateService.Opened += value;
+    remove => WindowStateService.Opened -= value;
+  }
+
+  /// <summary>
+  /// Fires when a player closes a tracked window. Args: (player, plugin, windowId). Handle this to
+  /// stop any per-window update loop you were running for that player.
+  /// </summary>
+  public static event Action<PlayerData, string, string> OnWindowClosed {
+    add => WindowStateService.Closed += value;
+    remove => WindowStateService.Closed -= value;
+  }
+
   /// <summary>
   /// Creates a <see cref="NativeElementBuilder"/> targeting an existing game GameObject
   /// for a specific player. Use the normalized path (without "(Clone)" suffixes).

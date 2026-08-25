@@ -52,8 +52,40 @@ public class ScrollCanvas : UIElement, IEnumerable<Branch>
   /// <summary>Color of the lines connecting parent and child nodes. No lines are drawn when null.</summary>
   public UIColor? LineColor { get; set; }
 
+  /// <summary>
+  /// Color of the extra shared-node edges declared via <see cref="Branch.LinkFrom"/> (cross-branch /
+  /// convergence links). Lets those stand out from the normal tree edges. Falls back to
+  /// <see cref="LineColor"/> when null.
+  /// </summary>
+  public UIColor? LinkColor { get; set; }
+
   /// <summary>Thickness of connection lines in pixels.</summary>
   public float LineWidth { get; set; } = 2f;
+
+  /// <summary>
+  /// Glow spread around connection lines, in pixels beyond the line edge. 0 = no glow (default).
+  /// Overlapping/joining glows resolve as max intensity client-side — they never sum brighter.
+  /// </summary>
+  public float GlowWidth { get; set; }
+
+  /// <summary>
+  /// Glow color, fully independent of <see cref="LineColor"/>; the alpha channel is the peak
+  /// glow strength. Null = each line glows in its own color (including <see cref="LinkColor"/>
+  /// and per-node <see cref="Branch.EdgeColor"/>) at 60% of its alpha.
+  /// </summary>
+  public UIColor? GlowColor { get; set; }
+
+  /// <summary>Glow fade exponent: 1 = linear, 2 = soft (default), higher = tighter core.</summary>
+  public float GlowFalloff { get; set; } = 2f;
+
+  /// <summary>
+  /// Opt-in x-assignment mode for the whole canvas: every node is centred on the connections that
+  /// enter it — its tree parent plus its <see cref="Branch.LinkFrom"/> sources — level by level from
+  /// the top, with sibling overlaps resolved so <see cref="ColumnGap"/> is always respected. Use for
+  /// DAG-style trees where convergence nodes should sit at the common centre of their links instead
+  /// of directly under their single tree parent. Off by default (classic compact tree layout).
+  /// </summary>
+  public bool CenterOnParents { get; set; }
 
   /// <summary>Style of the connection lines between branch nodes. Defaults to Direct (straight line).</summary>
   public Builders.LineStyle LineStyle { get; set; } = Builders.LineStyle.Direct;
