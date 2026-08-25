@@ -329,6 +329,9 @@ internal static class ElementSerializer
     if (sc.LineStyle != Builders.LineStyle.Direct) d["ls"] = sc.LineStyle.ToString();
     // Canvas-wide x-assignment mode: centre every node on its incoming connections.
     if (sc.CenterOnParents) d["cop"] = "1";
+    // Rebuild opt-in (rbd/rfi/rfo) — was silently dropped for ScrollCanvas: Row/Accordion/Container
+    // already emitted it, so a full-tree swap with Rebuild=true diff-patched instead of rebuilding.
+    SerializeRebuild(d, sc);
 
     // Standalone ScrollCanvas (direct window child): emit anchor/position when either
     // Anchor or Position is explicitly set.
