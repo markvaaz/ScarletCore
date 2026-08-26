@@ -635,6 +635,21 @@ internal static class ElementSerializer
 
     switch (elem)
     {
+      // Must precede Text — Timer is a Text. Content is client-computed from the date+format,
+      // so tx is left empty; tmn (server clock at send) lets the client cancel clock skew.
+      case Timer tm:
+        if (tm.TextAlign != TextAlignment.Left) d["ta"] = tm.TextAlign.ToString();
+        if (tm.Wrap) d["wr"] = TRUE_LC;
+        SerializeTextStyle(d, tm);
+        d["tmd"] = UnixMs(tm.Date).ToString(IC);
+        d["tmn"] = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(IC);
+        // Empty format is deliberate (invisible command-only timer) — the property default is
+        // "HH:MM:SS", so null/empty here means the caller explicitly cleared it.
+        d["tmf"] = tm.Format ?? string.Empty;
+        if (tm.Mode != TimerMode.Countdown) d["tmm"] = tm.Mode.ToString();
+        if (!string.IsNullOrEmpty(tm.Command)) d["cm"] = tm.Command;
+        return ("AT", d);
+
       case Text t:
         d["tx"] = t.Content ?? string.Empty;
         if (t.TextAlign != TextAlignment.Left) d["ta"] = t.TextAlign.ToString();
@@ -724,8 +739,40 @@ internal static class ElementSerializer
         if (pb.AnimateValue) d["av"] = "true";
         if (pb.AnimationDuration != 0.3f) d["ad"] = F(pb.AnimationDuration);
         if (pb.IsHealthBar) d["hb"] = "true";
+        // Timed fill: the client drives the fill from StartDate→EndDate on its own clock
+        // (tmn corrects skew). vl is overridden with the current progress so the bar is
+        // correct the frame it appears — same trick as the Timer element's initial text.
+        if (pb.StartDate.HasValue && pb.EndDate.HasValue)
+        {
+          long tpsMs = UnixMs(pb.StartDate.Value);
+          long tpeMs = UnixMs(pb.EndDate.Value);
+          long tnowMs = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+          d["tps"] = tpsMs.ToString(IC);
+          d["tpe"] = tpeMs.ToString(IC);
+          d["tmn"] = tnowMs.ToString(IC);
+          double tfrac = tpeMs > tpsMs
+              ? System.Math.Clamp((tnowMs - tpsMs) / (double)(tpeMs - tpsMs), 0d, 1d)
+              : 1d;
+          d["vl"] = F((float)(pb.Min + tfrac * (pb.Max - pb.Min)));
+        }
+        if (pb is RadialProgressBar rpb)
+        {
+          d["rdl"] = "true";
+          d["rdi"] = F(rpb.Radius);
+          if (rpb.Thickness != 8f) d["rtk"] = F(rpb.Thickness);
+          if (rpb.StartAngle != 0f) d["rsa"] = F(rpb.StartAngle);
+          if (!rpb.Clockwise) d["rcw"] = FALSE_LC;
+        }
         if (pb.Label != null)
         {
+          // Timer label: the client computes and ticks the text (lbt stays empty on the wire).
+          if (pb.Label is Timer lt)
+          {
+            d["ltd"] = UnixMs(lt.Date).ToString(IC);
+            if (!d.ContainsKey("tmn")) d["tmn"] = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(IC);
+            d["ltf"] = string.IsNullOrEmpty(lt.Format) ? "HH:MM:SS" : lt.Format;
+            if (lt.Mode != TimerMode.Countdown) d["ltm"] = lt.Mode.ToString();
+          }
           d["lbt"] = pb.Label.Content ?? string.Empty;
           if (pb.Label.TextAlign != TextAlignment.Left) d["lta"] = pb.Label.TextAlign.ToString();
           if (pb.Label.TextColor.HasValue) d["ltc"] = pb.Label.TextColor.Value;
@@ -888,6 +935,15 @@ internal static class ElementSerializer
   {
     if (!bg.HasValue || !bg.Value.HasValue) return;
     bg.Value.Apply(d);
+  }
+
+  /// <summary>DateTime → unix ms UTC (Unspecified Kind is treated as UTC). Timer/timed-bar keys.</summary>
+  static long UnixMs(System.DateTime dt)
+  {
+    var utc = dt.Kind == System.DateTimeKind.Unspecified
+        ? System.DateTime.SpecifyKind(dt, System.DateTimeKind.Utc)
+        : dt.ToUniversalTime();
+    return new System.DateTimeOffset(utc).ToUnixTimeMilliseconds();
   }
 
   /// <summary>Serializes ITextElement properties.</summary>

@@ -1,3 +1,4 @@
+using System;
 using ScarletCore.Interface.Builders;
 
 namespace ScarletCore.Interface.Elements;
@@ -27,12 +28,25 @@ public class ProgressBar : UIElement {
   /// </summary>
   public bool IsHealthBar { get; set; }
 
+  // ── Timed fill ────────────────────────────────────────────────────────────
+  /// <summary>
+  /// Timed fill start. Set together with <see cref="EndDate"/> and the client fills the bar
+  /// on its own from empty (at StartDate) to full (at EndDate) — no server value updates.
+  /// Overrides <see cref="Value"/>; server clock skew is corrected client-side. Treated as
+  /// UTC when Kind is Unspecified. The fill is cancelled when the window is closed.
+  /// </summary>
+  public DateTime? StartDate { get; set; }
+  /// <summary>Timed fill end — the moment the bar reaches full. See <see cref="StartDate"/>.</summary>
+  public DateTime? EndDate { get; set; }
+
   // ── Overlay label ─────────────────────────────────────────────────────────
   /// <summary>
   /// Optional text label overlaid on the bar, rendered as a sibling above it.
   /// Use <see cref="Text.TextAlign"/> to control positioning inside the bar.
   /// All <see cref="ITextElement"/> style properties (color, font size, gradient, etc.) are supported.
   /// For health bars, <c>{healthValue}</c> and <c>{maxHealth}</c> tokens are replaced client-side.
+  /// A <see cref="Timer"/> also works here — the label then ticks client-side (pairs well with
+  /// the <see cref="StartDate"/>/<see cref="EndDate"/> timed fill).
   /// </summary>
   public Text Label { get; set; }
 }

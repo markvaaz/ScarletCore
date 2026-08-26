@@ -191,11 +191,22 @@ public sealed class ChatLinesStyle {
   public Spacing? BubblePadding { get; set; }
   /// <summary>Vertical space between lines, px. Negative = keep default.</summary>
   public float Spacing { get; set; } = -1;
-  /// <summary>Default text colour for untagged message text.</summary>
+  /// <summary>Default text colour for the message body (name + content). Per-channel overrides in
+  /// <see cref="Channels"/> win over this.</summary>
   public UIColor? TextColor { get; set; }
   /// <summary>Message text size, px. Negative = keep default. The timestamp's Scale is relative
   /// to this, so it follows along.</summary>
   public float FontSize { get; set; } = -1;
+
+  /// <summary>
+  /// Per-channel message-body colour — colours the line text (player name + content) per channel,
+  /// so a channel's messages can read in its own colour. Same channel ids as
+  /// <see cref="ChatTagStyle.Channels"/> (native names "global"/"local"/"team"/"whisper"/"system"/
+  /// "region"/"lore", and custom ScarletChannels keys). Falls back to <see cref="TextColor"/>.
+  /// NOTE: colours the whole body including the player name — the client can't isolate the content
+  /// from the name in a rendered line (works uniformly for native and custom channels).
+  /// </summary>
+  public Dictionary<string, UIColor> Channels { get; set; } = new();
 
   internal Dictionary<string, string> Data() {
     var d = new Dictionary<string, string>();
@@ -205,6 +216,8 @@ public sealed class ChatLinesStyle {
     if (Spacing >= 0) d["Spacing"] = ChatTheme.F(Spacing);
     if (TextColor.HasValue) d["TextColor"] = TextColor.Value;
     if (FontSize > 0) d["FontSize"] = ChatTheme.F(FontSize);
+    foreach (var (key, c) in Channels)
+      if (!string.IsNullOrWhiteSpace(key)) d["LineCh:" + key.Trim().ToLowerInvariant()] = c;
     return d;
   }
 }
