@@ -375,10 +375,11 @@ internal static class ElementSerializer
     // connector so the parent draws V-fork lines directly to the grandchildren.
     bool isHub = branch.Children.Count > 0 && !branch.Children.Exists(c => c is not Branch);
     if (isHub) d["hb"] = "1";
-    // Shared-node extra incoming edges (cross-branch / convergence). Comma-joined source ElemIds.
-    if (branch.LinkFrom.Count > 0) d["lkf"] = string.Join(",", branch.LinkFrom);
+    // Shared-node extra incoming edges (cross-branch / convergence): plain LinkFrom + styled Links.
+    SerializeLinks(d, branch);
     // Per-node incoming-edge color override (e.g. highlight the unlocked path).
     if (branch.EdgeColor.HasValue) d["elc"] = branch.EdgeColor.Value;
+    if (branch.EdgeZIndex != 0) d["elz"] = branch.EdgeZIndex.ToString(IC);
     if (branch.GlowWidth.HasValue) d["glw"] = F(branch.GlowWidth.Value);
     if (branch.GlowColor.HasValue) d["glc"] = branch.GlowColor.Value;
     if (branch.GlowFalloff.HasValue) d["glf"] = F(branch.GlowFalloff.Value);
@@ -849,8 +850,9 @@ internal static class ElementSerializer
         d["bid"] = elemId;
         if (br.JustifyContent != default) d["jc"] = br.JustifyContent.ToString();
         if (br.AlignItems != default) d["ali"] = br.AlignItems.ToString();
-        if (br.LinkFrom.Count > 0) d["lkf"] = string.Join(",", br.LinkFrom);
+        SerializeLinks(d, br);
         if (br.EdgeColor.HasValue) d["elc"] = br.EdgeColor.Value;
+        if (br.EdgeZIndex != 0) d["elz"] = br.EdgeZIndex.ToString(IC);
         if (br.GlowWidth.HasValue) d["glw"] = F(br.GlowWidth.Value);
         if (br.GlowColor.HasValue) d["glc"] = br.GlowColor.Value;
         if (br.GlowFalloff.HasValue) d["glf"] = F(br.GlowFalloff.Value);
@@ -1010,6 +1012,32 @@ internal static class ElementSerializer
 
   internal static ScarletPacket SerializeDeleteElement(string plugin, string windowId, string elemId) =>
     Packet(plugin, windowId, "DE", new Dictionary<string, string> { ["ei"] = elemId });
+
+  // Emits a branch's shared-node edges: "lkf" = every source id (plain LinkFrom + styled Links),
+  // which the canvas layout needs to know each edge exists; "lks" = per-link style overrides for the
+  // styled Links only. Both keys are additive — a branch with no Links serializes exactly as before.
+  // lks entry = "sourceId|edgeColor|glowWidth|glowColor|glowFalloff|zindex"; empty field = inherit;
+  // colors are the usual "r,g,b,a". '|' and ';' never occur in ids or colors, so parsing is trivial.
+  static void SerializeLinks(Dictionary<string, string> d, Branch br) {
+    var ids = new List<string>(br.LinkFrom);
+    foreach (var lk in br.Links)
+      if (!string.IsNullOrEmpty(lk.SourceId) && !ids.Contains(lk.SourceId)) ids.Add(lk.SourceId);
+    if (ids.Count > 0) d["lkf"] = string.Join(",", ids);
+    if (br.Links.Count == 0) return;
+
+    var styled = new List<string>(br.Links.Count);
+    foreach (var lk in br.Links) {
+      if (string.IsNullOrEmpty(lk.SourceId)) continue;
+      styled.Add(string.Join("|",
+        lk.SourceId,
+        lk.Color.HasValue ? (string)lk.Color.Value : "",
+        lk.GlowWidth.HasValue ? F(lk.GlowWidth.Value) : "",
+        lk.GlowColor.HasValue ? (string)lk.GlowColor.Value : "",
+        lk.GlowFalloff.HasValue ? F(lk.GlowFalloff.Value) : "",
+        lk.ZIndex.ToString(IC)));
+    }
+    if (styled.Count > 0) d["lks"] = string.Join(";", styled);
+  }
 
   static string F(float v) => v.ToString(IC);
 
