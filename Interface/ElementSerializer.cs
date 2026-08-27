@@ -374,7 +374,10 @@ internal static class ElementSerializer
     // Hub: a branch whose only children are other branches — rendered as a transparent
     // connector so the parent draws V-fork lines directly to the grandchildren.
     bool isHub = branch.Children.Count > 0 && !branch.Children.Exists(c => c is not Branch);
-    if (isHub) d["hb"] = "1";
+    // Token "hub" (não "hb"): "hb" já é HealthBar na tabela do cliente (KeyMap.Keys). Como aquela
+    // tabela usa indexer-init, um "hb" duplicado fazia o último (HealthBar) vencer e o Hub nunca
+    // traduzir — hubs quebravam. Mantidos separados de propósito.
+    if (isHub) d["hub"] = "1";
     // Shared-node extra incoming edges (cross-branch / convergence): plain LinkFrom + styled Links.
     SerializeLinks(d, branch);
     // Per-node incoming-edge color override (e.g. highlight the unlocked path).
