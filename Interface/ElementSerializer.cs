@@ -61,7 +61,11 @@ internal static class ElementSerializer
     if (window.OpenAnimation != WindowAnimation.None) wd["oa"] = window.OpenAnimation.ToString();
     if (window.CloseAnimation != WindowAnimation.None) wd["ca"] = window.CloseAnimation.ToString();
     if (window.AnimationDuration != 0.2f) wd["ad"] = F(window.AnimationDuration);
-    if (window.AutoClose > 0f) wd["ax"] = F(window.AutoClose);
+    if (window.OpenSounds is { Length: > 0 }) wd["sopn"] = string.Join("\n", window.OpenSounds);
+    if (window.CloseSounds is { Length: > 0 }) wd["scls"] = string.Join("\n", window.CloseSounds);
+    // Always emit — the client keeps the previous value for any omitted key, so a resend
+    // that drops AutoClose back to 0 must send ax=0 explicitly or the timer stays alive.
+    wd["ax"] = F(window.AutoClose);
     if (window.CloseKey.HasValue) wd["kc"] = window.CloseKey.Value.ToString();
     // Template recipe marker. Must ride on the SW packet, which is emitted first here — the client
     // treats this SW as the start of the recording, so anything before it renders as a normal window.
@@ -669,6 +673,7 @@ internal static class ElementSerializer
         SerializeTextStyle(d, b);
         SerializeHoverBackground(d, b.HoverBackground, b.PressedBackground);
         if (b.HoverScale > 0f && b.HoverScale != 1f) d["hs"] = b.HoverScale.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (b.ClickSounds is { Length: > 0 }) d["sclk"] = string.Join("\n", b.ClickSounds);
         return ("AB", d);
 
       case Input inp:

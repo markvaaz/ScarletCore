@@ -8,6 +8,9 @@ public class Button : UIElement, ITextElement {
   public string Label { get; set; }
   /// <summary>Chat command sent to the server when the button is clicked.</summary>
   public string Command { get; set; }
+  /// <summary>Optional sound URLs played on the client when the button is clicked. The client
+  /// picks one at random per click. Empty/null = silent (fully opt-in, no default sound).</summary>
+  public string[] ClickSounds { get; set; }
   /// <summary>Whether padding is included in or added to the declared size.</summary>
   public BoxSizing BoxSizing { get; set; }
   /// <summary>Background shown when the cursor hovers over the button.</summary>

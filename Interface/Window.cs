@@ -163,6 +163,13 @@ public class Window : IEnumerable<UIElement>
   /// <summary>Duration in seconds for open/close animations. Default: 0.2s.</summary>
   public float AnimationDuration { get; set; } = 0.2f;
 
+  /// <summary>Optional sound URLs played on the client when the window opens. The client picks
+  /// one at random. Empty/null = silent (fully opt-in, no default sound).</summary>
+  public string[] OpenSounds { get; set; }
+  /// <summary>Optional sound URLs played on the client when the window closes. The client picks
+  /// one at random. Empty/null = silent (fully opt-in, no default sound).</summary>
+  public string[] CloseSounds { get; set; }
+
   // ─── Auto-Close ──────────────────────────────────────────────────────────
 
   /// <summary>
