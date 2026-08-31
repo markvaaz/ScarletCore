@@ -183,6 +183,10 @@ internal static class PacketManager {
       if (HasInterface(player)) WindowStateService.HandleClose(player, args);
     });
 
+    // Push the configured interface update source (if any) on every auth, so a server admin can pin
+    // the client build from ScarletCore's own [Interface] config alone. No-op when unconfigured.
+    EventManager.On(PlayerEvents.InterfaceAuth, InterfaceManager.SendConfiguredUpdateSource);
+
     // Remove role and pending packets when the player disconnects.
     EventManager.On(PlayerEvents.PlayerLeft, Deauth);
   }

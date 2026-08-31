@@ -401,6 +401,62 @@ public static class InterfaceManager {
   static ScarletPacket ServerLogoPacket(string plugin, string url) =>
     new() { Type = "SL", Plugin = plugin, Window = "", Data = new() { ["ur"] = url ?? "" } };
 
+  // ── Interface self-update source ──────────────────────────────────────────────
+
+  // The core payload asset published on every ScarletInterface release. The download URL is built as
+  // https://github.com/<user>/<path>/releases/download/<version>/ScarletInterface-Core.dll.
+  const string CoreAssetName = "ScarletInterface-Core.dll";
+
+  /// <summary>
+  /// Pins which ScarletInterface build this player's client runs and where it downloads it from,
+  /// overriding the client's default GitHub self-update. The build is a release asset at
+  /// <c>github.com/<paramref name="user"/>/<paramref name="path"/>/releases/download/<paramref name="version"/>/ScarletInterface-Core.dll</c>;
+  /// the client applies <paramref name="version"/> exactly — upgrading or downgrading. The client
+  /// only accepts the whitelisted owners (<c>markvaaz</c> / <c>duugagno</c>) and refuses anything
+  /// else. Pass the sha256 of that file to have the client verify it before applying. Pass a
+  /// null/empty user, path or version to clear the pin and let the client fall back to its own
+  /// update source. Call on <c>InterfaceAuth</c>.
+  /// </summary>
+  public static void SetUpdateSource(PlayerData player, string user, string path, string version, string sha256 = null) =>
+    PacketManager.SendPacket(player, UpdateSourcePacket(user, path, version, sha256));
+
+  /// <summary>Pins the interface update source for every connected player. See <see cref="SetUpdateSource"/>.</summary>
+  public static void SetUpdateSourceAll(string user, string path, string version, string sha256 = null) =>
+    PacketManager.SendPacketToAll(UpdateSourcePacket(user, path, version, sha256));
+
+  static ScarletPacket UpdateSourcePacket(string user, string path, string version, string sha256) {
+    // Empty user/path/version → empty URL, which the client reads as "clear the pin".
+    string url = string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(version)
+      ? ""
+      : $"https://github.com/{user.Trim()}/{path.Trim()}/releases/download/{version.Trim()}/{CoreAssetName}";
+    return new() {
+      Type = "SUS",
+      Plugin = "", // the interface update source is global, not plugin-scoped
+      Window = "",
+      Data = new() {
+        ["ur"] = url,
+        ["upv"] = version ?? "",
+        ["uph"] = sha256 ?? "",
+      },
+    };
+  }
+
+  /// <summary>
+  /// Sends the interface update source configured in ScarletCore's own settings
+  /// (<c>[Interface] UpdateUser / UpdatePath / UpdateVersion / UpdateSha256</c>) to
+  /// <paramref name="player"/>. A no-op when the user, path or version is blank. Wired to
+  /// <c>InterfaceAuth</c> so a server admin can pin the client build from config alone, with no mod
+  /// code. See <see cref="SetUpdateSource"/>.
+  /// </summary>
+  public static void SendConfiguredUpdateSource(PlayerData player) {
+    string user = Plugin.Settings.Get<string>("UpdateUser");
+    string path = Plugin.Settings.Get<string>("UpdatePath");
+    string version = Plugin.Settings.Get<string>("UpdateVersion");
+    if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(version)) return;
+    string sha = Plugin.Settings.Get<string>("UpdateSha256");
+    SetUpdateSource(player, user, path, version, string.IsNullOrWhiteSpace(sha) ? null : sha.Trim());
+  }
+
   // ── Floating character HUD ────────────────────────────────────────────────────
 
   /// <summary>

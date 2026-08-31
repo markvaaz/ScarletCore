@@ -59,6 +59,13 @@ public class Plugin : BasePlugin {
       .Add("DisableLanguageSelectionPrompt", false, "If true, players will not be prompted to select a language on first join.")
       .Add("WelcomeMessage", "~Welcome to {ServerName}!~\n\nThis server uses ~ScarletMods~ to enhance your experience.\n\nTo get started, please set ~your preferred language~:\n\n{AvailableLanguages}\nUse: ~.language <language>~", "Welcome message shown to players who haven't set their language. Placeholders: {ServerName}, {AvailableLanguages}, {PlayerName}")
       .Add("LanguageReminderMessage", "~Hey {PlayerName}!~ You haven't set your language yet.\n\nAvailable languages: {AvailableLanguages}\nUse: ~.language <language>~", "Reminder message sent every 10 minutes to online players who haven't set their language. Placeholders: {ServerName}, {AvailableLanguages}, {PlayerName}");
+
+    Settings.Section("Interface")
+      .Add("UpdateUser", "", "GitHub owner hosting the ScarletInterface build clients must run (only 'markvaaz' or 'duugagno' are accepted by the client). Requires UpdatePath + UpdateVersion. Empty = clients use their own update source.")
+      .Add("UpdatePath", "", "GitHub repo under UpdateUser holding the release (e.g. ScarletInterface-Public). The client downloads github.com/<User>/<Path>/releases/download/<Version>/ScarletInterface-Core.dll.")
+      .Add("UpdateVersion", "", "The exact ScarletInterface version clients must run (e.g. 1.2.0), also the release tag. Clients up/downgrade to match it. Empty = no override.")
+      .Add("UpdateSha256", "", "Optional sha256 of the ScarletInterface-Core.dll asset. When set, clients verify the download against it before applying.");
+
     Localizer.Initialize();
     CommandHandler.Initialize();
   }
