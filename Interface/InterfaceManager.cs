@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using ScarletCore.Services;
 using ScarletCore.Interface.Builders;
@@ -9,6 +10,7 @@ using ScarletCore.Interface.Models;
 using Unity.Entities;
 using Unity.Mathematics;
 using ProjectM.Network;
+using Stunlock.Core;
 
 namespace ScarletCore.Interface;
 
@@ -514,6 +516,269 @@ public static class InterfaceManager {
       Window = "",
       Data = new() { ["esm"] = ((int)mode).ToString(CultureInfo.InvariantCulture) },
     };
+
+  // ── Animation ─────────────────────────────────────────────────────────────────
+  //
+  // Plays an animation on a character even when its own rig was never authored with it. The client
+  // reroutes the request through a state the rig does have and swaps that state's clip, so the
+  // animation starts, blends and stops through the game's own machinery.
+  //
+  // Two things can be sent, and they are independent:
+  //   • PlayAnimation  — which animation to run, on whom, for how long.
+  //   • SetBoneMap     — how to retarget a source skeleton the client has no built-in map for.
+  //
+  // Most animations need no map: the client derives one from the player's own rig, which covers
+  // everything authored for the humanoid NPC skeleton. Send a map only for a source skeleton that
+  // does not fit — a creature or a boss whose bones are named or arranged differently.
+
+  /// <summary>
+  /// How a bound animation plays. Every field is optional.
+  /// </summary>
+  public sealed class AnimationOptions {
+    /// <summary>The rig the animation was authored for, as the game names it —
+    /// <c>NPCLittleGuy_FarmGirl_Standard_LOD00_rig</c>. Selects the bone map: a map sent for this rig
+    /// by <see cref="SetBoneMap"/> is used, otherwise the client derives one from the character's own
+    /// rig. Leave empty for anything authored for the humanoid NPC skeleton.</summary>
+    public string SourceRig { get; set; } = string.Empty;
+
+    /// <summary>For <see cref="PlayAnimation"/> and friends only: how long to keep the carrier buff on
+    /// the character, in seconds. 0 (the default) lets the buff run its own natural length; a negative
+    /// value holds it until <see cref="StopAnimation"/>. What is visible also depends on the buff: one
+    /// that asks the client for a single 2.5 s animation shows 2.5 s whatever its lifetime, while the
+    /// interaction buffs keep asking in cycles for as long as they are on.</summary>
+    public float DurationSeconds { get; set; }
+
+    /// <summary>For a playlist: start over when the last clip ends, instead of holding on it. A single
+    /// animation follows the buff's own cycle and ignores this.</summary>
+    public bool Loop { get; set; }
+
+    /// <summary>Playback rate for a playlist; 1 is the clips' authored speed. A single animation is
+    /// timed by the buff's requests, the way the game times its own, and ignores this.</summary>
+    public float Speed { get; set; } = 1f;
+
+    /// <summary>For <see cref="PlayAnimation"/> and friends only: the buff to bind and apply. Zero uses
+    /// <see cref="AnimationCarrierBuff"/>. Any buff that asks the client for an animation serves; one
+    /// that asks for nothing produces nothing to substitute for.</summary>
+    public int CarrierBuff { get; set; }
+  }
+
+  // ── Bindings ────────────────────────────────────────────────────────────────
+  //
+  // A binding says: whoever carries buff X plays animation Y. It is registered on every client once;
+  // from then on applying the buff to any character — server-side, by any means — plays the animation
+  // on every client that sees that character, and removing the buff stops it. That is exactly how the
+  // game's own interaction buffs work, and it is what keeps clients in agreement: nothing is sent
+  // when an animation starts, every client answers the same replicated buff with the same clips.
+  //
+  // One buff, one animation: bind a different buff for each animation you want available at once.
+
+  /// <summary>Bindings registered for everyone, kept so a client that connects later gets them too.</summary>
+  static readonly Dictionary<int, ScarletPacket> _animationBindings = new();
+
+  /// <summary>
+  /// Binds <paramref name="buffGuid"/> to <paramref name="clips"/> on one player's client. One clip is
+  /// an animation whose phases (<c>_Antip</c>, <c>_Exec</c>, <c>_Post</c>…) are discovered and played
+  /// in step with the buff's own; more than one is a playlist played in exactly that order, each clip
+  /// for its own length, in any mix of animations and rigs.
+  ///
+  /// <para>Clip names are as the game holds them, e.g. <c>NPCLittleGuy_Idle_FarmerRaking_Loop</c>. A
+  /// clip has to be loaded on the client, which it is while any unit using it is streamed in; the
+  /// client logs when one does not resolve.</para>
+  ///
+  /// <para>Per-player bindings are not retained across a relog; resend on <c>InterfaceAuth</c>, or use
+  /// <see cref="BindAnimationAll"/>, which is.</para>
+  /// </summary>
+  public static void BindAnimation(PlayerData player, string plugin, int buffGuid, IEnumerable<string> clips, AnimationOptions options = null) =>
+    PacketManager.SendPacket(player, BindPacket(plugin, buffGuid, clips, options));
+
+  /// <summary>Binds a buff to an animation on every client, now and for anyone who connects later.
+  /// See <see cref="BindAnimation"/>.</summary>
+  public static void BindAnimationAll(string plugin, int buffGuid, IEnumerable<string> clips, AnimationOptions options = null) {
+    ScarletPacket packet = BindPacket(plugin, buffGuid, clips, options);
+    _animationBindings[buffGuid] = packet;
+    PacketManager.SendPacketToAll(packet);
+  }
+
+  /// <summary>Forgets a binding on one player's client. Characters carrying the buff stop animating;
+  /// the buff itself is untouched.</summary>
+  public static void UnbindAnimation(PlayerData player, string plugin, int buffGuid) =>
+    PacketManager.SendPacket(player, UnbindPacket(plugin, buffGuid));
+
+  /// <summary>Forgets a binding everywhere, including for future connections.</summary>
+  public static void UnbindAnimationAll(string plugin, int buffGuid) {
+    _animationBindings.Remove(buffGuid);
+    PacketManager.SendPacketToAll(UnbindPacket(plugin, buffGuid));
+  }
+
+  /// <summary>Hands a freshly authenticated client every retained binding. Wired to
+  /// <c>PlayerEvents.InterfaceAuth</c> by the packet service.</summary>
+  internal static void ResendAnimationBindings(PlayerData player) {
+    foreach (ScarletPacket packet in _animationBindings.Values)
+      PacketManager.SendPacket(player, packet);
+  }
+
+  static ScarletPacket BindPacket(string plugin, int buffGuid, IEnumerable<string> clips, AnimationOptions options) {
+    if (buffGuid == 0) throw new ArgumentException("A binding needs a buff.", nameof(buffGuid));
+    options ??= new AnimationOptions();
+    var data = new Dictionary<string, string> {
+      ["anu"] = buffGuid.ToString(CultureInfo.InvariantCulture),
+      ["anc"] = Join(clips),
+      ["ans"] = F(options.Speed),
+      ["anl"] = B(options.Loop),
+    };
+    if (!string.IsNullOrEmpty(options.SourceRig)) data["anr"] = options.SourceRig;
+    return new ScarletPacket { Type = "BAN", Plugin = plugin, Window = "", Data = data };
+  }
+
+  static ScarletPacket UnbindPacket(string plugin, int buffGuid) =>
+    new() {
+      Type = "UAN", Plugin = plugin, Window = "",
+      Data = new() { ["anu"] = buffGuid.ToString(CultureInfo.InvariantCulture) },
+    };
+
+  /// <summary>One clip per line — the wire form the client splits back into a playlist.</summary>
+  static string Join(IEnumerable<string> animations) {
+    if (animations == null) return "";
+    var sb = new StringBuilder();
+    foreach (var name in animations) {
+      if (string.IsNullOrWhiteSpace(name)) continue;
+      if (sb.Length > 0) sb.Append('\n');
+      sb.Append(name.Trim());
+    }
+    return sb.ToString();
+  }
+
+  // ── Play ────────────────────────────────────────────────────────────────────
+  //
+  // Bind + apply in one call, for the common "make this character do this now" case. The binding is
+  // global (every client, retained), so two characters animated at once through the SAME carrier buff
+  // share whatever was bound last — give each concurrent animation its own carrier buff via
+  // AnimationOptions.CarrierBuff.
+
+  /// <summary>Plays <paramref name="animation"/> on the player's character: binds the carrier buff to
+  /// it for everyone and applies the buff to the character. See <see cref="BindAnimation"/> for what
+  /// a clip name is.</summary>
+  public static void PlayAnimation(PlayerData player, string plugin, string animation, AnimationOptions options = null) =>
+    PlayAnimationSequence(player, plugin, new[] { animation }, options);
+
+  /// <summary>Plays an animation on every connected player's character. See <see cref="PlayAnimation"/>.</summary>
+  public static void PlayAnimationAll(string plugin, string animation, AnimationOptions options = null) =>
+    PlayAnimationSequenceAll(plugin, new[] { animation }, options);
+
+  /// <summary>
+  /// Plays a playlist on the player's character: binds the carrier buff to the clips for everyone and
+  /// applies the buff. Set <see cref="AnimationOptions.Loop"/> to start over when the last clip ends;
+  /// otherwise it holds on the last clip until the buff goes. Give a
+  /// <see cref="AnimationOptions.DurationSeconds"/> if it should end on its own — the server has no
+  /// way to know how long the clips run.
+  /// </summary>
+  public static void PlayAnimationSequence(PlayerData player, string plugin, IEnumerable<string> animations, AnimationOptions options = null) {
+    options ??= new AnimationOptions();
+    PrefabGUID carrier = CarrierOf(options);
+    BindAnimationAll(plugin, carrier.GuidHash, animations, options);
+    ApplyCarrier(player, carrier, options);
+  }
+
+  /// <summary>Plays a playlist on every connected player. See <see cref="PlayAnimationSequence"/>.</summary>
+  public static void PlayAnimationSequenceAll(string plugin, IEnumerable<string> animations, AnimationOptions options = null) {
+    options ??= new AnimationOptions();
+    PrefabGUID carrier = CarrierOf(options);
+    BindAnimationAll(plugin, carrier.GuidHash, animations, options);
+    foreach (var player in PlayerService.GetAllConnected()) ApplyCarrier(player, carrier, options);
+  }
+
+  /// <summary>Stops an animation started by <see cref="PlayAnimation"/> by removing its carrier buff —
+  /// the client blends out the way the game does for its own buffs. The binding stays. Harmless when
+  /// nothing is playing.</summary>
+  /// <param name="player">Whose animation to stop.</param>
+  /// <param name="plugin">The calling plugin, as in every packet.</param>
+  /// <param name="carrierBuff">The buff the animation was started on, when it was not the default —
+  /// the same value as <see cref="AnimationOptions.CarrierBuff"/>. Zero removes the default carrier.</param>
+  public static void StopAnimation(PlayerData player, string plugin, int carrierBuff = 0) {
+    if (player != null)
+      BuffService.TryRemoveBuff(player.CharacterEntity, carrierBuff != 0 ? new PrefabGUID(carrierBuff) : AnimationCarrierBuff);
+  }
+
+  /// <summary>Stops the animation on every connected player. See <see cref="StopAnimation"/>.</summary>
+  public static void StopAnimationAll(string plugin, int carrierBuff = 0) {
+    PrefabGUID carrier = carrierBuff != 0 ? new PrefabGUID(carrierBuff) : AnimationCarrierBuff;
+    foreach (var player in PlayerService.GetAllConnected())
+      BuffService.TryRemoveBuff(player.CharacterEntity, carrier);
+  }
+
+  /// <summary>
+  /// The default carrier buff: <c>Buff_IdleInteraction_Tinker</c>. Any buff that asks the client for an
+  /// animation can be used instead, through <see cref="AnimationOptions.CarrierBuff"/> or by binding
+  /// it directly.
+  ///
+  /// <para><b>Why this one by default.</b> The carrier decides how many phases a single animation can
+  /// show: the game emits one animation request per phase of the carrier's own animation, and each is
+  /// a slot the bound animation answers with one of its phases. Tinker is <c>Init/Loop/Post</c> —
+  /// three slots, and it keeps cycling for as long as it is on. Animations run 1 to 5 phases
+  /// (measured over the clip dump: 2266 have one, 619 three, 228 two, 196 four, 7 five), so three
+  /// covers the great majority. A playlist is not bound by this: it paces itself.</para>
+  ///
+  /// <para>Why a buff at all: the action layer's weight is written by the game late in the frame, and
+  /// a client-side write to it does not survive. Asking the game for an animation is what raises the
+  /// layer, and that is the only reliable way in.</para>
+  /// </summary>
+  static readonly PrefabGUID AnimationCarrierBuff = new(-701198643);
+
+  static PrefabGUID CarrierOf(AnimationOptions options) =>
+    options.CarrierBuff != 0 ? new PrefabGUID(options.CarrierBuff) : AnimationCarrierBuff;
+
+  static void ApplyCarrier(PlayerData player, PrefabGUID carrier, AnimationOptions options) {
+    if (player == null) return;
+
+    // Re-applying while it is already on restarts the animation, which is what a second PlayAnimation
+    // should do. Duration maps straight onto the buff's, because the buff's lifetime IS the
+    // animation's: a positive value is that many seconds, a negative one is permanent (until
+    // StopAnimation), and zero lets the carrier buff run its own natural length.
+    Entity character = player.CharacterEntity;
+    BuffService.TryRemoveBuff(character, carrier);
+    BuffService.TryApplyBuff(character, carrier,
+      options.DurationSeconds < 0f ? -1f : options.DurationSeconds);
+  }
+
+  /// <summary>
+  /// Registers how animations authored for one skeleton retarget onto the player's rig, so a later
+  /// <see cref="PlayAnimation"/> naming that rig in <see cref="AnimationOptions.SourceRig"/> uses it.
+  ///
+  /// <para>Send once per rig, on <c>InterfaceAuth</c> or before the first animation that needs it. A
+  /// map with no entries clears the one previously sent for that rig, returning it to the client's own
+  /// derivation.</para>
+  /// </summary>
+  public static void SetBoneMap(PlayerData player, string plugin, BoneMapDefinition map) =>
+    PacketManager.SendPacket(player, BoneMapPacket(plugin, map));
+
+  /// <summary>Registers a bone map on every connected player. See <see cref="SetBoneMap"/>.</summary>
+  public static void SetBoneMapAll(string plugin, BoneMapDefinition map) =>
+    PacketManager.SendPacketToAll(BoneMapPacket(plugin, map));
+
+  static ScarletPacket BoneMapPacket(string plugin, BoneMapDefinition map) {
+    if (map == null) throw new ArgumentNullException(nameof(map));
+    if (string.IsNullOrEmpty(map.SourceRig)) throw new ArgumentException("A bone map needs a SourceRig.", nameof(map));
+
+    // One entry per line: sourcePath|targetBone|mode|x,y,z,w. Flat text rather than nested JSON
+    // because the packet layer compresses and chunks a single string well, and a full skeleton is
+    // ~50 entries.
+    var sb = new StringBuilder();
+    foreach (var entry in map.Entries) {
+      if (entry == null || string.IsNullOrEmpty(entry.SourcePath)) continue;
+      sb.Append(entry.SourcePath).Append('|')
+        .Append(entry.TargetBone ?? "").Append('|')
+        .Append((int)entry.Mode).Append('|')
+        .Append(F(entry.RestX)).Append(',').Append(F(entry.RestY)).Append(',')
+        .Append(F(entry.RestZ)).Append(',').Append(F(entry.RestW)).Append('\n');
+    }
+
+    return new ScarletPacket {
+      Type = "SBM",
+      Plugin = plugin,
+      Window = "",
+      Data = new() { ["anr"] = map.SourceRig, ["bme"] = sb.ToString() },
+    };
+  }
 
   // ── Audio ─────────────────────────────────────────────────────────────────────
   //

@@ -187,6 +187,10 @@ internal static class PacketManager {
     // the client build from ScarletCore's own [Interface] config alone. No-op when unconfigured.
     EventManager.On(PlayerEvents.InterfaceAuth, InterfaceManager.SendConfiguredUpdateSource);
 
+    // Animation bindings registered for everyone (buff → clips) reach a client that connects later
+    // too, so every client agrees on what a bound buff plays.
+    EventManager.On(PlayerEvents.InterfaceAuth, InterfaceManager.ResendAnimationBindings);
+
     // Remove role and pending packets when the player disconnects.
     EventManager.On(PlayerEvents.PlayerLeft, Deauth);
   }
