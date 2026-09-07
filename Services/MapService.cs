@@ -99,6 +99,7 @@ public static class MapService {
   /// </summary>
   public static void Initialize() {
     LoadRegionPolygons();
+    SweepOrphanIcons();
   }
 
   /// <summary>
@@ -697,6 +698,36 @@ public static class MapService {
     if (!MapIcons.TryGetValue(key, out var entity)) return;
     if (entity.Exists()) entity.Destroy();
     MapIcons.Remove(key);
+  }
+
+  /// <summary>
+  /// Destroys every custom marker entity in the world that this registry does not own. Returns how many.
+  /// </summary>
+  /// <remarks>
+  /// Marker entities are persisted with the world save, but <see cref="MapIcons"/> is not: after a server
+  /// restart every marker left in the save has no owner, sits on its player's map forever, and a plugin
+  /// re-placing the same id spawns a second entity next to it instead of updating it. Called on
+  /// <see cref="Initialize"/>, when nothing has been placed yet, it clears all of them; called later it only
+  /// removes markers that slipped out of the registry. Native player icons share the prefab but never carry
+  /// <c>CustomImplementation</c>, which only <see cref="SpawnMapIcon"/> sets.
+  /// </remarks>
+  public static int SweepOrphanIcons() {
+    var owned = new HashSet<Entity>(MapIcons.Values);
+    var entities = EntityLookupService.QueryAll(EntityQueryOptions.IncludeDisabled, typeof(MapIconData), typeof(PlayerMapIcon));
+    var destroyed = 0;
+    try {
+      foreach (var entity in entities) {
+        if (owned.Contains(entity)) continue;
+        if (!entity.Has<PrefabGUID>() || entity.Read<PrefabGUID>().GuidHash != MAP_ICON_PREFAB.GuidHash) continue;
+        if (!entity.Read<MapIconData>().CustomImplementation) continue;
+        entity.Destroy();
+        destroyed++;
+      }
+    } finally {
+      entities.Dispose();
+    }
+    if (destroyed > 0) Log.Info($"[MapService] Destroyed {destroyed} orphan map marker(s) with no owner in the registry.");
+    return destroyed;
   }
 
   private static Entity SpawnMapIcon(PlayerData player, float3 position, string userName, bool clamp, bool showOnMinimap) {
