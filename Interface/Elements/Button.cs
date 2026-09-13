@@ -17,6 +17,12 @@ public class Button : UIElement, ITextElement {
   public UIBackground? HoverBackground { get; set; }
   /// <summary>Background shown while the button is pressed.</summary>
   public UIBackground? PressedBackground { get; set; }
+
+  /// <summary>Border shown while the pointer is over the button (falls back to <see cref="UIElement.Border"/>).
+  /// Content-aware, it traces this state's art (<see cref="HoverBackground"/> image/sprite, else the normal one).</summary>
+  public Border? HoverBorder { get; set; }
+  /// <summary>Border shown while the button is pressed (falls back to <see cref="HoverBorder"/>, then <see cref="UIElement.Border"/>).</summary>
+  public Border? PressedBorder { get; set; }
   /// <summary>Scale applied on hover (e.g. 1.05). 0 or 1 disables the effect.</summary>
   public float HoverScale { get; set; }
   /// <summary>Horizontal alignment of the button label. Default: Left.</summary>
@@ -25,6 +31,13 @@ public class Button : UIElement, ITextElement {
   /// instead of overflowing past the edges. Off by default (single-line). Give the button
   /// enough height (or Height="auto") for the extra lines.</summary>
   public bool Wrap { get; set; }
+
+  /// <summary>
+  /// Border drawn around each <c>{icon:...}</c> / inline-SVG glyph in the content — not around
+  /// the text box (that is <see cref="UIElement.Border"/>). With <see cref="Border.ContentAware"/>
+  /// it hugs the glyph's alpha outline; otherwise it is a box the size of the glyph.
+  /// </summary>
+  public Border? IconBorder { get; set; }
 
   // ─── ITextElement ────────────────────────────────────────────────────────
   /// <inheritdoc/>

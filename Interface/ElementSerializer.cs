@@ -662,6 +662,7 @@ internal static class ElementSerializer
         if (t.TextAlign != TextAlignment.Left) d["ta"] = t.TextAlign.ToString();
         if (t.Wrap) d["wr"] = "true";
         SerializeTextStyle(d, t);
+        SerializeBorder(d, t.IconBorder, "i");
         return ("AT", d);
 
       case Button b:
@@ -671,6 +672,9 @@ internal static class ElementSerializer
         if (b.TextAlign != TextAlignment.Left) d["ta"] = b.TextAlign.ToString();
         if (b.Wrap) d["wr"] = "true";
         SerializeTextStyle(d, b);
+        SerializeBorder(d, b.IconBorder, "i");
+        SerializeBorder(d, b.HoverBorder, "h");     // hdc/hdw/hdr/hdgc/hdgw/hdgf/hdca
+        SerializeBorder(d, b.PressedBorder, "q");   // qdc/...
         SerializeHoverBackground(d, b.HoverBackground, b.PressedBackground);
         if (b.HoverScale > 0f && b.HoverScale != 1f) d["hs"] = b.HoverScale.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (b.ClickSounds is { Length: > 0 }) d["sclk"] = string.Join("\n", b.ClickSounds);
@@ -819,6 +823,12 @@ internal static class ElementSerializer
         if (!float.IsNaN(iv.RMaxDur)) d["ivm"] = F(iv.RMaxDur);
         if (iv.RTier >= 0) d["ivt"] = iv.RTier.ToString(IC);
         if (iv.RModsSyncId != 0) d["ivy"] = iv.RModsSyncId.ToString(IC);
+        // Stored blood: quality + primary type, and the infused secondary as "type:quality:buffIndex".
+        if (iv.RBloodType != 0) {
+          d["ivbq"] = F(iv.RBloodQuality);
+          d["ivbt"] = iv.RBloodType.ToString(IC);
+          if (iv.RBlood2Type != 0) d["ivb2"] = $"{iv.RBlood2Type.ToString(IC)}:{F(iv.RBlood2Quality)}:{iv.RBlood2Buff.ToString(IC)}";
+        }
         if (iv.RMods is { Count: > 0 }) d["ivs"] = ModsWire(iv.RMods);
         if (iv.RAbil0 is { Count: > 0 }) d["iva"] = ModsWire(iv.RAbil0);
         if (iv.RAbil0SyncId != 0) d["ivas"] = iv.RAbil0SyncId.ToString(IC);
@@ -975,17 +985,21 @@ internal static class ElementSerializer
     if (elem.RebuildFadeOut != 0) d["rfo"] = elem.RebuildFadeOut.ToString(IC);
   }
 
-  /// <summary>Serializes Border into data keys (dc=BorderColor, dw=BorderWidth, dr=BorderRadius).</summary>
-  static void SerializeBorder(Dictionary<string, string> d, Border? border)
+  /// <summary>Serializes Border into data keys (dc=BorderColor, dw=BorderWidth, dr=BorderRadius).
+  /// <paramref name="p"/> prefixes the keys: "" for the element border, "i" for Text/Button.IconBorder
+  /// (idc/idw/idr/idgc/idgw/idgf/idca).</summary>
+  static void SerializeBorder(Dictionary<string, string> d, Border? border, string p = "")
   {
     if (!border.HasValue) return;
-    d["dc"] = border.Value.Color;
-    d["dw"] = F(border.Value.Width);
-    d["dr"] = F(border.Value.Radius);
+    d[p + "dc"] = border.Value.Color;
+    d[p + "dw"] = F(border.Value.Width);
+    d[p + "dr"] = F(border.Value.Radius);
+    // Content-aware: the client traces the alpha outline instead of the rectangle (dca).
+    if (border.Value.ContentAware) d[p + "dca"] = "true";
     if (border.Value.GlowColor.HasValue && border.Value.GlowWidth > 0f) {
-      d["dgc"] = border.Value.GlowColor.Value;
-      d["dgw"] = F(border.Value.GlowWidth);
-      if (border.Value.GlowFalloff != 2f) d["dgf"] = F(border.Value.GlowFalloff);
+      d[p + "dgc"] = border.Value.GlowColor.Value;
+      d[p + "dgw"] = F(border.Value.GlowWidth);
+      if (border.Value.GlowFalloff != 2f) d[p + "dgf"] = F(border.Value.GlowFalloff);
     }
   }
 

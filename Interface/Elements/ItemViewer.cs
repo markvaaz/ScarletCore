@@ -4,6 +4,7 @@ using ProjectM;
 using ProjectM.Network;
 using ProjectM.Shared;
 using ScarletCore.Interface.Builders;
+using ScarletCore.Services;
 using ScarletCore.Systems;
 using ScarletCore.Utils;
 using Stunlock.Core;
@@ -55,6 +56,13 @@ public class ItemViewer : UIElement {
   /// <summary>Extra pre-rendered tooltip text rows (e.g. custom attributes).</summary>
   public string[] Lines { get; set; }
 
+  /// <summary>
+  /// Manual form: the blood a potion holds (primary + infused secondary). The entity form reads
+  /// <c>StoredBlood</c> from the item itself, gated on the item's public identity being a blood
+  /// potion — a Bone Matrix or scroll riding a potion entity as its carrier shows no blood.
+  /// </summary>
+  public ItemBlood? Blood { get; set; }
+
   // ── Native-tooltip positioning (same model as ScarletInterface tooltips) ──
   // Without these the tooltip opens at the cursor growing up-right; near a screen edge it can spill
   // off-screen. Set them to attach the tooltip to a fixed point of THIS icon and grow inward.
@@ -81,6 +89,10 @@ public class ItemViewer : UIElement {
   // sets, each registered for its own sync id.
   internal List<(int Guid, float Power)> RAbil0, RAbil1;
   internal int RAbil0SyncId, RAbil1SyncId;
+  // Stored blood (blood potions): primary type/quality + the infused secondary of a mixed potion.
+  // 0 type = none. Entity form fills these only when the PUBLIC identity is a blood potion.
+  internal int RBloodType, RBlood2Type, RBlood2Buff;
+  internal float RBloodQuality = float.NaN, RBlood2Quality;
 
   /// <summary>Resolves the entity (if any) and registers stat rolls once. Runs on the main thread
   /// (called from serialization during <c>Window.Send</c>/<c>SendUpdate</c>).</summary>
@@ -90,6 +102,11 @@ public class ItemViewer : UIElement {
     RGuid = Guid;
     RLevel = Level; RDur = Durability; RMaxDur = MaxDurability;
     RTier = LegendaryTier;
+    if (Blood.HasValue) {
+      var b = Blood.Value;
+      RBloodType = b.Type; RBloodQuality = b.Quality;
+      RBlood2Type = b.SecondaryType; RBlood2Quality = b.SecondaryQuality; RBlood2Buff = b.SecondaryBuffIndex;
+    }
     if (StatMods is { Length: > 0 }) {
       RMods = new List<(int, float)>(StatMods.Length);
       foreach (var m in StatMods) if (m.Guid != 0) RMods.Add(m);
@@ -106,7 +123,13 @@ public class ItemViewer : UIElement {
     try {
       NetworkIdLookupMap map = GameSystems.NetworkIdSystem.GetNetworkIdLookupRO();
       if (!map.TryGetValue(nid, out var e) || !e.Exists()) return;
-      if (RGuid == 0) RGuid = e.GetPrefabGuid().GuidHash;
+      // Public identity first: a disguised carrier (Bone Matrix, forge weapon, pet…) has a
+      // misleading prefab on the entity; the inventory slot's ItemType is what the player sees.
+      if (RGuid == 0) {
+        int pub = PublicIdentity(e);
+        RGuid = pub != 0 ? pub : e.GetPrefabGuid().GuidHash;
+      }
+      RGuid = RefineDisplayGuid(e, RGuid);
       if (e.Has<Durability>()) { var d = e.Read<Durability>(); RDur = d.Value; RMaxDur = d.MaxDurability; }
       if (float.IsNaN(RLevel) && e.Has<WeaponLevelSource>())
         RLevel = e.Read<WeaponLevelSource>().Level; // RAW — client curves use raw units
@@ -118,9 +141,54 @@ public class ItemViewer : UIElement {
         RAbil0 ??= Extract(comp.AbilityMods0);  // → "Ability Modification"
         RAbil1 ??= Extract(comp.AbilityMods1);
       }
+      // Stored blood, whatever the public item is: the native tooltip shows "Blood type / quality"
+      // for ANY entity carrying StoredBlood (a custom item riding a potion entity included).
+      if (RBloodType == 0 && e.Has<StoredBlood>()) {
+        var sb = e.Read<StoredBlood>();
+        if (sb.PrimaryBloodType.GuidHash != 0) {
+          RBloodType = sb.PrimaryBloodType.GuidHash; RBloodQuality = sb.BloodQuality;
+          RBlood2Type = sb.SecondaryBlood.Type.GuidHash; RBlood2Quality = sb.SecondaryBlood.Quality;
+          RBlood2Buff = sb.SecondaryBlood.BuffIndex;
+        }
+      }
     } catch (Exception ex) {
       Log.Warning($"[ItemViewer] entity resolve failed: {ex.Message}");
     }
+  }
+
+  // The ItemType of the inventory slot holding this entity — the item's public identity — or 0
+  // when the entity is not sitting in an inventory the server knows.
+  static int PublicIdentity(Entity e) {
+    try {
+      if (!e.Has<InventoryItem>()) return 0;
+      var container = e.Read<InventoryItem>().ContainerEntity;
+      if (!container.Exists()) return 0;
+      var em = GameSystems.EntityManager;
+      if (!em.HasBuffer<InventoryBuffer>(container)) return 0;
+      var buf = em.GetBuffer<InventoryBuffer>(container);
+      for (int i = 0; i < buf.Length; i++)
+        if (buf[i].ItemEntity.GetEntityOnServer() == e) return buf[i].ItemType.GuidHash;
+    } catch (Exception ex) {
+      Log.Warning($"[ItemViewer] public identity lookup failed: {ex.Message}");
+    }
+    return 0;
+  }
+
+  // The same consumer refinement the chat item share asks for (ScarletChannels.ItemShareResolve —
+  // ScarletRPG answers with the forge display guid). Only the guid is usable here: the viewer's
+  // client renders the name from the guid, so the per-recipient name/lines delegates are skipped.
+  static int RefineDisplayGuid(Entity e, int guid) {
+    const string id = "ScarletChannels.ItemShareResolve";
+    try {
+      if (!ModBridge.Has(id)) return guid;
+      var input = new Dictionary<string, object> { ["itemEntity"] = e, ["itemType"] = guid };
+      if (ModBridge.TryCall<Dictionary<string, object>, Dictionary<string, object>>(id, input, out var res)
+          && res != null && res.TryGetValue("guid", out var g) && g is int gi && gi != 0)
+        return gi;
+    } catch (Exception ex) {
+      Log.Warning($"[ItemViewer] display refinement failed: {ex.Message}");
+    }
+    return guid;
   }
 
   // Non-empty mods of a SpellModSet as a (guid,power) list, or null when the set is empty.
