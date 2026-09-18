@@ -545,14 +545,19 @@ public static class MapService {
   ///
   /// The icon adapts to the player's client:
   /// <list type="bullet">
-  /// <item>Plain V Rising client — the label goes into <c>PlayerMapIcon.UserName</c> and the
-  /// default sprite is used. Nothing is sent and nothing looks broken.</item>
-  /// <item>ScarletInterface client — the marker's id goes into <c>PlayerMapIcon.UserName</c>
-  /// instead, and image plus label travel in a packet keyed by that same id. The client matches
-  /// icon to packet by id, so it repaints exactly the right one even when markers overlap.</item>
+  /// <item>Plain V Rising client — sees the prefab's own sprite. With the default prefab
+  /// (<c>MapIcon_Player</c>) the label goes into <c>PlayerMapIcon.UserName</c> and shows on
+  /// hover; with any other prefab the game shows that prefab's own localized header instead,
+  /// because those icons have no per-instance text. Nothing is sent and nothing looks broken.</item>
+  /// <item>ScarletInterface client — image, tint, scale and (for prefabs without
+  /// <c>PlayerMapIcon</c>) the label travel in a packet keyed by the icon's NetworkId. The client
+  /// matches icon to packet by that id, so it repaints exactly the right one even when markers
+  /// overlap, and writes the label into the game's own hover-label slot.</item>
   /// </list>
   ///
-  /// Reusing an id moves and updates that marker rather than creating a second one.
+  /// Reusing an id moves and updates that marker rather than creating a second one. Passing a
+  /// different <paramref name="prefab"/> for an existing id replaces the entity, since the
+  /// native sprite is the prefab's.
   /// </remarks>
   /// <param name="player">The player who sees the marker</param>
   /// <param name="plugin">Calling plugin — scopes the id so two mods can both use "boss"</param>
@@ -561,11 +566,13 @@ public static class MapService {
   /// <param name="z">World Z coordinate</param>
   /// <param name="icon">Image for ScarletInterface clients: an http(s)/file URL or a native sprite name; ignored by plain clients</param>
   /// <param name="label">Text shown when hovering the marker on the full map</param>
+  /// <param name="subLabel">Second line under the label on the full map, ScarletInterface clients only. Absent means no second line at all: the client also hides the prefab's own sub-header (e.g. the "Blacksmith" line of the bandit-camp icons), so a prefab's native subtitle never leaks under a custom marker. Plain clients see the prefab's sub-header as the game ships it</param>
   /// <param name="color">Optional tint applied by ScarletInterface clients (e.g. "#ff0000")</param>
   /// <param name="scale">Icon size multiplier for ScarletInterface clients; 1 keeps the game's own size. Relative rather than absolute, because the minimap and the full map draw icons at different base sizes</param>
   /// <param name="clamp">Whether the game pins the marker to the minimap edge when off-screen</param>
   /// <param name="showOnMinimap">Whether the marker shows on the minimap; false leaves it on the full map only. The full map has no per-icon toggle natively, so it always shows the marker</param>
   /// <param name="showIndicator">ScarletInterface clients only: draw the game's own screen-edge arrow with direction and distance to this marker while it is off-screen. Off by default; plain clients never show it because the game only gives that arrow to its own player-placed pings</param>
+  /// <param name="prefab">Which native MapIcon prefab to spawn; default is <c>MapIcon_Player</c>. Any <c>MapIcon_*</c> prefab works (e.g. <c>MapIcon_POI_Discover_Merchant</c>): plain clients see that prefab's sprite and header, ScarletInterface clients still get <paramref name="icon"/> and <paramref name="label"/></param>
   /// <returns>False when the marker could not be created; the reason is logged</returns>
   /// <remarks>
   /// <paramref name="clamp"/> and <paramref name="showOnMinimap"/> map to the game's own
@@ -576,7 +583,8 @@ public static class MapService {
   /// therefore always get the prefab defaults for these two.
   /// </remarks>
   public static bool SetIcon(PlayerData player, string plugin, string id, float x, float z,
-      string icon = null, string label = null, string color = null, float scale = 1f, bool clamp = true, bool showOnMinimap = true, bool showIndicator = false) {
+      string icon = null, string label = null, string color = null, float scale = 1f, bool clamp = true, bool showOnMinimap = true, bool showIndicator = false,
+      PrefabGUID prefab = default, string subLabel = null) {
     if (player == null || string.IsNullOrEmpty(plugin) || string.IsNullOrEmpty(id)) return false;
 
     var token = $"{plugin}:{id}";
@@ -589,38 +597,56 @@ public static class MapService {
       return false;
     }
 
-    // The label always lives on the icon, for every client: the game's own tooltip then shows it
-    // with no help from us. Identity travels as the icon's NetworkId in the packet instead, so
-    // nothing the player can see has to be sacrificed to make markers identifiable.
+    // The label lives on the icon itself whenever the prefab can carry text: MapIcon_Player has
+    // PlayerMapIcon, whose UserName the game shows on hover for every client. Other prefabs have
+    // no per-instance text, so plain clients see the prefab's own localized header and
+    // ScarletInterface clients take the label from the packet. Identity travels as the icon's
+    // NetworkId in the packet, so nothing the player can see is sacrificed for it.
     var userName = SanitizeLabel(label);
+    var subText = SanitizeLabel(subLabel);
+    var iconPrefab = prefab.GuidHash != 0 ? prefab : MAP_ICON_PREFAB;
 
     var position = new float3(x, 0f, z);
     var key = $"{plugin}:{id}:{player.PlatformId}";
 
-    if (MapIcons.TryGetValue(key, out var entity) && entity.Exists()) {
+    // A different prefab means a different native sprite, and that only comes with the entity.
+    if (MapIcons.TryGetValue(key, out var entity) && entity.Exists()
+        && entity.Has<PrefabGUID>() && entity.Read<PrefabGUID>().GuidHash != iconPrefab.GuidHash) {
+      DestroyMapIcon(key);
+      entity = Entity.Null;
+    }
+
+    if (entity.Exists()) {
       entity.SetPosition(position);
       SetIconUserName(entity, userName);
     } else {
-      entity = MapIcons[key] = SpawnMapIcon(player, position, userName, clamp, showOnMinimap);
+      entity = SpawnMapIcon(player, iconPrefab, position, userName, clamp, showOnMinimap);
+      if (!entity.Exists()) {
+        MapIcons.Remove(key);
+        Log.Error($"[MapService] Marker '{token}' could not be spawned from prefab {iconPrefab.GuidHash}.");
+        return false;
+      }
+      MapIcons[key] = entity;
     }
 
+    // True for MapIcon_Player only; everything else needs the label in the packet.
+    var labelOnIcon = entity.Has<PlayerMapIcon>();
+
     if (PacketManager.HasInterface(player)) {
-      // A freshly spawned entity has no NetworkId yet — reading it here returns 0:0, which
-      // identifies nothing. The id is assigned later in the frame, so the packet waits for it.
-      var pending = entity;
-      ActionScheduler.NextFrame(() => {
-        if (!pending.Exists()) return;
-        var netId = pending.Read<NetworkId>();
-        if (netId.Normal_Index == 0 && netId.Normal_Generation == 0) {
-          Log.Warning($"[MapService] Marker '{plugin}:{id}' still has no NetworkId; ScarletInterface clients cannot identify it.");
-          return;
-        }
+      // The packet is keyed by the icon's NetworkId. A freshly spawned entity gets one from
+      // SpawnMapIcon synchronously, so this normally fires right away; the helper only waits
+      // when the game's allocator could not be run on the spot.
+      WhenNetworkIdReady(entity, token, netId => {
         var data = new Dictionary<string, string> {
           ["Id"] = id,
           ["Net"] = $"{netId.Normal_Index}:{netId.Normal_Generation}",
           ["Icon"] = icon ?? string.Empty,
         };
         if (!string.IsNullOrEmpty(color)) data["Color"] = color;
+        // Absent means "keep the game's own label", which for a text-less prefab is its header.
+        if (!labelOnIcon && !string.IsNullOrEmpty(userName)) data["Label"] = userName;
+        // Absent means "no second line": the client blanks the prefab's own sub-header too.
+        if (!string.IsNullOrEmpty(subText)) data["Sub"] = subText;
         if (scale > 0f && scale != 1f) data["Scale"] = scale.ToString(System.Globalization.CultureInfo.InvariantCulture);
         // Sent only when off the default so the packet stays small; the client treats an absent
         // key as the default, which also makes an update that flips the flag back revert cleanly.
@@ -642,9 +668,10 @@ public static class MapService {
   // ponytail: players connecting later don't receive existing markers — call this again on join
   // if that matters. Storing marker definitions and replaying them on connect is the upgrade path.
   public static void SetIconAll(string plugin, string id, float x, float z,
-      string icon = null, string label = null, string color = null, float scale = 1f, bool clamp = true, bool showOnMinimap = true, bool showIndicator = false) {
+      string icon = null, string label = null, string color = null, float scale = 1f, bool clamp = true, bool showOnMinimap = true, bool showIndicator = false,
+      PrefabGUID prefab = default, string subLabel = null) {
     foreach (var player in PlayerService.GetAllConnected()) {
-      SetIcon(player, plugin, id, x, z, icon, label, color, scale, clamp, showOnMinimap, showIndicator);
+      SetIcon(player, plugin, id, x, z, icon, label, color, scale, clamp, showOnMinimap, showIndicator, prefab, subLabel);
     }
   }
 
@@ -708,18 +735,20 @@ public static class MapService {
   /// restart every marker left in the save has no owner, sits on its player's map forever, and a plugin
   /// re-placing the same id spawns a second entity next to it instead of updating it. Called on
   /// <see cref="Initialize"/>, when nothing has been placed yet, it clears all of them; called later it only
-  /// removes markers that slipped out of the registry. Native player icons share the prefab but never carry
-  /// <c>CustomImplementation</c>, which only <see cref="SpawnMapIcon"/> sets.
+  /// removes markers that slipped out of the registry. Markers can be spawned from any MapIcon prefab, so
+  /// they are told apart from the game's own icons by two things only <see cref="SpawnMapIcon"/> does:
+  /// setting <c>CustomImplementation</c> and pointing <c>MapIconTargetEntity</c> at the icon itself (native
+  /// icons target a player, a heart, a waypoint... never themselves).
   /// </remarks>
   public static int SweepOrphanIcons() {
     var owned = new HashSet<Entity>(MapIcons.Values);
-    var entities = EntityLookupService.QueryAll(EntityQueryOptions.IncludeDisabled, typeof(MapIconData), typeof(PlayerMapIcon));
+    var entities = EntityLookupService.QueryAll(EntityQueryOptions.IncludeDisabled, typeof(MapIconData), typeof(MapIconTargetEntity));
     var destroyed = 0;
     try {
       foreach (var entity in entities) {
         if (owned.Contains(entity)) continue;
-        if (!entity.Has<PrefabGUID>() || entity.Read<PrefabGUID>().GuidHash != MAP_ICON_PREFAB.GuidHash) continue;
         if (!entity.Read<MapIconData>().CustomImplementation) continue;
+        if (entity.Read<MapIconTargetEntity>().TargetEntity._Entity != entity) continue;
         entity.Destroy();
         destroyed++;
       }
@@ -730,8 +759,13 @@ public static class MapService {
     return destroyed;
   }
 
-  private static Entity SpawnMapIcon(PlayerData player, float3 position, string userName, bool clamp, bool showOnMinimap) {
-    var entity = SpawnerService.ImmediateSpawn(MAP_ICON_PREFAB, position, lifeTime: -1f);
+  private static Entity SpawnMapIcon(PlayerData player, PrefabGUID prefab, float3 position, string userName, bool clamp, bool showOnMinimap) {
+    var entity = SpawnerService.ImmediateSpawn(prefab, position, lifeTime: -1f);
+    if (!entity.Exists()) return Entity.Null;
+
+    // Give the icon its NetworkId now rather than whenever the game gets around to it: the
+    // ScarletInterface packet and MapIconTargetEntity below both need the real value.
+    AssignNetworkId(entity);
 
     entity.HasWith((ref MapIconData iconData) => {
       iconData.AllySetting = MapIconShowSettings.Global;
@@ -751,8 +785,15 @@ public static class MapService {
     });
 
     entity.SetPosition(position);
-    entity.SetTeam(player.CharacterEntity);
-    entity.ReadBuffer<SyncToUserBuffer>().Add(new SyncToUserBuffer {
+    entity.SetTeam(player.CharacterEntity);   // no-op for prefabs without Team
+
+    // Only this player may receive the icon. MapIcon_Player ships with the per-user sync pair
+    // (OnlySyncToUsersTag + SyncToUserBuffer); world icons such as the POI prefabs sync to
+    // everyone, so the pair is added on the instance — the same recipe that keeps a caravan's
+    // chest visible to its owner alone.
+    if (!entity.Has<OnlySyncToUsersTag>()) entity.Add<OnlySyncToUsersTag>();
+    var syncBuffer = entity.Has<SyncToUserBuffer>() ? entity.ReadBuffer<SyncToUserBuffer>() : entity.AddBuffer<SyncToUserBuffer>();
+    syncBuffer.Add(new SyncToUserBuffer {
       UserEntity = player.UserEntity
     });
 
@@ -760,8 +801,73 @@ public static class MapService {
     return entity;
   }
 
+  // The game hands out NetworkIds in SetupNetworkIdSystem (two passes per world update: plain
+  // and PreSerialize), never at instantiate time, so InstantiateEntityImmediate returns an
+  // entity whose NetworkId reads 0:0 until the next pass. When the spawn happens inside the
+  // world update the PreSerialize pass covers it in the same frame. When it happens outside —
+  // Bloodpebble runs plugin reloads from MonoBehaviour LateUpdate, after every world system
+  // of the frame — both passes are already gone, and a check scheduled for "next frame" fires
+  // in the PerformanceRecorderSystem prefix, which precedes those passes: still 0:0. That is
+  // why every marker placed during a hot-reload used to be unidentifiable.
+  // Running the system on demand assigns the id on the spot. Its query is every entity with
+  // NetworkId + SpawnTag, and the game already runs it twice per frame over the same entities,
+  // so an extra pass is safe: entities that already hold an id are skipped.
+  private static SetupNetworkIdSystem _setupNetworkIdSystem;
+
+  // How long WhenNetworkIdReady keeps polling if the on-demand pass could not assign an id.
+  private const int NETWORK_ID_WAIT_FRAMES = 60;
+
+  private static bool HasNetworkId(Entity entity) {
+    if (!entity.Exists() || !entity.Has<NetworkId>()) return false;
+    var netId = entity.Read<NetworkId>();
+    return netId.Normal_Index != 0 || netId.Normal_Generation != 0;
+  }
+
+  private static void AssignNetworkId(Entity entity) {
+    if (!entity.Exists() || !entity.Has<NetworkId>() || HasNetworkId(entity)) return;
+    try {
+      _setupNetworkIdSystem ??= GameSystems.Server.GetExistingSystemManaged<SetupNetworkIdSystem>();
+      _setupNetworkIdSystem?.Update();
+    } catch (Exception ex) {
+      Log.Warning($"[MapService] Could not run SetupNetworkIdSystem on demand: {ex.Message}");
+    }
+  }
+
+  /// <summary>
+  /// Invokes <paramref name="callback"/> with the entity's NetworkId as soon as it has one:
+  /// synchronously when it already does or the game's allocator can be run now, otherwise on
+  /// the first later frame where the id shows up. Gives up with a warning after
+  /// <see cref="NETWORK_ID_WAIT_FRAMES"/> frames or if the entity is destroyed meanwhile.
+  /// </summary>
+  private static void WhenNetworkIdReady(Entity entity, string token, Action<NetworkId> callback) {
+    if (!HasNetworkId(entity)) AssignNetworkId(entity);
+    if (HasNetworkId(entity)) {
+      callback(entity.Read<NetworkId>());
+      return;
+    }
+
+    var frames = 0;
+    ActionScheduler.OncePerFrame(cancel => {
+      if (!entity.Exists()) {
+        cancel();
+        return;
+      }
+      if (HasNetworkId(entity)) {
+        cancel();
+        callback(entity.Read<NetworkId>());
+        return;
+      }
+      if (++frames >= NETWORK_ID_WAIT_FRAMES) {
+        cancel();
+        Log.Warning($"[MapService] Marker '{token}' got no NetworkId after {NETWORK_ID_WAIT_FRAMES} frames; ScarletInterface clients cannot identify it.");
+      }
+    });
+  }
+
+  // Only prefabs that carry PlayerMapIcon (MapIcon_Player) can hold text; the rest get their
+  // label through the packet, so nothing is added here.
   private static void SetIconUserName(Entity entity, string userName) {
-    entity.AddWith((ref PlayerMapIcon playerIcon) => {
+    entity.HasWith((ref PlayerMapIcon playerIcon) => {
       playerIcon.UserName = new(userName);
     });
   }
