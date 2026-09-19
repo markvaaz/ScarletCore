@@ -40,8 +40,10 @@ public static class UIIcons {
   /// Inside a <c>Button</c> the click still reaches the button (the glyph forwards Down/Up/Click).
   /// Shows the BASE item — a glyph carries no entity data; use <c>ItemViewer</c> for level/durability/mods.
   /// </summary>
+  /// <param name="guidHash">PrefabGUID hash.</param>
   /// <param name="size">Icon size in pixels. 0 = inherit from font size.</param>
   /// <param name="spacing">Gap on each side. -1 = default (3 px).</param>
+  /// <param name="tooltip">Whether hovering the icon opens the item's native tooltip.</param>
   public static string Icon(int guidHash, float size, float spacing, bool tooltip) =>
     Icon(guidHash, size, spacing, tooltip, null);
 

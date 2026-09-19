@@ -93,8 +93,11 @@ public sealed class ChatTheme {
 
 /// <summary>A styled chat region: background, border and inner padding.</summary>
 public class ChatArea {
+  /// <summary>Background fill of the region.</summary>
   public UIBackground? Background { get; set; }
+  /// <summary>Border drawn around the region.</summary>
   public Border? Border { get; set; }
+  /// <summary>Inner padding between the region's edge and its content.</summary>
   public Spacing? Padding { get; set; }
   /// <summary>
   /// Container only: when true the skin wraps the WHOLE chat (messages + input + tab bar) as one
@@ -133,8 +136,11 @@ public class ChatArea {
 
 /// <summary>The chat input box: area style plus text/placeholder/caret colours.</summary>
 public sealed class ChatInputStyle : ChatArea {
+  /// <summary>Colour of the text the player types.</summary>
   public UIColor? TextColor { get; set; }
+  /// <summary>Colour of the placeholder text shown while the input is empty.</summary>
   public UIColor? PlaceholderColor { get; set; }
+  /// <summary>Colour of the text caret.</summary>
   public UIColor? CaretColor { get; set; }
   /// <summary>Input text size (typed text + placeholder), px. Negative = keep default.</summary>
   public float FontSize { get; set; } = -1;
@@ -162,9 +168,13 @@ public sealed class ChatTabsStyle : ChatArea {
   public Spacing? TabPadding { get; set; }
   /// <summary>Tab label font size. Negative = keep default.</summary>
   public float FontSize { get; set; } = -1;
+  /// <summary>Background colour of an unselected tab button.</summary>
   public UIColor? TabBackground { get; set; }
+  /// <summary>Label colour of an unselected tab button.</summary>
   public UIColor? TabTextColor { get; set; }
+  /// <summary>Background colour of the selected tab button.</summary>
   public UIColor? SelectedBackground { get; set; }
+  /// <summary>Label colour of the selected tab button.</summary>
   public UIColor? SelectedTextColor { get; set; }
 
   internal override Dictionary<string, string> Data() {
@@ -229,6 +239,7 @@ public sealed class ChatLinesStyle {
 public sealed class ChatTagStyle {
   /// <summary>Chip background. Unset = no chip, text-only restyle.</summary>
   public UIColor? Background { get; set; }
+  /// <summary>Colour of the tag label.</summary>
   public UIColor? TextColor { get; set; }
   /// <summary>Render the label in UPPERCASE.</summary>
   public bool Uppercase { get; set; }
@@ -287,15 +298,16 @@ public sealed class ChatTagStyle {
 /// fighting the chat-history ghost text. Keys are the same channel ids as <see cref="ChatTagStyle.Channels"/>
 /// (native names + custom keys). A value can be:
 /// <list type="bullet">
-///   <item><see cref="Builders.UIIcons.Svg"/> — an inline SVG token. The recommended kind: every
+///   <item><see cref="Builders.UIIcons.Svg(string)"/> — an inline SVG token. The recommended kind: every
 ///     icon rasterizes into the same fit-square border box, so sizes stay pixel-consistent, and a
 ///     colour-free SVG is tinted live (tab icons follow the label's normal/selected colour).</item>
-///   <item><see cref="Builders.UIIcons.Icon"/> — a game item/ability icon by PrefabGUID hash.</item>
+///   <item><see cref="Builders.UIIcons.Icon(int)"/> — a game item/ability icon by PrefabGUID hash.</item>
 ///   <item>a game sprite name or an http(s) image URL. Beware: game sprites carry arbitrary padding
 ///     and aspect ratios, so a mixed set will NOT look uniform — prefer SVG.</item>
 /// </list>
 /// </summary>
 public sealed class ChatIconsStyle {
+  /// <summary>Channel id → icon token (inline SVG, game icon, sprite name or image URL).</summary>
   public Dictionary<string, string> Channels { get; set; } = new();
   /// <summary>Icon square size in px.</summary>
   public float Size { get; set; } = 16;
@@ -357,8 +369,11 @@ public sealed class ChatHintStyle {
 
 /// <summary>Per-channel chip colours (see <see cref="ChatTagStyle.Channels"/>). Unset = inherit.</summary>
 public sealed class ChatTagColors {
+  /// <summary>Chip background colour for this channel.</summary>
   public UIColor? Background { get; set; }
+  /// <summary>Tag label colour for this channel.</summary>
   public UIColor? TextColor { get; set; }
+  /// <summary>Chip border colour for this channel.</summary>
   public UIColor? BorderColor { get; set; }
 }
 
@@ -366,6 +381,7 @@ public sealed class ChatTagColors {
 public sealed class ChatTimestampStyle {
   /// <summary>Remove the timestamp from lines entirely.</summary>
   public bool Hide { get; set; }
+  /// <summary>Colour of the timestamp text.</summary>
   public UIColor? Color { get; set; }
   /// <summary>Size relative to the line text, percent (e.g. 80). Zero/negative = keep.</summary>
   public float Scale { get; set; } = -1;

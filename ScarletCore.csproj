@@ -12,7 +12,7 @@
     <FileVersion>1.6.59.0</FileVersion>
     <Authors>markvaaz</Authors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);1591</NoWarn>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
   
   <PropertyGroup> 
@@ -41,6 +41,38 @@
     <EmbeddedResource Include="Localization\**\*.*" />
   </ItemGroup>
   
+  <!-- Overrides BepInEx.PluginInfoProps' own AddGeneratedFile target so the generated MyPluginInfo
+       carries XML docs (its default output has none, tripping CS1591 with doc generation on). Same
+       shape as the package's target, only the emitted text gains /// summaries. -->
+  <Target Name="AddGeneratedFile" BeforeTargets="BeforeCompile;CoreCompile" Inputs="$(MSBuildAllProjects)" Outputs="$(IntermediateOutputPath)MyPluginInfo.cs">
+    <PropertyGroup>
+      <BepInExPluginGuid Condition="'$(BepInExPluginGuid)' == ''">$(AssemblyName)</BepInExPluginGuid>
+      <BepInExPluginName Condition="'$(BepInExPluginName)' == ''">$(Product)</BepInExPluginName>
+      <BepInExPluginVersion Condition="'$(BepInExPluginVersion)' == ''">$(Version)</BepInExPluginVersion>
+      <GeneratedText><![CDATA[
+namespace $(RootNamespace)
+{
+    /// <summary>Compile-time plugin metadata, generated from the BepInEx plugin properties in the csproj.</summary>
+    public static class MyPluginInfo
+    {
+        /// <summary>The plugin's unique BepInEx GUID.</summary>
+        public const string PLUGIN_GUID = "$(BepInExPluginGuid)"%3B
+        /// <summary>The plugin's display name.</summary>
+        public const string PLUGIN_NAME = "$(BepInExPluginName)"%3B
+        /// <summary>The plugin's version string.</summary>
+        public const string PLUGIN_VERSION = "$(BepInExPluginVersion)"%3B
+    }
+}
+      ]]></GeneratedText>
+      <GeneratedFilePath>$(IntermediateOutputPath)MyPluginInfo.cs</GeneratedFilePath>
+    </PropertyGroup>
+    <ItemGroup>
+      <Compile Include="$(GeneratedFilePath)" />
+      <FileWrites Include="$(GeneratedFilePath)" />
+    </ItemGroup>
+    <WriteLinesToFile Lines="$(GeneratedText)" File="$(GeneratedFilePath)" WriteOnlyWhenDifferent="true" Overwrite="true" />
+  </Target>
+
   <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(SkipDeploy)' != 'true'">
     <Exec Command="copy &quot;$(TargetPath)&quot; &quot;C:\Program Files (x86)\Steam\steamapps\common\VRisingDedicatedServer\BepInEx\plugins&quot; " ContinueOnError="true" />
     <Exec Command="start &quot;VRising Server&quot; cmd /c &quot;cd /d &quot;C:\Program Files (x86)\Steam\steamapps\common\VRisingDedicatedServer&quot; &amp; START_SERVER.bat&quot;" />

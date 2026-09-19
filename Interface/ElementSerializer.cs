@@ -1070,7 +1070,7 @@ internal static class ElementSerializer
     // Containers: ck=1 clears the old children on the client, then the subtree is re-sent through
     // the same recursive path the full window uses (nested rows/containers, absolute-in-parent
     // leaves, tooltips). A one-level loop here silently dropped every grandchild.
-    IEnumerable<UIElement>? children = elem switch
+    IEnumerable<UIElement> children = elem switch
     {
       Row row => row.Children,
       Accordion acc => acc.Children,

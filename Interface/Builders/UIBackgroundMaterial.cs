@@ -12,7 +12,7 @@ namespace ScarletCore.Interface.Builders;
 /// the game uses it with (see <see cref="UIBackground.FromMaterial"/>). Without a sprite they
 /// render flat.
 /// </para>
-/// Use <see cref="UIBackground.FromMaterial"/> or <see cref="UIBackground.WithMaterial"/> to
+/// Use <see cref="UIBackground.FromMaterial"/> or <see cref="UIBackground.WithMaterial(string)"/> to
 /// create one, then <see cref="UIBackground.WithMaterialColor"/> to tint it.
 /// </summary>
 public readonly struct UIBackgroundMaterial {
