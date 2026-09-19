@@ -166,9 +166,15 @@ public class Window : IEnumerable<UIElement>
   /// <summary>Optional sound URLs played on the client when the window opens. The client picks
   /// one at random. Empty/null = silent (fully opt-in, no default sound).</summary>
   public string[] OpenSounds { get; set; }
+  /// <summary>Volume of the open sound, 0..1 (default 1 = full). Multiplied on top of the player's
+  /// interface-sound volume slider.</summary>
+  public float OpenVolume { get; set; } = 1f;
   /// <summary>Optional sound URLs played on the client when the window closes. The client picks
   /// one at random. Empty/null = silent (fully opt-in, no default sound).</summary>
   public string[] CloseSounds { get; set; }
+  /// <summary>Volume of the close sound, 0..1 (default 1 = full). Multiplied on top of the player's
+  /// interface-sound volume slider.</summary>
+  public float CloseVolume { get; set; } = 1f;
 
   // ─── Auto-Close ──────────────────────────────────────────────────────────
 

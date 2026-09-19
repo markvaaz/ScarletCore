@@ -62,7 +62,9 @@ internal static class ElementSerializer
     if (window.CloseAnimation != WindowAnimation.None) wd["ca"] = window.CloseAnimation.ToString();
     if (window.AnimationDuration != 0.2f) wd["ad"] = F(window.AnimationDuration);
     if (window.OpenSounds is { Length: > 0 }) wd["sopn"] = string.Join("\n", window.OpenSounds);
+    if (window.OpenVolume != 1f) wd["sopnv"] = F(window.OpenVolume);
     if (window.CloseSounds is { Length: > 0 }) wd["scls"] = string.Join("\n", window.CloseSounds);
+    if (window.CloseVolume != 1f) wd["sclsv"] = F(window.CloseVolume);
     // Always emit — the client keeps the previous value for any omitted key, so a resend
     // that drops AutoClose back to 0 must send ax=0 explicitly or the timer stays alive.
     wd["ax"] = F(window.AutoClose);
@@ -678,6 +680,7 @@ internal static class ElementSerializer
         SerializeHoverBackground(d, b.HoverBackground, b.PressedBackground);
         if (b.HoverScale > 0f && b.HoverScale != 1f) d["hs"] = b.HoverScale.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (b.ClickSounds is { Length: > 0 }) d["sclk"] = string.Join("\n", b.ClickSounds);
+        if (b.ClickVolume != 1f) d["sclkv"] = F(b.ClickVolume);
         return ("AB", d);
 
       case Input inp:

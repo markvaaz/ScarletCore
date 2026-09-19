@@ -11,6 +11,9 @@ public class Button : UIElement, ITextElement {
   /// <summary>Optional sound URLs played on the client when the button is clicked. The client
   /// picks one at random per click. Empty/null = silent (fully opt-in, no default sound).</summary>
   public string[] ClickSounds { get; set; }
+  /// <summary>Volume of the click sound, 0..1 (default 1 = full). Multiplied on top of the player's
+  /// interface-sound volume slider. Lets one button be quieter/louder than another individually.</summary>
+  public float ClickVolume { get; set; } = 1f;
   /// <summary>Whether padding is included in or added to the declared size.</summary>
   public BoxSizing BoxSizing { get; set; }
   /// <summary>Background shown when the cursor hovers over the button.</summary>
