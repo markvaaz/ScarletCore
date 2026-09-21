@@ -403,6 +403,122 @@ public static class InterfaceManager {
   static ScarletPacket ServerLogoPacket(string plugin, string url) =>
     new() { Type = "SL", Plugin = plugin, Window = "", Data = new() { ["ur"] = url ?? "" } };
 
+  // ── Custom world map ──────────────────────────────────────────────────────────
+
+  /// <summary>The map set for everyone, kept so a client that connects later receives it too.</summary>
+  static ScarletPacket _worldMapAll;
+
+  /// <summary>
+  /// Replaces the game's world-map art on this player's client with an image downloaded from
+  /// <paramref name="url"/>. The swap reflects on all three map surfaces at once — the full (M) map,
+  /// the HUD minimap, and any ScarletInterface <c>AddMiniMap</c> element — because they share one map
+  /// material. The image should be the whole map, at the same aspect as the game's own art, so world
+  /// positions still line up; edit the game's map export and host it anywhere the client can reach.
+  /// <para>
+  /// The server only sends the link: the client downloads and disk-caches the image itself, so a large
+  /// map never travels over the wire. Only the explored (unfogged) part of the map shows the custom
+  /// art, exactly as with the default map. Pass a null/empty url to restore the game's own map.
+  /// </para>
+  /// Per-player and not retained across a relog — resend on <c>InterfaceAuth</c>, or use
+  /// <see cref="SetWorldMapAll"/>, which is retained.
+  /// </summary>
+  public static void SetWorldMap(PlayerData player, string plugin, string url) =>
+    PacketManager.SendPacket(player, WorldMapPacket(plugin, url));
+
+  /// <summary>
+  /// Sets the custom world map on every connected player, now and for anyone who connects later.
+  /// Pass a null/empty url to restore the game's own map everywhere. See <see cref="SetWorldMap"/>.
+  /// </summary>
+  public static void SetWorldMapAll(string plugin, string url) {
+    var packet = WorldMapPacket(plugin, url);
+    // Empty url means "restore the default" — there is nothing to hand a future connection.
+    _worldMapAll = string.IsNullOrWhiteSpace(url) ? null : packet;
+    PacketManager.SendPacketToAll(packet);
+  }
+
+  static ScarletPacket WorldMapPacket(string plugin, string url) =>
+    new() { Type = "SWM", Plugin = plugin, Window = "", Data = new() { ["ur"] = url ?? "" } };
+
+  /// <summary>Hands a freshly authenticated client the retained custom world map, if one is set.
+  /// Wired to <c>PlayerEvents.InterfaceAuth</c> by the packet service.</summary>
+  internal static void ResendWorldMap(PlayerData player) {
+    if (_worldMapAll != null) PacketManager.SendPacket(player, _worldMapAll);
+  }
+
+  // ── Selective native map-region visibility ───────────────────────────────────
+
+  // Broadcast replacement sets are retained per plugin so late-joining clients receive the same
+  // union. Per-player sets are intentionally session-scoped and should be resent on InterfaceAuth.
+  static readonly Dictionary<string, ScarletPacket> _hiddenMapRegionsAll =
+    new(StringComparer.Ordinal);
+
+  /// <summary>
+  /// Replaces this plugin's hidden native map-region set for one player.
+  /// </summary>
+  /// <remarks>
+  /// The client hides the matching polygon on the full map and minimap and suppresses its native
+  /// hover tooltip. For a castle territory it also hides only the linked castle-heart map icon;
+  /// the actual CastleHeart entity and all gameplay behavior remain active.
+  /// <para>
+  /// Region identity is <see cref="MapRegionKey"/>. Passing null or an empty sequence clears this
+  /// plugin's set. Sets are plugin-owned and unioned on the client, so clearing one plugin cannot
+  /// reveal a region another plugin still hides. This per-player form is not retained across relog;
+  /// resend it on <c>PlayerEvents.InterfaceAuth</c>.
+  /// </para>
+  /// </remarks>
+  public static void SetHiddenMapRegions(PlayerData player, string plugin,
+      IEnumerable<MapRegionKey> regions) =>
+    PacketManager.SendPacket(player, HiddenMapRegionsPacket(plugin, regions));
+
+  /// <summary>
+  /// Replaces this plugin's hidden native map-region set for every connected player and retains it
+  /// for clients that authenticate later. See <see cref="SetHiddenMapRegions"/>.
+  /// </summary>
+  public static void SetHiddenMapRegionsAll(string plugin, IEnumerable<MapRegionKey> regions) {
+    var packet = HiddenMapRegionsPacket(plugin, regions);
+    var owner = plugin ?? string.Empty;
+    if (string.IsNullOrEmpty(packet.Data["hrg"])) _hiddenMapRegionsAll.Remove(owner);
+    else _hiddenMapRegionsAll[owner] = packet;
+    PacketManager.SendPacketToAll(packet);
+  }
+
+  /// <summary>Clears this plugin's hidden-region set for one player.</summary>
+  public static void ClearHiddenMapRegions(PlayerData player, string plugin) =>
+    SetHiddenMapRegions(player, plugin, Array.Empty<MapRegionKey>());
+
+  /// <summary>
+  /// Clears this plugin's retained hidden-region set for all current and future clients.
+  /// </summary>
+  public static void ClearHiddenMapRegionsAll(string plugin) =>
+    SetHiddenMapRegionsAll(plugin, Array.Empty<MapRegionKey>());
+
+  static ScarletPacket HiddenMapRegionsPacket(string plugin, IEnumerable<MapRegionKey> regions) {
+    var normalized = regions == null
+      ? []
+      : regions.Distinct()
+          .OrderBy(region => region.ChunkX)
+          .ThenBy(region => region.ChunkY)
+          .ThenBy(region => region.ZoneIndex)
+          .ToList();
+    return new ScarletPacket {
+      Type = "SMR",
+      Plugin = plugin ?? string.Empty,
+      Window = "",
+      Data = new() {
+        ["hrg"] = string.Join("\n", normalized.Select(region => region.Serialize())),
+      },
+    };
+  }
+
+  /// <summary>
+  /// Hands a freshly authenticated client every retained plugin-owned hidden-region set.
+  /// Wired to <c>PlayerEvents.InterfaceAuth</c> by the packet service.
+  /// </summary>
+  internal static void ResendHiddenMapRegions(PlayerData player) {
+    foreach (var packet in _hiddenMapRegionsAll.Values)
+      PacketManager.SendPacket(player, packet);
+  }
+
   // ── Interface self-update source ──────────────────────────────────────────────
 
   // The core payload asset published on every ScarletInterface release. The download URL is built as

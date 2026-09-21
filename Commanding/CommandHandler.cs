@@ -30,6 +30,9 @@ public static class CommandHandler {
   /// <summary>The prefix used to identify chat commands (e.g. '.')</summary>
   public const char CommandPrefix = '.';
 
+  /// <summary>Gets or sets whether the built-in help and helpmod commands (including localized aliases) are enabled. Defaults to true and takes effect immediately.</summary>
+  public static bool HelpCommandEnabled { get; set; } = true;
+
   internal static readonly HashSet<ulong> PlayersWaitingForReply = [];
   private static readonly Dictionary<CommandLookupKey, List<CommandInfo>> CommandsByKey = [];
   private static readonly Dictionary<(int TokenCount, string CommandName), List<CommandInfo>> FallbackCommandsByKey = [];
@@ -107,6 +110,10 @@ public static class CommandHandler {
     }
 
     try {
+      if (FindCommand(player.Language, Tokenize(text[1..].Trim())) == null) {
+        return false;
+      }
+
       HandleCommand(player, text, Entity.Null);
       return true;
     } catch (Exception ex) {
@@ -259,6 +266,11 @@ public static class CommandHandler {
 
   private static bool IsHelpCommand(CommandInfo commandInfo) {
     return commandInfo.Language == Language.English && commandInfo.Method.DeclaringType == typeof(CommandHandler) && commandInfo.Method.Name == nameof(HelpCommand);
+  }
+
+  private static bool IsCommandEnabled(CommandInfo commandInfo) {
+    return HelpCommandEnabled || commandInfo.Method.DeclaringType != typeof(CommandHandler) ||
+      (commandInfo.Method.Name != nameof(HelpCommand) && commandInfo.Method.Name != nameof(HelpModCommand));
   }
 
   private static bool IsVCFLoaded() {
@@ -535,12 +547,14 @@ public static class CommandHandler {
       var key = new CommandLookupKey(playerLanguage, commandTokens, commandName);
 
       if (CommandsByKey.TryGetValue(key, out var commands) && commands.Count > 0) {
-        return commands[0];
+        var command = commands.FirstOrDefault(IsCommandEnabled);
+        if (command != null) return command;
       }
 
       var fallbackKey = (commandTokens, commandName);
       if (FallbackCommandsByKey.TryGetValue(fallbackKey, out var fallbackCommands) && fallbackCommands.Count > 0) {
-        return fallbackCommands[0];
+        var command = fallbackCommands.FirstOrDefault(IsCommandEnabled);
+        if (command != null) return command;
       }
     }
 
@@ -569,6 +583,8 @@ public static class CommandHandler {
         int bestScore = -1;
 
         foreach (var command in commands) {
+          if (!IsCommandEnabled(command)) continue;
+
           // Try with strict type checking first
           int score = CalculateCommandMatchScore(command, tokens, commandTokens, allowTypeFailure: false);
           if (score >= 0) {
@@ -596,7 +612,8 @@ public static class CommandHandler {
         }
 
         // Name matches but no valid parameter combination - return first command for usage
-        return commands[0];
+        var firstEnabledCommand = commands.FirstOrDefault(IsCommandEnabled);
+        if (firstEnabledCommand != null) return firstEnabledCommand;
       }
 
       // Check fallback commands
@@ -606,6 +623,8 @@ public static class CommandHandler {
         int bestScore = -1;
 
         foreach (var command in fallbackCommands) {
+          if (!IsCommandEnabled(command)) continue;
+
           int score = CalculateCommandMatchScore(command, tokens, commandTokens, allowTypeFailure: false);
           if (score >= 0) {
             score += 50000 + (commandTokens * 10000);
@@ -629,7 +648,8 @@ public static class CommandHandler {
           return bestMatch;
         }
 
-        return fallbackCommands[0];
+        var firstEnabledCommand = fallbackCommands.FirstOrDefault(IsCommandEnabled);
+        if (firstEnabledCommand != null) return firstEnabledCommand;
       }
     }
 
@@ -876,6 +896,7 @@ public static class CommandHandler {
 
     var allCommands = CommandsByKey.Values
       .SelectMany(list => list)
+      .Where(IsCommandEnabled)
       .Where(cmd => isAdmin || !cmd.AdminOnly)
       .GroupBy(cmd => cmd.Assembly.GetName().Name)
       .OrderBy(g => g.Key);

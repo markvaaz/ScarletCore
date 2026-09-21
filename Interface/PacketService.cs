@@ -191,6 +191,12 @@ internal static class PacketManager {
     // too, so every client agrees on what a bound buff plays.
     EventManager.On(PlayerEvents.InterfaceAuth, InterfaceManager.ResendAnimationBindings);
 
+    // A custom world map set for everyone reaches a late-joining client too (retained, like bindings).
+    EventManager.On(PlayerEvents.InterfaceAuth, InterfaceManager.ResendWorldMap);
+
+    // Plugin-owned hidden map-region sets are retained and unioned by each client.
+    EventManager.On(PlayerEvents.InterfaceAuth, InterfaceManager.ResendHiddenMapRegions);
+
     // Remove role and pending packets when the player disconnects.
     EventManager.On(PlayerEvents.PlayerLeft, Deauth);
   }
