@@ -46,7 +46,7 @@ public enum ExtraSlotMode {
 /// Main entry point for the ScarletInterface server-side API.
 /// Build windows directly with <c>new Window(player, plugin, id) { ... }.Send();</c>.
 /// </summary>
-public static class InterfaceManager {
+public static partial class InterfaceManager {
   /// <summary>
   /// Closes the specified window for a player.
   /// </summary>
@@ -740,6 +740,8 @@ public static class InterfaceManager {
     foreach (ScarletPacket packet in _animationBindings.Values)
       PacketManager.SendPacket(player, packet);
     foreach (ScarletPacket packet in _animationProps.Values)
+      PacketManager.SendPacket(player, packet);
+    foreach (ScarletPacket packet in WeaponPropPackets())
       PacketManager.SendPacket(player, packet);
   }
 
