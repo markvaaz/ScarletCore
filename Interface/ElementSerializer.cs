@@ -633,6 +633,37 @@ internal static class ElementSerializer
     SerializeTooltip(packets, plugin, windowId, elem, elemId);
   }
 
+  /// <summary>The resolved item payload (iv* keys) of an ItemViewer — shared by the ItemViewer element
+  /// and the item a DragSlot holds. Resolves once (entity read + stat-roll registration).</summary>
+  static void SerializeItemViewerData(Dictionary<string, string> d, ItemViewer iv)
+  {
+    iv.EnsureResolved();
+    d["ivg"] = iv.RGuid.ToString(IC);
+    if (!float.IsNaN(iv.RLevel)) d["ivl"] = F(iv.RLevel);
+    if (!float.IsNaN(iv.RDur)) d["ivd"] = F(iv.RDur);
+    if (!float.IsNaN(iv.RMaxDur)) d["ivm"] = F(iv.RMaxDur);
+    if (iv.RTier >= 0) d["ivt"] = iv.RTier.ToString(IC);
+    if (iv.RModsSyncId != 0) d["ivy"] = iv.RModsSyncId.ToString(IC);
+    // Stored blood: quality + primary type, and the infused secondary as "type:quality:buffIndex".
+    if (iv.RBloodType != 0) {
+      d["ivbq"] = F(iv.RBloodQuality);
+      d["ivbt"] = iv.RBloodType.ToString(IC);
+      if (iv.RBlood2Type != 0) d["ivb2"] = $"{iv.RBlood2Type.ToString(IC)}:{F(iv.RBlood2Quality)}:{iv.RBlood2Buff.ToString(IC)}";
+    }
+    if (iv.RMods is { Count: > 0 }) d["ivs"] = ModsWire(iv.RMods);
+    if (iv.RAbil0 is { Count: > 0 }) d["iva"] = ModsWire(iv.RAbil0);
+    if (iv.RAbil0SyncId != 0) d["ivas"] = iv.RAbil0SyncId.ToString(IC);
+    if (iv.RAbil1 is { Count: > 0 }) d["ivb"] = ModsWire(iv.RAbil1);
+    if (iv.RAbil1SyncId != 0) d["ivbs"] = iv.RAbil1SyncId.ToString(IC);
+    if (iv.Lines is { Length: > 0 }) d["ivx"] = string.Join("\n", iv.Lines);
+    if (iv.TooltipAnchor.HasValue) d["ivta"] = iv.TooltipAnchor.Value.ToString();
+    if (iv.TooltipPivot.HasValue) d["ivtp"] = iv.TooltipPivot.Value.ToString();
+    if (iv.TooltipPosition.HasValue) {
+      if (iv.TooltipPosition.Value.X.HasValue) d["ivtx"] = iv.TooltipPosition.Value.X.Raw;
+      if (iv.TooltipPosition.Value.Y.HasValue) d["ivty"] = iv.TooltipPosition.Value.Y.Raw;
+    }
+  }
+
   /// <summary>
   /// Builds the packet Type name and data dictionary for a concrete element.
   /// Common base properties are always applied; type-specific properties added per case.
@@ -818,33 +849,44 @@ internal static class ElementSerializer
         return ("AM", d);
 
       case ItemViewer iv:
-        // Resolve once (entity read + stat-roll registration); base already emitted box styling.
-        iv.EnsureResolved();
-        d["ivg"] = iv.RGuid.ToString(IC);
-        if (!float.IsNaN(iv.RLevel)) d["ivl"] = F(iv.RLevel);
-        if (!float.IsNaN(iv.RDur)) d["ivd"] = F(iv.RDur);
-        if (!float.IsNaN(iv.RMaxDur)) d["ivm"] = F(iv.RMaxDur);
-        if (iv.RTier >= 0) d["ivt"] = iv.RTier.ToString(IC);
-        if (iv.RModsSyncId != 0) d["ivy"] = iv.RModsSyncId.ToString(IC);
-        // Stored blood: quality + primary type, and the infused secondary as "type:quality:buffIndex".
-        if (iv.RBloodType != 0) {
-          d["ivbq"] = F(iv.RBloodQuality);
-          d["ivbt"] = iv.RBloodType.ToString(IC);
-          if (iv.RBlood2Type != 0) d["ivb2"] = $"{iv.RBlood2Type.ToString(IC)}:{F(iv.RBlood2Quality)}:{iv.RBlood2Buff.ToString(IC)}";
-        }
-        if (iv.RMods is { Count: > 0 }) d["ivs"] = ModsWire(iv.RMods);
-        if (iv.RAbil0 is { Count: > 0 }) d["iva"] = ModsWire(iv.RAbil0);
-        if (iv.RAbil0SyncId != 0) d["ivas"] = iv.RAbil0SyncId.ToString(IC);
-        if (iv.RAbil1 is { Count: > 0 }) d["ivb"] = ModsWire(iv.RAbil1);
-        if (iv.RAbil1SyncId != 0) d["ivbs"] = iv.RAbil1SyncId.ToString(IC);
-        if (iv.Lines is { Length: > 0 }) d["ivx"] = string.Join("\n", iv.Lines);
-        if (iv.TooltipAnchor.HasValue) d["ivta"] = iv.TooltipAnchor.Value.ToString();
-        if (iv.TooltipPivot.HasValue) d["ivtp"] = iv.TooltipPivot.Value.ToString();
-        if (iv.TooltipPosition.HasValue) {
-          if (iv.TooltipPosition.Value.X.HasValue) d["ivtx"] = iv.TooltipPosition.Value.X.Raw;
-          if (iv.TooltipPosition.Value.Y.HasValue) d["ivty"] = iv.TooltipPosition.Value.Y.Raw;
-        }
+        // Base already emitted box styling.
+        SerializeItemViewerData(d, iv);
         return ("AIV", d);
+
+      case DragSlot ds:
+        // Base already emitted the slot's box styling. The held item rides inline on the slot's own
+        // packet (iv* keys) so every resend of the slot carries the server's view of its content.
+        d["id"] = ds.Id ?? string.Empty;
+        if (ds.Category != "items") d["dzc"] = ds.Category ?? string.Empty;
+        if (!ds.AcceptInventory) d["dzi"] = "0";
+        if (ds.Locked) d["dzl"] = "1";
+        if (ds.AcceptGuids != null && System.Array.Exists(ds.AcceptGuids, g => g != 0))
+          d["dzg"] = string.Join(",", System.Array.FindAll(ds.AcceptGuids, g => g != 0));
+        if (ds.AcceptItemCategories != ProjectM.ItemCategory.NONE) d["dzt"] = ((long)ds.AcceptItemCategories).ToString(IC);
+        if (!string.IsNullOrEmpty(ds.OnDrop)) d["dzd"] = ds.OnDrop;
+        if (!string.IsNullOrEmpty(ds.OnRemove)) d["dzr"] = ds.OnRemove;
+        if (ds.HighlightColor.HasValue) d["dzh"] = ds.HighlightColor.Value;
+        if (ds.IconPadding != 4f) d["dzp"] = F(ds.IconPadding);
+        if (ds.Item != null) {
+          SerializeItemViewerData(d, ds.Item);
+          if (ds.Amount > 0) d["dza"] = ds.Amount.ToString(IC);
+        }
+        return ("ADZ", d);
+
+      case ColorWheel cw:
+        // Base already emitted box styling. The pick is client-side state read back through the
+        // {Id} token, so vl is only the INITIAL color — the client re-applies it only when it changes.
+        d["id"] = cw.Id ?? string.Empty;
+        if (cw.Value.HasValue) d["vl"] = cw.Value.Value;
+        if (!cw.ShowAlpha) d["cwa"] = "0";
+        if (!cw.ShowHex) d["cwh"] = "0";
+        if (!cw.ShowPreview) d["cwp"] = "0";
+        if (cw.HueBarWidth != 18f) d["cwb"] = F(cw.HueBarWidth);
+        if (cw.Gap != 8f) d["cwg"] = F(cw.Gap);
+        if (cw.InputBackground.HasValue) d["cwi"] = cw.InputBackground.Value;
+        if (cw.TextColor.HasValue) d["tc"] = cw.TextColor.Value;
+        if (cw.FontSize > 0) d["fs"] = F(cw.FontSize);
+        return ("ACW", d);
 
       case CloseButton:
         SerializeTextStyle(d, (ITextElement)elem);

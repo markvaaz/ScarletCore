@@ -676,6 +676,14 @@ public static class InterfaceManager {
     /// <see cref="AnimationCarrierBuff"/>. Any buff that asks the client for an animation serves; one
     /// that asks for nothing produces nothing to substitute for.</summary>
     public int CarrierBuff { get; set; }
+
+    /// <summary>Something to hold while the animation plays — <see cref="AnimationProp.Pitchfork"/>
+    /// for raking, <see cref="AnimationProp.Hammer"/> for the anvil. Null (the default) keeps the
+    /// carrier buff's own default prop when it has one (the game's interaction buffs do; see
+    /// <see cref="AnimationProp"/>) and otherwise leaves the hand as equipped;
+    /// <see cref="AnimationProp.None"/> forces empty hands. The animations themselves bring no prop:
+    /// the game's raking farmer is holding his own weapon, and a player would be holding theirs.</summary>
+    public AnimationProp Prop { get; set; }
   }
 
   // ── Bindings ────────────────────────────────────────────────────────────────
@@ -731,6 +739,8 @@ public static class InterfaceManager {
   internal static void ResendAnimationBindings(PlayerData player) {
     foreach (ScarletPacket packet in _animationBindings.Values)
       PacketManager.SendPacket(player, packet);
+    foreach (ScarletPacket packet in _animationProps.Values)
+      PacketManager.SendPacket(player, packet);
   }
 
   static ScarletPacket BindPacket(string plugin, int buffGuid, IEnumerable<string> clips, AnimationOptions options) {
@@ -743,7 +753,80 @@ public static class InterfaceManager {
       ["anl"] = B(options.Loop),
     };
     if (!string.IsNullOrEmpty(options.SourceRig)) data["anr"] = options.SourceRig;
+
+    WriteProp(data, options.Prop);
     return new ScarletPacket { Type = "BAN", Plugin = plugin, Window = "", Data = data };
+  }
+
+  /// <summary>The prop tokens of a bind or set-prop packet (see AnimationPropService on the client).
+  /// Only what differs from the defaults is written.</summary>
+  static void WriteProp(Dictionary<string, string> data, AnimationProp prop) {
+    if (prop == null || string.IsNullOrWhiteSpace(prop.Mesh)) return;
+    data["anp"] = prop.Mesh.Trim();
+    if (prop.IsNone) {
+      if (!prop.HideWeapon) data["anw"] = "0";   // "no prop, weapon stays"; bare None hides it
+      return;
+    }
+    if (!string.IsNullOrWhiteSpace(prop.Material)) data["anm"] = prop.Material.Trim();
+    if (!string.IsNullOrWhiteSpace(prop.Bone) && prop.Bone != AnimationProp.RightHand) data["anh"] = prop.Bone.Trim();
+    // px,py,pz;rx,ry,rz;scale — only when something is off identity, which is the common case.
+    bool offset = prop.PositionX != 0f || prop.PositionY != 0f || prop.PositionZ != 0f
+      || prop.RotationX != 0f || prop.RotationY != 0f || prop.RotationZ != 0f || prop.Scale != 1f;
+    if (offset)
+      data["ano"] = $"{F(prop.PositionX)},{F(prop.PositionY)},{F(prop.PositionZ)};" +
+                    $"{F(prop.RotationX)},{F(prop.RotationY)},{F(prop.RotationZ)};{F(prop.Scale)}";
+    if (!prop.HideWeapon) data["anw"] = "0";
+    if (prop.Parts is { Count: > 0 }) {
+      var parts = new StringBuilder();
+      foreach (var part in prop.Parts) {
+        if (part == null || string.IsNullOrWhiteSpace(part.Mesh)) continue;
+        if (parts.Length > 0) parts.Append('\n');
+        parts.Append(part.Mesh.Trim()).Append('|').Append(part.Material ?? "").Append('|')
+          .Append($"{F(part.PositionX)},{F(part.PositionY)},{F(part.PositionZ)};{F(part.RotationX)},{F(part.RotationY)},{F(part.RotationZ)};{F(part.Scale)}");
+        // Own joint and model, only when they differ from the main mesh's: mesh|material|offset|bone|a,b,c,d.
+        bool ownAsset = part.HasAsset && (part.AssetA != prop.AssetA || part.AssetB != prop.AssetB || part.AssetC != prop.AssetC || part.AssetD != prop.AssetD);
+        bool ownBone = !string.IsNullOrWhiteSpace(part.Bone) && part.Bone.Trim() != (prop.Bone ?? AnimationProp.RightHand);
+        if (ownBone || ownAsset) parts.Append('|').Append(ownBone ? part.Bone.Trim() : "");
+        if (ownAsset)
+          parts.Append('|').Append($"{part.AssetA.ToString(CultureInfo.InvariantCulture)},{part.AssetB.ToString(CultureInfo.InvariantCulture)}," +
+                                   $"{part.AssetC.ToString(CultureInfo.InvariantCulture)},{part.AssetD.ToString(CultureInfo.InvariantCulture)}");
+      }
+      if (parts.Length > 0) data["anx"] = parts.ToString();
+    }
+    if (prop.HasAsset)
+      data["ana"] = $"{prop.AssetA.ToString(CultureInfo.InvariantCulture)},{prop.AssetB.ToString(CultureInfo.InvariantCulture)}," +
+                    $"{prop.AssetC.ToString(CultureInfo.InvariantCulture)},{prop.AssetD.ToString(CultureInfo.InvariantCulture)}";
+  }
+
+  // ── Props by buff ─────────────────────────────────────────────────────────────
+  //
+  // What a character holds while carrying a buff, independent of any animation binding. The client
+  // already dresses the game's own interaction buffs by default (the raking buff shows the farmer's
+  // pitchfork); this overrides that for one buff, or gives any other buff a prop. Precedence on the
+  // client: a binding's own Prop, then this, then the built-in default.
+
+  /// <summary>Retained set-prop packets, re-sent to clients that connect later.</summary>
+  static readonly Dictionary<int, ScarletPacket> _animationProps = new();
+
+  /// <summary>Sets what a character carrying <paramref name="buffGuid"/> holds, on one player's
+  /// client. <paramref name="prop"/> null clears the override (back to the client's default for that
+  /// buff); <see cref="AnimationProp.None"/> forces empty hands.</summary>
+  public static void SetAnimationProp(PlayerData player, string plugin, int buffGuid, AnimationProp prop) =>
+    PacketManager.SendPacket(player, PropPacket(plugin, buffGuid, prop));
+
+  /// <summary>Sets a buff's prop on every client, now and for anyone who connects later. See
+  /// <see cref="SetAnimationProp"/>.</summary>
+  public static void SetAnimationPropAll(string plugin, int buffGuid, AnimationProp prop) {
+    ScarletPacket packet = PropPacket(plugin, buffGuid, prop);
+    if (prop == null) _animationProps.Remove(buffGuid); else _animationProps[buffGuid] = packet;
+    PacketManager.SendPacketToAll(packet);
+  }
+
+  static ScarletPacket PropPacket(string plugin, int buffGuid, AnimationProp prop) {
+    if (buffGuid == 0) throw new ArgumentException("A prop needs a buff.", nameof(buffGuid));
+    var data = new Dictionary<string, string> { ["anu"] = buffGuid.ToString(CultureInfo.InvariantCulture) };
+    WriteProp(data, prop);
+    return new ScarletPacket { Type = "SAP", Plugin = plugin, Window = "", Data = data };
   }
 
   static ScarletPacket UnbindPacket(string plugin, int buffGuid) =>
