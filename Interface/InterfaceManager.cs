@@ -305,6 +305,27 @@ public static partial class InterfaceManager {
     PacketManager.OnCommand(commandName, handler);
 
   /// <summary>
+  /// Sends a custom packet to one player: a <paramref name="type"/> the client mod of the caller knows
+  /// how to handle, with an arbitrary string payload. Goes through the same pipeline as UI packets
+  /// (compression, per-frame send budget, chunking), and is queued until the player's interface
+  /// authenticates if it has not yet. Nothing in ScarletInterface itself reacts to a custom type — the
+  /// client side belongs to the calling plugin.
+  /// </summary>
+  /// <param name="player">The target player.</param>
+  /// <param name="plugin">A unique identifier for the calling plugin (e.g. "myplugin").</param>
+  /// <param name="type">Packet type; prefix it with the plugin's name to avoid clashes (e.g. "MyPluginPing").</param>
+  /// <param name="data">Payload, delivered as-is.</param>
+  public static void SendCustomPacket(PlayerData player, string plugin, string type, Dictionary<string, string> data) =>
+    PacketManager.SendPacket(player, new ScarletPacket { Type = type, Plugin = plugin, Window = string.Empty, Data = data ?? [] });
+
+  /// <summary>
+  /// Sends a custom packet to every connected player whose interface is authenticated.
+  /// See <see cref="SendCustomPacket(PlayerData, string, string, Dictionary{string, string})"/>.
+  /// </summary>
+  public static void SendCustomPacketToAll(string plugin, string type, Dictionary<string, string> data) =>
+    PacketManager.SendPacketToAll(new ScarletPacket { Type = type, Plugin = plugin, Window = string.Empty, Data = data ?? [] });
+
+  /// <summary>
   /// Sends a keybind map to a specific player. Each entry maps a Unity <c>KeyCode</c> name
   /// (e.g. <c>"G"</c>, <c>"F1"</c>) to a command string that is executed on the client when
   /// that key is pressed. The command is fired once per press with a 1-second cooldown.
