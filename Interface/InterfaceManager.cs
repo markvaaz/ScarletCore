@@ -304,6 +304,18 @@ public static partial class InterfaceManager {
   public static void OnCommand(string commandName, Action<PlayerData, string[]> handler) =>
     PacketManager.OnCommand(commandName, handler);
 
+  /// <summary>Removes a handler registered with <see cref="OnMessage"/>.</summary>
+  public static void OffMessage(string prefix, Action<PlayerData, string[]> handler) =>
+    PacketManager.OffMessage(prefix, handler);
+
+  /// <summary>
+  /// Removes every <see cref="OnMessage"/>/<see cref="OnCommand"/> handler the calling plugin's assembly
+  /// registered. Call it from the plugin's Unload, like EventManager.UnregisterAssembly — otherwise a
+  /// hot reload keeps the previous copy's handlers and every message is handled once per reload.
+  /// </summary>
+  public static void UnregisterAssembly(System.Reflection.Assembly assembly = null) =>
+    PacketManager.UnregisterAssembly(assembly ?? System.Reflection.Assembly.GetCallingAssembly());
+
   /// <summary>
   /// Sends a custom packet to one player: a <paramref name="type"/> the client mod of the caller knows
   /// how to handle, with an arbitrary string payload. Goes through the same pipeline as UI packets

@@ -412,6 +412,27 @@ internal static class PacketManager {
     list.Add(handler);
   }
 
+  /// <summary>Removes one raw-message handler registered with <see cref="OnMessage"/>.</summary>
+  public static void OffMessage(string prefix, Action<PlayerData, string[]> handler) {
+    if (_rawHandlers.TryGetValue(prefix, out var list)) { list.Remove(handler); if (list.Count == 0) _rawHandlers.Remove(prefix); }
+  }
+
+  /// <summary>
+  /// Removes every raw-message and command handler declared in <paramref name="assembly"/> — for a
+  /// plugin's Unload, so a hot reload does not leave the previous copy's handlers behind (each reload
+  /// would otherwise add another handler and run the same message N times).
+  /// </summary>
+  public static void UnregisterAssembly(System.Reflection.Assembly assembly) {
+    foreach (var prefix in new List<string>(_rawHandlers.Keys)) {
+      _rawHandlers[prefix].RemoveAll(h => h.Method.DeclaringType?.Assembly == assembly);
+      if (_rawHandlers[prefix].Count == 0) _rawHandlers.Remove(prefix);
+    }
+    foreach (var name in new List<string>(_cmdHandlers.Keys)) {
+      _cmdHandlers[name].RemoveAll(h => h.Method.DeclaringType?.Assembly == assembly);
+      if (_cmdHandlers[name].Count == 0) _cmdHandlers.Remove(name);
+    }
+  }
+
   [EventPriority(EventPriority.High)]
   static void OnChatMessage(NativeArray<Entity> entities) {
     if (_rawHandlers.Count == 0) return;
