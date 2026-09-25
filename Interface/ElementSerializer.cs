@@ -888,6 +888,23 @@ internal static class ElementSerializer
         if (cw.FontSize > 0) d["fs"] = F(cw.FontSize);
         return ("ACW", d);
 
+      case Slider sd:
+        // Base already emitted box styling. Like ColorWheel, vl is only the INITIAL value.
+        d["id"] = sd.Id ?? string.Empty;
+        d["vl"] = F(sd.Value);
+        if (sd.Min != 0f) d["sdmn"] = F(sd.Min);
+        if (sd.Max != 100f) d["sdmx"] = F(sd.Max);
+        if (sd.Step != 1f) d["sdst"] = F(sd.Step);
+        if (sd.Vertical) d["sdv"] = "1";
+        if (sd.TrackColor.HasValue) d["sdtc"] = sd.TrackColor.Value;
+        if (sd.FillColor.HasValue) d["sdfc"] = sd.FillColor.Value;
+        if (sd.HandleColor.HasValue) d["sdhc"] = sd.HandleColor.Value;
+        if (sd.HandleSize != 14f) d["sdhs"] = F(sd.HandleSize);
+        if (sd.TrackThickness != 6f) d["sdth"] = F(sd.TrackThickness);
+        if (!string.IsNullOrEmpty(sd.Command)) d["cm"] = sd.Command;
+        if (!string.IsNullOrEmpty(sd.ChangeCommand)) d["sdcc"] = sd.ChangeCommand;
+        return ("ASD", d);
+
       case CloseButton:
         SerializeTextStyle(d, (ITextElement)elem);
         return ("AZ", d);
